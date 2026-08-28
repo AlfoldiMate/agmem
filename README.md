@@ -4,10 +4,11 @@ Memory for coding agents, over MCP. One local process, one embedded database,
 no server-side LLM: the agent distils what is worth keeping, agmem stores it,
 dates it, ranks it, and shows its work.
 
-Four tools — `remember`, `recall`, `context`, `inspect`.
+Five tools — `remember`, `recall`, `context`, `forget`, `inspect`.
 
-> Status: Phase 1 (MVP) plus the `context` block. The loop works end to end
-> from Claude Code. `forget` and consolidation are Phase 2+.
+> Status: Phase 1 (MVP) plus the `context` block and `forget`. The loop works
+> end to end from Claude Code. Startup pruning, prompts and consolidation are
+> Phase 2+.
 
 ## Install
 
@@ -171,6 +172,36 @@ through `remember`'s `supersedes` without a `recall` in between. Verbatim
 episode text never appears — one chunk would eat a quarter of the budget, and
 `recall` is the way to it. Nothing is reinforced either: the block is read on a
 schedule, so being in it is no evidence a memory was useful.
+
+**`forget`** — removal, with the scope confirmed before anything moves. By
+default it *closes* a memory rather than deleting it: it stops answering
+`recall` and `context`, and stays readable through `inspect`, dated and marked
+`forgotten`. Reach for `remember`'s `supersedes` first — a claim that turned out
+to be wrong is a correction, not a mistake to erase.
+
+```json
+{ "ids": ["01M14XWWAXJG…"] }
+{ "spaces": ["myproject", "user"], "dry_run": false, "purge": false,
+  "matched": [ { "id": "01M14XWWAXJG…", "kind": "memory",
+                 "content": "The API gateway is deployed from the infra repo",
+                 "space": "myproject" } ],
+  "invalidated": ["01M14XWWAXJG…"], "purged": [], "chunks_purged": 0 }
+```
+
+Three rules worth knowing before you call it:
+
+- **By query, it takes two calls.** Send it once with `dry_run: true`, read
+  `matched`, then send the identical call again to act. Anything else — a
+  different query, the same query with `purge` flipped, a second execution — is
+  refused. A query matches on the *words* you write, not on their meaning:
+  BM25 only, deliberately, because a deletion must never reach something that
+  merely resembles what you asked for.
+- **`purge: true` deletes, and takes the correction chain with it.** That is
+  unrecoverable, and it is the only way to remove text that must not stay on
+  disk. The dry run lists every row it will take, chain included.
+- **Verbatim text can only be purged, never closed** — an episode has no
+  validity window — and purging it leaves the claims distilled from it
+  standing, still naming where they came from.
 
 **`inspect`** — the paper trail. `ref` takes a memory id (the correction chain,
 oldest first, plus the verbatim text behind it), `episode:<id>`,

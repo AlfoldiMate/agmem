@@ -5,9 +5,11 @@
 //! reported result rather than an aborted transaction, that a rejected row
 //! takes the whole batch down with it — are proven here rather than assumed.
 
-use agmem_core::{Kind, MemoryId, Source, SpaceName};
+use agmem_core::{InvalidReason, Kind, MemoryId, Source, SpaceName};
 use agmem_store::db::Db;
-use agmem_store::repo::{self, Batch, NewChunk, NewEpisode, NewMemory, Written};
+use agmem_store::repo::{
+    self, Batch, Forget, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Written,
+};
 use agmem_store::{StoreError, db, migrate};
 use surrealdb::types::SurrealValue;
 
@@ -419,5 +421,163 @@ async fn a_supersedes_target_outside_this_space_is_rejected_before_anything_is_w
             .await
             .is_empty(),
         "nothing is written when validation refuses the batch"
+    );
+}
+
+/// Every memory a space holds, closed ones included.
+async fn all_memories(db: &Db, space: &SpaceName) -> Vec<agmem_core::MemoryRecord> {
+    let mut lookup = Lookup::new(vec![space.clone()]);
+    lookup.liveness = Liveness::Any;
+    repo::direct_lookup(db, &lookup).await.expect("lookup")
+}
+
+/// Write one memory into a space of its own and hand back its id.
+async fn elsewhere(db: &Db, space: &SpaceName, content: &str) -> MemoryId {
+    repo::insert_batch(
+        db,
+        Batch {
+            space: space.clone(),
+            episode: None,
+            memories: vec![NewMemory::new(Kind::Fact, content)],
+        },
+    )
+    .await
+    .expect("write")
+    .memories
+    .remove(0)
+    .into_id()
+}
+
+#[tokio::test]
+async fn a_soft_forget_closes_what_is_live_and_leaves_the_rest_alone() {
+    let db = store().await;
+    let outcome = repo::insert_batch(
+        &db,
+        batch(vec![
+            NewMemory::new(Kind::Fact, "the office is on the third floor"),
+            NewMemory::new(Kind::Fact, "the office is on the fourth floor"),
+            NewMemory::new(Kind::Lesson, "the lift is out on Tuesdays"),
+        ]),
+    )
+    .await
+    .expect("write");
+    let ids: Vec<MemoryId> = outcome.memories.into_iter().map(Written::into_id).collect();
+    let (third, fourth, lift) = (ids[0].clone(), ids[1].clone(), ids[2].clone());
+    repo::supersede(&db, &space(), &third, &fourth)
+        .await
+        .expect("correct the floor");
+
+    let other: SpaceName = "elsewhere".parse().expect("valid slug");
+    let outsider = elsewhere(&db, &other, "another space's business").await;
+
+    let forgotten = repo::forget(
+        &db,
+        &Forget {
+            spaces: vec![space()],
+            memories: vec![third.clone(), fourth.clone(), outsider.clone()],
+            episodes: Vec::new(),
+            purge: false,
+        },
+    )
+    .await
+    .expect("forget");
+
+    assert_eq!(
+        forgotten.memories,
+        vec![fourth.clone()],
+        "only the live row in this space moved: the corrected one is already closed, \
+         and the outsider is outside the space guard"
+    );
+    assert!(forgotten.episodes.is_empty());
+    assert_eq!(forgotten.chunks, 0);
+
+    let rows = all_memories(&db, &space()).await;
+    let reason = |id: &MemoryId| {
+        rows.iter()
+            .find(|row| row.id == *id)
+            .expect("the row is still there")
+            .invalid_reason
+    };
+    assert_eq!(
+        reason(&third),
+        Some(InvalidReason::Superseded),
+        "a forget never rewrites another close"
+    );
+    assert_eq!(reason(&fourth), Some(InvalidReason::Forgotten));
+    assert_eq!(reason(&lift), None, "nothing it was not asked about moved");
+    assert_eq!(
+        all_memories(&db, &other).await[0].invalid_reason,
+        None,
+        "an id is a capability inside its space, not across the store"
+    );
+}
+
+#[tokio::test]
+async fn a_purge_takes_an_episodes_slices_and_leaves_the_claims_drawn_from_it() {
+    let db = store().await;
+    let outcome = repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: Some(NewEpisode {
+                content: "I like Rust. Python is fine too.".to_owned(),
+                occurred_at: None,
+                session: None,
+                chunks: vec![
+                    NewChunk {
+                        text: "I like Rust.".to_owned(),
+                        embedding: None,
+                    },
+                    NewChunk {
+                        text: "Python is fine too.".to_owned(),
+                        embedding: None,
+                    },
+                ],
+            }),
+            memories: vec![NewMemory::new(Kind::Fact, "the user prefers Rust")],
+        },
+    )
+    .await
+    .expect("write");
+    let episode = outcome.episode.expect("an episode was written").into_id();
+    let claim = outcome.memories[0].id().clone();
+
+    let other: SpaceName = "elsewhere".parse().expect("valid slug");
+    let outsider = elsewhere(&db, &other, "another space's business").await;
+
+    let forgotten = repo::forget(
+        &db,
+        &Forget {
+            spaces: vec![space()],
+            memories: vec![outsider.clone()],
+            episodes: vec![episode.clone()],
+            purge: true,
+        },
+    )
+    .await
+    .expect("purge");
+
+    assert_eq!(forgotten.episodes, vec![episode.clone()]);
+    assert_eq!(forgotten.chunks, 2, "the slices go with the text");
+    assert!(
+        forgotten.memories.is_empty(),
+        "the space guard holds on the destructive path too"
+    );
+
+    let stats = repo::stats(&db, &space()).await.expect("stats");
+    assert_eq!(
+        (stats.episodes, stats.chunks, stats.memories),
+        (0, 0, 1),
+        "the text is gone and the claim distilled from it is not"
+    );
+    assert_eq!(
+        all_memories(&db, &space()).await[0].id,
+        claim,
+        "purging text does not purge what was learned from it"
+    );
+    assert_eq!(
+        all_memories(&db, &other).await.len(),
+        1,
+        "the outsider was never in scope"
     );
 }

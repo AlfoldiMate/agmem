@@ -147,6 +147,15 @@ impl Harness {
             .expect("inspect answers with structured content, not just text")
     }
 
+    /// One successful `forget`, as the structured result an agent reads.
+    async fn forget(&self, arguments: Value) -> Value {
+        let result = self.call("forget", arguments).await.expect("forget");
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        result
+            .structured_content
+            .expect("forget answers with structured content, not just text")
+    }
+
     /// Every memory the default space holds, closed ones included.
     async fn memories(&self) -> Vec<MemoryRecord> {
         let mut lookup = Lookup::new(vec![space()]);
@@ -236,6 +245,22 @@ fn ids(value: &Value) -> Vec<&str> {
         .iter()
         .map(|id| id.as_str().expect("an id"))
         .collect()
+}
+
+/// The ids a `forget` reported as matched, in the order it listed them.
+fn match_ids(value: &Value) -> Vec<&str> {
+    value
+        .as_array()
+        .expect("an array of matches")
+        .iter()
+        .map(|found| found["id"].as_str().expect("an id"))
+        .collect()
+}
+
+/// The refusal an argument error is expected to produce.
+fn refusal(error: &ServiceError, expected: &str) -> bool {
+    matches!(error, ServiceError::McpError(data)
+        if data.code == ErrorCode::INVALID_PARAMS && data.message.contains(expected))
 }
 
 /// Every hit of a `recall`, in the order it ranked them.
@@ -1284,6 +1309,244 @@ async fn an_unanswerable_ref_says_what_the_grammar_is() {
         agmem.inspect(&elsewhere).await["found"]["memory"]["space"].as_str(),
         Some("user"),
         "and the default pair of spaces finds it"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_forgotten_claim_stops_answering_but_stays_readable() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let stored = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the user prefers Rust over Python for CLI tools" },
+                { "content": "the kitchen renovation finished in March" }
+            ]
+        }))
+        .await;
+    let kitchen = ids(&stored["created"])[1].to_owned();
+
+    let preview = agmem
+        .forget(json!({ "ids": [kitchen.clone()], "dry_run": true }))
+        .await;
+    assert_eq!(match_ids(&preview["matched"]), vec![kitchen.as_str()]);
+    assert_eq!(preview["matched"][0]["kind"].as_str(), Some("memory"));
+    assert!(
+        ids(&preview["invalidated"]).is_empty(),
+        "a dry run reports and changes nothing"
+    );
+    assert_eq!(agmem.contents().await.len(), 2);
+
+    let done = agmem
+        .forget(json!({ "ids": [format!("memory:{kitchen}")] }))
+        .await;
+    assert_eq!(ids(&done["invalidated"]), vec![kitchen.as_str()]);
+    assert!(ids(&done["purged"]).is_empty());
+
+    let found = agmem.recall(json!({ "query": "kitchen renovation" })).await;
+    assert!(
+        !hit_contents(&found)
+            .iter()
+            .any(|hit| hit.contains("kitchen")),
+        "a forgotten claim stops answering recall: {found}"
+    );
+    let block = agmem.context(json!({})).await;
+    assert!(
+        !block.contains("kitchen"),
+        "and stops being briefed at session start:\n{block}"
+    );
+
+    let seen = agmem.inspect(&kitchen).await;
+    assert_eq!(
+        seen["found"]["memory"]["invalid_reason"].as_str(),
+        Some("forgotten"),
+        "but stays readable, dated, and labelled — a wrong forget is recoverable"
+    );
+    assert!(
+        hit_contents(&agmem.recall(json!({ "query": "Rust" })).await)
+            .iter()
+            .any(|hit| hit.contains("Rust")),
+        "and nothing else moved"
+    );
+    assert_eq!(agmem.memories().await.len(), 2, "soft is not deletion");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn forgetting_by_query_needs_the_same_call_with_dry_run_first() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the kitchen renovation finished in March" },
+                { "content": "the user prefers Rust over Python" }
+            ]
+        }))
+        .await;
+
+    let straight_in = agmem
+        .call("forget", json!({ "query": "kitchen" }))
+        .await
+        .expect_err("a query with no confirmation must be refused");
+    assert!(
+        refusal(&straight_in, "dry_run"),
+        "and must say what is missing, got: {straight_in}"
+    );
+
+    let preview = agmem
+        .forget(json!({ "query": "kitchen", "dry_run": true }))
+        .await;
+    assert_eq!(
+        match_ids(&preview["matched"]).len(),
+        1,
+        "a query selects on the words it contains, not on what resembles them: {preview}"
+    );
+    let matched = match_ids(&preview["matched"])[0].to_owned();
+
+    let wider = agmem
+        .call("forget", json!({ "query": "kitchen", "purge": true }))
+        .await
+        .expect_err("previewing a close does not authorise a delete");
+    assert!(refusal(&wider, "dry_run"), "got: {wider}");
+
+    let done = agmem.forget(json!({ "query": "kitchen" })).await;
+    assert_eq!(ids(&done["invalidated"]), vec![matched.as_str()]);
+
+    let again = agmem
+        .call("forget", json!({ "query": "kitchen" }))
+        .await
+        .expect_err("a confirmation authorises one call, not a standing licence");
+    assert!(refusal(&again, "dry_run"), "got: {again}");
+
+    assert_eq!(
+        agmem.stats().await.live,
+        1,
+        "the claim that did not contain the word is untouched"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_purge_takes_the_whole_correction_chain_and_leaves_no_row() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let first = agmem
+        .remember(json!({ "memories": [{ "content": "the office is on the third floor" }] }))
+        .await;
+    let old = ids(&first["created"])[0].to_owned();
+    let second = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "the office is on the fourth floor",
+                "supersedes": format!("memory:{old}")
+            }]
+        }))
+        .await;
+    let new = ids(&second["created"])[0].to_owned();
+
+    let preview = agmem
+        .forget(json!({ "ids": [new.clone()], "purge": true, "dry_run": true }))
+        .await;
+    let mut shown = match_ids(&preview["matched"]);
+    shown.sort_unstable();
+    let mut both = vec![old.as_str(), new.as_str()];
+    both.sort_unstable();
+    assert_eq!(
+        shown, both,
+        "a purge shows the whole correction chain before it takes it: {preview}"
+    );
+    assert_eq!(
+        agmem.memories().await.len(),
+        2,
+        "and the preview itself deletes nothing"
+    );
+
+    let done = agmem
+        .forget(json!({ "ids": [new.clone()], "purge": true }))
+        .await;
+    let mut gone = ids(&done["purged"]);
+    gone.sort_unstable();
+    assert_eq!(gone, both);
+    assert!(ids(&done["invalidated"]).is_empty());
+    assert!(
+        agmem.memories().await.is_empty(),
+        "a purge leaves no rows behind"
+    );
+
+    let vanished = agmem
+        .call("inspect", json!({ "ref": old }))
+        .await
+        .expect_err("there is nothing left to audit");
+    assert!(refusal(&vanished, "no memory"), "got: {vanished}");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn verbatim_text_can_only_be_purged_and_its_claims_outlive_it() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let stored = agmem
+        .remember(json!({
+            "memories": [{ "content": "the user prefers Rust over Python" }],
+            "episode": { "content": "I like Rust. Python is fine too." }
+        }))
+        .await;
+    let claim = ids(&stored["created"])[0].to_owned();
+    let episode = stored["episode"]
+        .as_str()
+        .expect("an episode id")
+        .to_owned();
+
+    let closed = agmem
+        .call("forget", json!({ "ids": [format!("episode:{episode}")] }))
+        .await
+        .expect_err("verbatim text has no validity window to close");
+    assert!(refusal(&closed, "purge: true"), "got: {closed}");
+
+    let slices = agmem.inspect(&format!("episode:{episode}")).await;
+    let slice = slices["found"]["chunks"][0]["id"]
+        .as_str()
+        .expect("a slice")
+        .to_owned();
+    let by_slice = agmem
+        .call("forget", json!({ "ids": [slice], "purge": true }))
+        .await
+        .expect_err("a slice is not a thing anyone forgets");
+    assert!(
+        refusal(&by_slice, "one slice of episode:"),
+        "got: {by_slice}"
+    );
+
+    let preview = agmem
+        .forget(json!({ "ids": [format!("episode:{episode}")], "purge": true, "dry_run": true }))
+        .await;
+    assert_eq!(preview["matched"][0]["kind"].as_str(), Some("episode"));
+    assert_eq!(
+        preview["matched"][0]["derived"].as_u64(),
+        Some(1),
+        "what the text leaves behind is part of the scope: {preview}"
+    );
+
+    let done = agmem
+        .forget(json!({ "ids": [format!("episode:{episode}")], "purge": true }))
+        .await;
+    assert_eq!(ids(&done["purged"]), vec![episode.as_str()]);
+    assert_eq!(done["chunks_purged"].as_u64(), Some(1));
+
+    let stats = agmem.stats().await;
+    assert_eq!(
+        (stats.episodes, stats.chunks, stats.memories),
+        (0, 0, 1),
+        "purging text does not purge what was learned from it"
+    );
+
+    let seen = agmem.inspect(&claim).await;
+    assert_eq!(
+        seen["found"]["memory"]["source"].as_str(),
+        Some(format!("episode:{episode}").as_str()),
+        "the claim still says where it came from"
+    );
+    assert!(
+        seen["found"]["episode"].is_null(),
+        "there is simply nothing left to quote: {seen}"
     );
     agmem.shutdown().await;
 }

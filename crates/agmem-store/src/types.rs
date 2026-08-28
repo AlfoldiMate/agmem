@@ -355,3 +355,11 @@ pub(crate) fn kind_str(kind: Kind) -> String {
 pub(crate) fn decay_class_str(class: DecayClass) -> String {
     class.as_str().to_owned()
 }
+
+/// The single object a purge returns: what it deleted, by id.
+#[derive(SurrealValue)]
+pub(crate) struct PurgedRow {
+    pub(crate) chunks: i64,
+    pub(crate) episodes: Vec<String>,
+    pub(crate) memories: Vec<String>,
+}

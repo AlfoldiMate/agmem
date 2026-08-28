@@ -7,12 +7,15 @@
 
 use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
 use jiff::Timestamp;
+use surrealdb::types::RecordId;
 
 use super::{checked, ensure_memories_exist};
 use crate::StoreError;
 use crate::db::Db;
 use crate::queries::write::{self as queries, MemoryShape};
-use crate::types::{self, BatchRow, ChunkRow, EpisodeRow, MemoryRow, SourceRow, WriteRow};
+use crate::types::{
+    self, BatchRow, ChunkRow, EpisodeRow, MemoryRow, PurgedRow, SourceRow, WriteRow,
+};
 
 /// A memory to write.
 ///
@@ -314,6 +317,100 @@ pub async fn supersede(
             .await?,
     )?;
     Ok(())
+}
+
+/// What one `forget` call acts on (design §5.4).
+///
+/// The ids are exactly the rows to touch. Resolving a reference, expanding a
+/// supersession chain and confirming the scope of a query all happen above
+/// this, so the only judgement left here is the space guard — which is not
+/// judgement so much as the same rule every read follows: an id is a
+/// capability inside a space, not across the store.
+#[derive(Debug, Clone)]
+pub struct Forget {
+    /// The scopes a row must belong to before it may be touched.
+    pub spaces: Vec<SpaceName>,
+    /// The memories to close, or to delete under `purge`.
+    pub memories: Vec<MemoryId>,
+    /// The episodes to delete; a soft forget ignores them, because verbatim
+    /// text has no validity window to close.
+    pub episodes: Vec<EpisodeId>,
+    /// Delete outright instead of closing.
+    pub purge: bool,
+}
+
+/// What a forget actually changed.
+///
+/// Ids that named nothing in `spaces`, and memories a correction had already
+/// closed, are simply absent: the caller asked for a state, and this reports
+/// the rows that moved into it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Forgotten {
+    /// The memories closed, or deleted under `purge`.
+    pub memories: Vec<MemoryId>,
+    /// The episodes deleted; always empty for a soft forget.
+    pub episodes: Vec<EpisodeId>,
+    /// How many retrieval slices went with those episodes.
+    pub chunks: usize,
+}
+
+/// Close or delete what a `forget` call resolved to (design §5.4).
+///
+/// Soft is the default and the whole point: a closed memory stops answering
+/// `recall` while staying readable through `inspect`, dated and labelled
+/// `forgotten`, so "we decided not to keep this" and "this was never said"
+/// stay distinguishable. `purge` is the escape hatch for text that must not
+/// remain on disk, and it takes the episode's slices with it.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for an id the engine reported that is not a
+/// ULID. A purge is one transaction: it lands whole or not at all.
+pub async fn forget(db: &Db, request: &Forget) -> Result<Forgotten, StoreError> {
+    let spaces: Vec<String> = request.spaces.iter().map(types::space_str).collect();
+    let memories: Vec<RecordId> = request.memories.iter().map(types::memory_ref).collect();
+
+    if !request.purge {
+        let mut resp = checked(
+            db.query(queries::FORGET_SOFT)
+                .bind(("spaces", spaces))
+                .bind(("memories", memories))
+                .await?,
+        )?;
+        let closed: Vec<String> = resp.take(0)?;
+        return Ok(Forgotten {
+            memories: ids(closed, MemoryId::new)?,
+            episodes: Vec::new(),
+            chunks: 0,
+        });
+    }
+
+    let episodes: Vec<RecordId> = request.episodes.iter().map(types::episode_ref).collect();
+    let script = queries::forget_purge();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("spaces", spaces))
+            .bind(("memories", memories))
+            .bind(("episodes", episodes))
+            .await?,
+    )?;
+    let row: PurgedRow = resp
+        .take::<Option<PurgedRow>>(script.result_index)?
+        .ok_or(StoreError::UnexpectedResponse("the purge reported nothing"))?;
+    Ok(Forgotten {
+        memories: ids(row.memories, MemoryId::new)?,
+        episodes: ids(row.episodes, EpisodeId::new)?,
+        chunks: usize::try_from(row.chunks).unwrap_or(0),
+    })
+}
+
+/// Parse a list of reported ids, failing on the first the schema cannot have
+/// minted.
+fn ids<I, E>(raw: Vec<String>, id: impl Fn(String) -> Result<I, E>) -> Result<Vec<I>, StoreError>
+where
+    StoreError: From<E>,
+{
+    raw.into_iter().map(|one| Ok(id(one)?)).collect()
 }
 
 /// Turn one reported row into a typed outcome.

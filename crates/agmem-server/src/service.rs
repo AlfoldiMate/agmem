@@ -24,6 +24,7 @@ use rmcp::{
 
 use crate::config::Config;
 use crate::tools::context::{self, ContextParams};
+use crate::tools::forget::{self, ForgetParams, ForgetResult, Pending};
 use crate::tools::inspect::{self, InspectParams, InspectResult};
 use crate::tools::recall::{self, RecallParams, RecallResult};
 use crate::tools::remember::{self, RememberParams, RememberResult};
@@ -50,6 +51,11 @@ pub struct AgmemService {
     db: Db,
     embedder: Arc<dyn Embedder>,
     config: Arc<Config>,
+    /// What this session's last `forget` dry run offered. It belongs to the
+    /// service rather than to the store because it is a fact about *this*
+    /// conversation: the daemon builds one service per connection, so a scope
+    /// one agent confirmed can never authorise another agent's delete.
+    pending_forget: Pending,
 }
 
 impl AgmemService {
@@ -59,6 +65,7 @@ impl AgmemService {
             db,
             embedder,
             config,
+            pending_forget: Pending::default(),
         }
     }
 
@@ -76,6 +83,11 @@ impl AgmemService {
     pub fn config(&self) -> &Config {
         &self.config
     }
+
+    /// The gate a `forget` by query has to pass (design §5.4).
+    pub(crate) fn pending_forget(&self) -> &Pending {
+        &self.pending_forget
+    }
 }
 
 /// The tools, and only the tools.
@@ -84,7 +96,8 @@ impl AgmemService {
 /// macro generates, which [`ServerHandler`] below dispatches through. Each body
 /// is one call into [`crate::tools`]; the `description` beside it is not a
 /// comment but the tool's text on the wire — the extraction contract the model
-/// reads before deciding to call. `forget` follows in phase 2 (design §3.1).
+/// reads before deciding to call. They are declared in the order design §3.1
+/// tables them, which is also the order `list_tools` reports.
 #[tool_router]
 impl AgmemService {
     /// The write verb (design §5.2). `description` below is the extraction
@@ -176,6 +189,43 @@ to `remember`'s `supersedes` the moment you learn it is wrong.",
         Parameters(params): Parameters<ContextParams>,
     ) -> Result<CallToolResult, ErrorData> {
         context::run(self, params).await
+    }
+
+    /// The destructive verb (design §5.4).
+    ///
+    /// The only tool whose description spends most of its words talking the
+    /// caller *out* of the call: a correction through `remember` keeps the
+    /// history, and forgetting is for what should never have been written
+    /// down. The two-step on `query` is enforced in the tool, not described
+    /// here as etiquette.
+    #[tool(
+        name = "forget",
+        description = "Remove memories the store should no longer act on — by id when you know \
+which, or by query when you do not.\n\n\
+Reach for `remember` with `supersedes` first: a claim that turned out to be wrong is a correction, \
+and a correction stays readable and dated. Forget is for what should not have been stored at all — \
+something private, something that only made sense inside one session, notes on a project that no \
+longer exists.\n\n\
+By default a forgotten memory is closed, not deleted: it stops surfacing in `recall` and \
+`context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is \
+recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole \
+correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it \
+is the only way to remove something that must not stay on disk. Purging text does not purge the \
+claims distilled from it.\n\n\
+Forgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what \
+matched, then send the identical call with `dry_run: false` to act. Any other second call is \
+refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: \
+true` previews them too.\n\n\
+A query here matches on the words you write, not on their meaning: it selects the memories that \
+contain those terms, so write the words you want gone. That is the opposite of `recall`, and \
+deliberately — a deletion should never reach something that merely resembles what you asked for.",
+        annotations(destructive_hint = true)
+    )]
+    async fn forget(
+        &self,
+        Parameters(params): Parameters<ForgetParams>,
+    ) -> Result<Json<ForgetResult>, ErrorData> {
+        forget::run(self, params).await.map(Json)
     }
 
     /// The audit verb (design §3.1).

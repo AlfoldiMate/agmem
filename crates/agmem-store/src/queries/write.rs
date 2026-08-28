@@ -117,3 +117,41 @@ LET $done = (UPDATE $old SET superseded_by = $new,
     invalid_at = $valid_from, invalid_reason = 'superseded');
 IF array::len($done) = 0 { THROW 'the superseded memory does not exist' };
 COMMIT;";
+
+/// Close every live memory in `$memories` that one of `$spaces` holds
+/// (design §5.4).
+///
+/// `invalid_at IS NONE` is what keeps a forget from rewriting history: a
+/// memory a correction already closed keeps its own reason and its own date,
+/// and its id simply does not come back. The `space` clause keeps an id a
+/// capability inside its space, exactly as every read does.
+pub(crate) const FORGET_SOFT: &str = "UPDATE $memories
+     SET invalid_at = time::now(), invalid_reason = 'forgotten'
+     WHERE space IN $spaces AND invalid_at IS NONE
+     RETURN VALUE record::id(id)";
+
+/// Delete rows outright, an episode's slices along with it (design §5.4).
+///
+/// `DELETE … RETURN VALUE record::id(id)` is an *error*, not an empty list —
+/// the projection runs against the row after deletion, where `id` is NONE and
+/// `record::id` refuses it. The rows are therefore taken whole with `RETURN
+/// BEFORE` and projected afterwards.
+///
+/// Nothing here resolves an id or expands a supersession chain: the caller
+/// hands over exactly the rows it means, having already shown them to the
+/// agent. An empty list is a clean no-op on both statements.
+pub(crate) fn forget_purge() -> Script {
+    let mut builder = Builder::transaction();
+    builder.push(
+        "LET $chunks = (DELETE episode_chunk
+             WHERE space IN $spaces AND episode IN $episodes RETURN BEFORE)",
+    );
+    builder.push("LET $gone_episodes = (DELETE $episodes WHERE space IN $spaces RETURN BEFORE)");
+    builder.push("LET $gone_memories = (DELETE $memories WHERE space IN $spaces RETURN BEFORE)");
+    builder.finish(
+        "RETURN { chunks: array::len($chunks),
+             episodes: $gone_episodes.map(|$row| record::id($row.id)),
+             memories: $gone_memories.map(|$row| record::id($row.id)) }"
+            .to_owned(),
+    )
+}

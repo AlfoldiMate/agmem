@@ -39,6 +39,7 @@
 //! ```
 
 pub mod context;
+pub mod forget;
 pub mod inspect;
 pub mod recall;
 pub mod remember;

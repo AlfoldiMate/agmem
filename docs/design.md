@@ -311,9 +311,19 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // → one markdown string (see §3.2)
 
 // forget
-{ "ids": ["memory:…"], "query": "alternative to ids", "space": "…",
-  "purge": false, "dry_run": false }
-// → { matched: n, invalidated|purged: [ids] }   (query-mode requires dry_run first)
+{ "ids": ["memory:01J…", "01J…", "episode:01M…"],   // exact; no dry run needed
+  "query": "alternative to ids",                     // dry_run: true required first
+  "space": "…", "purge": false, "dry_run": false }
+// → { spaces: [searched], dry_run, purge,
+//     matched: [{ id, kind: "memory|episode", content, space,
+//                 invalid_reason?, derived? }],   // derived: claims an episode leaves behind
+//     invalidated: [ids],       // soft: the rows this call closed
+//     purged: [ids], chunks_purged: n }
+// `matched` is the list, not a count: a dry run whose answer is a number is
+// not a scope anyone can check. It holds what a purge pulls in as well — the
+// whole correction chain — so the blast radius is what the agent reads.
+// An id already closed appears in `matched` with its `invalid_reason` and is
+// absent from `invalidated`: a forget never rewrites another close.
 
 // inspect
 { "ref": "memory:01J… | 01J… | episode:01J… | entity:<name> | stats",
@@ -611,11 +621,40 @@ matches nothing.
 ### 5.4 `forget`
 
 ```
-ids given   → resolve → soft-invalidate (invalid_reason="forgotten") | purge (DELETE + chain + chunks)
-query given → dry_run required first (returns matches + count)
-              second call with dry_run=false and same query executes
+ids given   → resolve in each searched space → soft-invalidate (invalid_reason="forgotten")
+                                                  | purge (DELETE + chain + chunks)
+query given → BM25 only, memories only → dry_run required first (returns the matches)
+              an identical second call with dry_run=false executes, and spends the confirmation
 purge on an episode also purges chunks; purge on a memory keeps its episode
 ```
+
+
+Five rules, each of them the answer to "what could this destroy that nobody
+asked it to":
+
+- **Soft is the default and the reversible state.** A forgotten memory is
+  closed exactly as a superseded one is, so `inspect` still reads it, dated and
+  labelled. A memory a correction already closed is left alone: `invalid_at IS
+  NONE` guards the update, so a forget never rewrites another close and never
+  moves a claim's date.
+- **A purge takes the whole supersession chain.** Deleting only the newest
+  wording of a claim would leave its earlier wordings readable, which is the
+  opposite of what "delete this" means. The dry run lists the chain, so the
+  blast radius is what the agent reads before it decides.
+- **Query mode is BM25 only — no vector arm.** KNN returns its nearest
+  neighbours however far away they are, which on a small store is the whole
+  store; as a selector for deletion that is wrong in the unrecoverable
+  direction. A row that does not contain the words does not match at all.
+- **The confirmation is per session and spent on use.** It lives on the
+  `AgmemService`, which the daemon builds per connection, so one agent's dry
+  run cannot authorise another's delete. `purge` is part of the scope:
+  previewing what would be closed does not authorise deleting the same rows.
+- **Verbatim text can only be purged.** An episode has no validity window, so
+  there is no soft state for it to enter; asking to close one is refused rather
+  than silently ignored. Its chunk ids are refused too — a slice is not a thing
+  anyone forgets — and the claims distilled from it survive it, still naming
+  the source. `inspect` therefore treats a `source` naming no episode as
+  history rather than as a broken store.
 
 ### 5.5 Maintenance without a scheduler
 

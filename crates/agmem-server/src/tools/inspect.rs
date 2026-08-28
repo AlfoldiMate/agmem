@@ -362,13 +362,15 @@ async fn memory(
     // deliberate, rare call, and one read that cannot disagree with itself
     // beats two that can.
     let episode = match &target.source {
-        Source::Episode { episode } => Some(
-            repo::episode(service.db(), space, episode)
-                .await
-                .map_err(|error| store_error(&error))?
-                .episode
-                .into(),
-        ),
+        Source::Episode { episode } => match repo::episode(service.db(), space, episode).await {
+            Ok(detail) => Some(detail.episode.into()),
+            // `forget` can purge the text while leaving the claims drawn from
+            // it (design §5.4), so a source that names nothing is history
+            // rather than a broken store: the claim still says where it came
+            // from, and there is simply nothing left to quote.
+            Err(StoreError::UnknownEpisode { .. }) => None,
+            Err(error) => return Err(store_error(&error)),
+        },
         Source::Agent | Source::External { .. } => None,
     };
 

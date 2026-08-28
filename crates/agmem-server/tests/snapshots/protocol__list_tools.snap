@@ -45,6 +45,171 @@ expression: "&tools.tools"
     }
   },
   {
+    "name": "forget",
+    "description": "Remove memories the store should no longer act on — by id when you know which, or by query when you do not.\n\nReach for `remember` with `supersedes` first: a claim that turned out to be wrong is a correction, and a correction stays readable and dated. Forget is for what should not have been stored at all — something private, something that only made sense inside one session, notes on a project that no longer exists.\n\nBy default a forgotten memory is closed, not deleted: it stops surfacing in `recall` and `context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it is the only way to remove something that must not stay on disk. Purging text does not purge the claims distilled from it.\n\nForgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what matched, then send the identical call with `dry_run: false` to act. Any other second call is refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: true` previews them too.\n\nA query here matches on the words you write, not on their meaning: it selects the memories that contain those terms, so write the words you want gone. That is the opposite of `recall`, and deliberately — a deletion should never reach something that merely resembles what you asked for.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Report what would be forgotten and change nothing. Required as the\nfirst of two calls when forgetting by `query`.",
+          "type": "boolean"
+        },
+        "ids": {
+          "default": [],
+          "description": "The ids to forget: `memory:<id>`, `episode:<id>`, or a bare id from a\n`recall` hit. Exact, and needs no dry run.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "purge": {
+          "default": false,
+          "description": "Delete outright instead of closing. Unrecoverable: it takes the\nclaim's whole correction history with it, and an episode's verbatim\ntext and slices. Off by default.",
+          "type": "boolean"
+        },
+        "query": {
+          "default": null,
+          "description": "What to forget, in words, when you do not have the ids. Matched on the\nwords themselves, not on meaning — so it selects what you wrote rather\nthan what resembles it. Refused unless the identical call has already\nbeen made with `dry_run: true`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "space": {
+          "default": null,
+          "description": "Where to look: `current`, `user`, `all`, or a space name. Defaults to\n`current` and `user` together.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "outputSchema": {
+      "$defs": {
+        "ForgetMatch": {
+          "description": "One row a forget selected.",
+          "properties": {
+            "content": {
+              "description": "The claim, or the opening of the verbatim text, cut at 300 characters.",
+              "type": "string"
+            },
+            "derived": {
+              "description": "For an episode: how many distilled claims cite it and will outlive it.\nPurging text does not purge what was learned from it.",
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "description": "Its id. Pass it to `inspect` to read the whole row before deciding.",
+              "type": "string"
+            },
+            "invalid_reason": {
+              "description": "Why it is already closed, when it is — `superseded`, `forgotten`, or\n`expired`. A soft forget leaves such a row exactly as it is, so this is\nwhat explains an id in `matched` that is missing from `invalidated`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "$ref": "#/$defs/MatchKind",
+              "description": "What it is."
+            },
+            "space": {
+              "description": "The space holding it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "content",
+            "space"
+          ],
+          "type": "object"
+        },
+        "MatchKind": {
+          "description": "What a match is.",
+          "oneOf": [
+            {
+              "const": "memory",
+              "description": "A distilled claim.",
+              "type": "string"
+            },
+            {
+              "const": "episode",
+              "description": "Verbatim text.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "chunks_purged": {
+          "description": "How many episode slices went with the purged episodes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dry_run": {
+          "description": "Whether this was the scope check rather than the act.",
+          "type": "boolean"
+        },
+        "invalidated": {
+          "description": "The memories closed by this call. Shorter than `matched` when\nsomething in it was already closed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "matched": {
+          "description": "Everything the request selected, whether or not it moved. A purge\nlists the correction history it pulls in, which is the blast radius\nthe dry run exists to show.",
+          "items": {
+            "$ref": "#/$defs/ForgetMatch"
+          },
+          "type": "array"
+        },
+        "purge": {
+          "description": "Whether the rows were deleted rather than closed.",
+          "type": "boolean"
+        },
+        "purged": {
+          "description": "The memories and episodes deleted by this call.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spaces": {
+          "description": "The spaces this call looked in.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "spaces",
+        "dry_run",
+        "purge",
+        "matched",
+        "invalidated",
+        "purged",
+        "chunks_purged"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true
+    }
+  },
+  {
     "name": "inspect",
     "description": "Look behind a stored memory: where it came from, what it used to say, and what the store actually holds.\n\nUse it when a recalled claim matters enough to check, when two claims disagree, or when you need to quote the original wording rather than the distilled version. `ref` takes one of: a memory id (bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim text it was distilled from; `episode:<id>` for that text with every claim drawn from it; `entity:<name>` for everything ever said about a subject, corrected claims included; or `stats` for per-space counts.\n\nNothing is ever deleted here, so a claim that was corrected is still readable and still dated — which is what lets you tell a belief that changed from a belief that was always wrong.",
     "inputSchema": {

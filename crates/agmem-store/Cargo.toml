@@ -10,8 +10,12 @@ repository.workspace = true
 [dependencies]
 agmem-core = { workspace = true }
 serde = { workspace = true }
+surrealdb = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
 
 [lints]
 workspace = true

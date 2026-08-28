@@ -4,3 +4,9 @@
 //! versioned schema migrations, and every SurrealQL query. Callers speak the
 //! `agmem-core` domain types; nothing outside this crate writes SurrealQL.
 //! See `docs/design.md` §4.
+
+pub mod db;
+pub mod error;
+pub mod migrate;
+
+pub use error::StoreError;

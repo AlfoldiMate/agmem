@@ -275,6 +275,24 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
     })
 }
 
+/// Register `space` in the space registry unless it is already there.
+///
+/// Isolation is a field on every row, not a database, so this table is a
+/// listing rather than a gate — nothing reads it to decide whether a write is
+/// allowed. Startup calls this every run (design §5.1 step 8), so it has to be
+/// idempotent.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects.
+pub async fn ensure_space(db: &Db, space: &SpaceName) -> Result<(), StoreError> {
+    checked(
+        db.query(queries::ENSURE_SPACE)
+            .bind(("name", types::space_str(space)))
+            .await?,
+    )?;
+    Ok(())
+}
+
 /// Close `old` in favour of `new`, atomically.
 ///
 /// The boundary comes from the successor's `valid_from`, so walking the chain

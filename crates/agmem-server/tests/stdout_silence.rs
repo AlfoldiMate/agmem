@@ -22,8 +22,14 @@ fn startup_and_logging_write_nothing_to_stdout() {
         "stdout must stay empty, got: {}",
         String::from_utf8_lossy(&out.stdout)
     );
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        String::from_utf8_lossy(&out.stderr).contains("agmem starting"),
+        stderr.contains("agmem starting"),
         "expected the startup log line on stderr"
+    );
+    assert!(
+        stderr.contains("stdin closed before a session began"),
+        "a client that never initializes is a session that never started, not \
+         a failure — and the clean exit above must be that path, not luck: {stderr}"
     );
 }

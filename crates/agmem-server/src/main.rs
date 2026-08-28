@@ -3,6 +3,9 @@
 //! stdout is the MCP wire: nothing in this binary may write to stdout except
 //! the protocol transport (enforced by `clippy::print_stdout = deny`).
 
+use std::sync::Arc;
+
+use agmem_server::service::{self, AgmemService};
 use agmem_server::{config, doctor, embedder, lock, telemetry};
 use clap::Parser;
 
@@ -28,6 +31,7 @@ async fn main() -> anyhow::Result<()> {
     let schema = agmem_store::migrate::ensure(&db).await?;
     let embedder = embedder::build(&cfg)?;
     agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
+    agmem_store::repo::ensure_space(&db, &cfg.space).await?;
     tracing::info!(
         schema,
         embedder = embedder.model_id(),
@@ -35,6 +39,10 @@ async fn main() -> anyhow::Result<()> {
         "store ready"
     );
 
-    // The MCP serve loop lands with the rmcp skeleton issue (design §5.1).
+    // From here stdout belongs to the transport (design §5.1 step 8). The
+    // lock is held until this returns, which is what keeps a second agmem off
+    // an embedded store for as long as this one is serving.
+    service::serve_stdio(AgmemService::new(db, embedder, Arc::new(cfg))).await?;
+    drop(lock);
     Ok(())
 }

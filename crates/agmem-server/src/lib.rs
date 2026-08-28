@@ -8,4 +8,6 @@ pub mod config;
 pub mod doctor;
 pub mod embedder;
 pub mod lock;
+pub mod service;
 pub mod telemetry;
+pub mod tools;

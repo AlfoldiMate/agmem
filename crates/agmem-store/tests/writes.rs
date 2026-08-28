@@ -135,6 +135,25 @@ async fn episode_chunks_and_memories_commit_together() {
 }
 
 #[tokio::test]
+async fn registering_a_space_twice_leaves_one_row() {
+    let db = store().await;
+    for _ in 0..2 {
+        repo::ensure_space(&db, &space())
+            .await
+            .expect("ensure space");
+    }
+    repo::ensure_space(&db, &"other".parse().expect("valid slug"))
+        .await
+        .expect("ensure space");
+
+    assert_eq!(
+        column::<String>(&db, "SELECT VALUE name FROM space ORDER BY name").await,
+        ["other", "test"],
+        "startup runs every launch, so the registry must not grow"
+    );
+}
+
+#[tokio::test]
 async fn an_exact_duplicate_reports_the_id_that_already_holds_it() {
     let db = store().await;
     let first = repo::insert_batch(

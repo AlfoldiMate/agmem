@@ -95,6 +95,15 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
     builder.finish(format!("RETURN {{ episode: {episode}, memories: $out }}"))
 }
 
+/// Register `$name` in the space table unless it is registered already.
+///
+/// Guarded rather than blind for the same reason every insert is: `space_name`
+/// is UNIQUE, and a conflict inside a transaction aborts the whole thing.
+pub(crate) const ENSURE_SPACE: &str = "BEGIN;
+LET $existing = (SELECT VALUE id FROM space WHERE name = $name LIMIT 1)[0];
+IF $existing IS NONE { CREATE space:ulid() SET name = $name };
+COMMIT;";
+
 /// Which of `$ids` exist in `$space`, as bare ULIDs.
 pub(crate) const EXISTING_MEMORIES: &str =
     "SELECT VALUE record::id(id) FROM memory WHERE space = $space AND id IN $ids";

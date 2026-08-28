@@ -14,7 +14,8 @@ pub use read::{
     direct_lookup, history_chain, reinforce, search_hybrid, stats,
 };
 pub use write::{
-    Batch, BatchOutcome, NewChunk, NewEpisode, NewMemory, Written, insert_batch, supersede,
+    Batch, BatchOutcome, NewChunk, NewEpisode, NewMemory, Written, ensure_space, insert_batch,
+    supersede,
 };
 
 use agmem_core::{MemoryId, SpaceName};

@@ -23,6 +23,7 @@ use rmcp::{
 };
 
 use crate::config::Config;
+use crate::tools::inspect::{self, InspectParams, InspectResult};
 use crate::tools::recall::{self, RecallParams, RecallResult};
 use crate::tools::remember::{self, RememberParams, RememberResult};
 
@@ -82,8 +83,8 @@ impl AgmemService {
 /// macro generates, which [`ServerHandler`] below dispatches through. Each body
 /// is one call into [`crate::tools`]; the `description` beside it is not a
 /// comment but the tool's text on the wire — the extraction contract the model
-/// reads before deciding to call. `inspect` follows in phase 1, `context` and
-/// `forget` in phase 2 (design §3.1).
+/// reads before deciding to call. `context` and `forget` follow in phase 2
+/// (design §3.1).
 #[tool_router]
 impl AgmemService {
     /// The write verb (design §5.2). `description` below is the extraction
@@ -141,6 +142,32 @@ you find out what was believed at some earlier point.",
         Parameters(params): Parameters<RecallParams>,
     ) -> Result<Json<RecallResult>, ErrorData> {
         recall::run(self, params).await.map(Json)
+    }
+
+    /// The audit verb (design §3.1).
+    #[tool(
+        name = "inspect",
+        description = "Look behind a stored memory: where it came from, what it used to say, and \
+what the store actually holds.\n\n\
+Use it when a recalled claim matters enough to check, when two claims disagree, or when you need \
+to quote the original wording rather than the distilled version. `ref` takes one of: a memory id \
+(bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim \
+text it was distilled from; `episode:<id>` for that text with every claim drawn from it; \
+`entity:<name>` for everything ever said about a subject, corrected claims included; or `stats` \
+for per-space counts.\n\n\
+Nothing is ever deleted here, so a claim that was corrected is still readable and still dated — \
+which is what lets you tell a belief that changed from a belief that was always wrong.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn inspect(
+        &self,
+        Parameters(params): Parameters<InspectParams>,
+    ) -> Result<Json<InspectResult>, ErrorData> {
+        inspect::run(self, params).await.map(Json)
     }
 }
 

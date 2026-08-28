@@ -316,8 +316,17 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // → { matched: n, invalidated|purged: [ids] }   (query-mode requires dry_run first)
 
 // inspect
-{ "ref": "memory:01J… | episode:01J… | entity:<name> | stats" }
-// → history chain / provenance / source episode text / per-space counts
+{ "ref": "memory:01J… | 01J… | episode:01J… | entity:<name> | stats",
+  "space": "current|user|all|<name>" }   // default: current + user; all for stats
+// → { ref: canonical form, spaces: [searched],
+//     found: one of
+//       { kind: "memory",  memory, chain: [oldest→newest], episode? }
+//       { kind: "episode", episode, chunks: [reading order], derived: [claims] }
+//       { kind: "entity",  entity, memories: [live and closed] }
+//       { kind: "stats",   counts: [{ space, memories, live, invalidated,
+//                                     episodes, chunks, live_by_kind }] } }
+// A bare ULID is `memory:<id>` — that is the form `remember` and `recall`
+// hand out, so requiring the prefix would make the obvious call fail.
 ```
 
 Behavioral rules baked into the tools:

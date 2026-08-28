@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use agmem_core::scoring::{self, Ranked, Signals};
-use agmem_core::{Kind, MemoryId, Source, SpaceName};
+use agmem_core::{Kind, MemoryId};
 use agmem_store::repo::{self, Candidate, Filters, Hit as StoreHit, Liveness, Lookup, Search};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -23,7 +23,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::service::AgmemService;
-use crate::tools::{internal, invalid, store_error};
+use crate::tools::{self, internal, invalid, provenance, store_error};
 
 /// How many hits a call that does not say gets back.
 const DEFAULT_K: u16 = 10;
@@ -185,7 +185,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         include_invalidated,
     } = params;
 
-    let spaces = resolve_spaces(service, space.as_deref()).await?;
+    let spaces = tools::spaces(service, space.as_deref()).await?;
     let k = usize::from(resolve_k(service, k)?);
     let liveness = resolve_liveness(as_of.as_deref(), include_invalidated)?;
     let filters = Filters {
@@ -319,37 +319,6 @@ impl From<Kind> for HitKind {
     }
 }
 
-/// Which spaces this call searches (design §3.1).
-///
-/// `current` and `all` are keywords, not names, so a space actually called
-/// one of those is unreachable — the documented vocabulary wins over a slug
-/// that collides with it. `user` needs no such rule: the keyword and the
-/// reserved space are the same thing, so it falls through and parses.
-///
-/// Unset means the pair an agent nearly always wants together — this project,
-/// and the person behind it.
-async fn resolve_spaces(
-    service: &AgmemService,
-    requested: Option<&str>,
-) -> Result<Vec<SpaceName>, ErrorData> {
-    let current = service.config().space.clone();
-    Ok(match requested {
-        None => {
-            let mut both = vec![current, SpaceName::user()];
-            both.dedup();
-            both
-        }
-        Some("current") => vec![current],
-        Some("all") => repo::spaces(service.db())
-            .await
-            .map_err(|error| store_error(&error))?,
-        Some(name) => vec![
-            name.parse()
-                .map_err(|error| invalid(format!("space: {error}")))?,
-        ],
-    })
-}
-
 /// How many hits to return, refused rather than silently clamped.
 ///
 /// A `k` of 200 against a ceiling of 50 is a caller that believes it is
@@ -405,39 +374,9 @@ async fn reinforce(service: &AgmemService, ids: &[MemoryId]) {
     }
 }
 
-/// A hit's provenance in the form `inspect` takes.
-fn provenance(source: &Source) -> String {
-    match source {
-        Source::Agent => "agent".to_owned(),
-        Source::Episode { episode } => format!("episode:{episode}"),
-        Source::External { origin } => format!("external:{origin}"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use agmem_core::EpisodeId;
-
     use super::*;
-
-    #[test]
-    fn provenance_is_an_inspect_reference() {
-        assert_eq!(provenance(&Source::Agent), "agent");
-        assert_eq!(
-            provenance(&Source::Episode {
-                episode: EpisodeId::new("01M145SMNET1XRYA713EWAQTD3").expect("ulid"),
-            }),
-            "episode:01M145SMNET1XRYA713EWAQTD3",
-            "a distilled claim points at the text it came from, in the shape \
-             inspect's `ref` accepts"
-        );
-        assert_eq!(
-            provenance(&Source::External {
-                origin: "https://example.com".to_owned(),
-            }),
-            "external:https://example.com"
-        );
-    }
 
     #[test]
     fn as_of_outranks_include_invalidated() {

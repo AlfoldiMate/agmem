@@ -53,6 +53,10 @@ const MEMORY_FIELDS: &str = "record::id(id) AS id, space, kind, content, content
 const CHUNK_FIELDS: &str =
     "record::id(id) AS id, record::id(episode) AS episode, space, text, position";
 
+/// Every `episode` column a read projects.
+const EPISODE_FIELDS: &str =
+    "record::id(id) AS id, space, content, content_hash, occurred_at, session, created_at";
+
 /// The whole read of one `recall` call: every retrieval arm the request has,
 /// fused into one order, and the rows behind it.
 pub(crate) fn search(search: &Search) -> Script {
@@ -143,6 +147,32 @@ pub(crate) fn history_chain() -> Script {
     builder.finish(format!(
         "RETURN {{ ids: $chain.map(|$link| record::id($link)),
              rows: (SELECT {MEMORY_FIELDS} FROM $chain) }}"
+    ))
+}
+
+/// One episode with everything hanging off it (design §3.1, `inspect`).
+///
+/// The three reads travel together because they are one question — "what did
+/// this text produce" — and answering it in three round-trips would let the
+/// slices and the claims disagree about what the episode is.
+///
+/// `(SELECT … FROM $target WHERE space = $space)[0]` is `NONE` both when the
+/// id names nothing and when it names a row in another space, so one branch
+/// covers both: an id is a capability inside a space, not across them.
+pub(crate) fn episode() -> Script {
+    let mut builder = Builder::plain();
+    builder.push(format!(
+        "LET $episode = (SELECT {EPISODE_FIELDS} FROM $target WHERE space = $space)[0]"
+    ));
+    builder.finish(format!(
+        "RETURN IF $episode IS NONE {{ NONE }} ELSE {{
+             {{ episode: $episode,
+                chunks: (SELECT {CHUNK_FIELDS} FROM episode_chunk
+                    WHERE episode = $target ORDER BY position),
+                derived: (SELECT {MEMORY_FIELDS} FROM memory
+                    WHERE space = $space AND source.ref = $target
+                    ORDER BY created_at) }}
+         }}"
     ))
 }
 

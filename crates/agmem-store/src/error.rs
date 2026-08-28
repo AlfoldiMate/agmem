@@ -1,6 +1,6 @@
 //! Store error taxonomy.
 
-use agmem_core::{CoreError, MemoryId, SpaceName};
+use agmem_core::{CoreError, EpisodeId, MemoryId, SpaceName};
 
 /// Errors from the repository layer.
 #[derive(Debug, thiserror::Error)]
@@ -14,6 +14,10 @@ pub enum StoreError {
     /// stale `supersedes` id, or one belonging to another space.
     #[error("memory {id} does not exist in space {space}")]
     UnknownMemory { space: SpaceName, id: MemoryId },
+
+    /// A caller named an episode that this space does not hold.
+    #[error("episode {id} does not exist in space {space}")]
+    UnknownEpisode { space: SpaceName, id: EpisodeId },
 
     /// A row came back in a shape the schema cannot have minted — a record id
     /// that is not a ULID, or an enum spelling this agmem does not know.

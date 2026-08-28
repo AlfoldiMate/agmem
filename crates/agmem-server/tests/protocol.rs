@@ -121,6 +121,18 @@ impl Harness {
             .expect("recall answers with structured content, not just text")
     }
 
+    /// One successful `inspect`, as the structured result an agent reads.
+    async fn inspect(&self, reference: &str) -> Value {
+        let result = self
+            .call("inspect", json!({ "ref": reference }))
+            .await
+            .expect("inspect");
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        result
+            .structured_content
+            .expect("inspect answers with structured content, not just text")
+    }
+
     /// Every memory the default space holds, closed ones included.
     async fn memories(&self) -> Vec<MemoryRecord> {
         let mut lookup = Lookup::new(vec![space()]);
@@ -801,6 +813,248 @@ async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
         agmem.memories().await.remove(0).access_count,
         1,
         "a refused recall reinforces nothing"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn inspect_walks_a_chain_of_two_corrections_oldest_first() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let mut links = Vec::new();
+    for (content, valid_from) in [
+        ("The user deploys from a laptop", "2026-01-01T00:00:00Z"),
+        ("The user deploys from CI", "2026-03-01T00:00:00Z"),
+        ("The user deploys from a robot", "2026-06-01T00:00:00Z"),
+    ] {
+        let mut memory = json!({ "content": content, "valid_from": valid_from });
+        if let Some(previous) = links.last() {
+            memory["supersedes"] = json!(previous);
+        }
+        let diff = agmem.remember(json!({ "memories": [memory] })).await;
+        links.push(ids(&diff["created"])[0].to_owned());
+    }
+
+    // From the newest link, sent the way `recall` hands ids out: bare.
+    let found = agmem.inspect(&links[2]).await;
+    assert_eq!(
+        found["ref"].as_str(),
+        Some(format!("memory:{}", links[2]).as_str())
+    );
+    let answer = &found["found"];
+    assert_eq!(answer["kind"].as_str(), Some("memory"));
+    assert_eq!(answer["memory"]["id"].as_str(), Some(links[2].as_str()));
+    assert_eq!(
+        answer["chain"]
+            .as_array()
+            .expect("chain")
+            .iter()
+            .map(|link| (
+                link["content"].as_str().expect("content"),
+                link["invalid_reason"].as_str()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("The user deploys from a laptop", Some("superseded")),
+            ("The user deploys from CI", Some("superseded")),
+            ("The user deploys from a robot", None),
+        ],
+        "oldest belief first, each dated, only the last one live: {answer}"
+    );
+
+    // The same chain from the middle link — a walk, not a lookup.
+    let from_middle = agmem.inspect(&format!("memory:{}", links[1])).await;
+    assert_eq!(
+        from_middle["found"]["chain"], answer["chain"],
+        "any link of a chain answers with the whole chain"
+    );
+    assert_eq!(
+        from_middle["found"]["memory"]["id"].as_str(),
+        Some(links[1].as_str()),
+        "but `memory` is the one that was asked about"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_claim_links_back_to_the_text_it_was_distilled_from() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let verbatim = "I'd rather write CLIs in Rust than Python.\n\nAlso cargo died on a cold cache.";
+    let diff = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The user prefers Rust over Python for CLI tools" },
+                { "content": "The build breaks on a cold cargo cache", "kind": "lesson" }
+            ],
+            "episode": { "content": verbatim, "session": "s-1" }
+        }))
+        .await;
+    let claim = ids(&diff["created"])[0].to_owned();
+    let episode = diff["episode"].as_str().expect("episode id").to_owned();
+
+    let found = agmem.inspect(&claim).await;
+    let quotable = &found["found"]["episode"];
+    assert_eq!(
+        quotable["content"].as_str(),
+        Some(verbatim),
+        "the claim carries its ground truth, unedited: {found}"
+    );
+    assert_eq!(quotable["session"].as_str(), Some("s-1"));
+    assert_eq!(
+        found["found"]["memory"]["source"].as_str(),
+        Some(format!("episode:{episode}").as_str()),
+        "and `source` is the reference that got us here"
+    );
+
+    let text = agmem.inspect(&format!("episode:{episode}")).await;
+    let answer = &text["found"];
+    assert_eq!(answer["kind"].as_str(), Some("episode"));
+    assert_eq!(
+        answer["chunks"]
+            .as_array()
+            .expect("chunks")
+            .iter()
+            .map(|chunk| chunk["position"].as_u64().expect("position"))
+            .collect::<Vec<_>>(),
+        [0],
+        "both paragraphs fit one slice: {answer}"
+    );
+    let mut derived: Vec<&str> = answer["derived"]
+        .as_array()
+        .expect("derived")
+        .iter()
+        .map(|memory| memory["content"].as_str().expect("content"))
+        .collect();
+    derived.sort_unstable();
+    assert_eq!(
+        derived,
+        [
+            "The build breaks on a cold cargo cache",
+            "The user prefers Rust over Python for CLI tools"
+        ],
+        "every claim the same call distilled from it"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn inspect_reports_a_subject_and_what_each_space_holds() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let first = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The user deploys from a laptop",
+                "entities": ["user"],
+                "valid_from": "2026-01-01T00:00:00Z"
+            }]
+        }))
+        .await;
+    agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The user deploys from CI",
+                "entities": ["user"],
+                "supersedes": ids(&first["created"])[0],
+                "valid_from": "2026-06-01T00:00:00Z"
+            }]
+        }))
+        .await;
+    agmem
+        .remember(json!({
+            "space": "user",
+            "memories": [{
+                "content": "The user answers in English",
+                "kind": "instruction",
+                "entities": ["user"]
+            }]
+        }))
+        .await;
+
+    let subject = agmem.inspect("entity:user").await;
+    assert_eq!(subject["found"]["entity"].as_str(), Some("user"));
+    let mut said: Vec<&str> = subject["found"]["memories"]
+        .as_array()
+        .expect("memories")
+        .iter()
+        .map(|memory| memory["content"].as_str().expect("content"))
+        .collect();
+    said.sort_unstable();
+    assert_eq!(
+        said,
+        [
+            "The user answers in English",
+            "The user deploys from CI",
+            "The user deploys from a laptop"
+        ],
+        "everything ever said about the subject, across both spaces, corrected \
+         claims included: {subject}"
+    );
+
+    let health = agmem.inspect("stats").await;
+    assert_eq!(
+        health["spaces"],
+        json!(["default", "user"]),
+        "`stats` is a question about the store, so it defaults to every space"
+    );
+    let counts = health["found"]["counts"].as_array().expect("counts");
+    let project = &counts[0];
+    assert_eq!(
+        (
+            project["space"].as_str(),
+            project["memories"].as_u64(),
+            project["live"].as_u64(),
+            project["invalidated"].as_u64()
+        ),
+        (Some("default"), Some(2), Some(1), Some(1)),
+        "a corrected claim is counted, not lost: {project}"
+    );
+    assert_eq!(
+        counts[1]["live_by_kind"],
+        json!([{ "kind": "instruction", "count": 1 }]),
+        "and the user space holds the standing rule: {}",
+        counts[1]
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_unanswerable_ref_says_what_the_grammar_is() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let stored = agmem
+        .remember(json!({
+            "space": "user",
+            "memories": [{ "content": "The user answers in English" }]
+        }))
+        .await;
+    let elsewhere = ids(&stored["created"])[0].to_owned();
+
+    for (reference, space, expected) in [
+        ("who knows", None, "ref must be"),
+        ("memory:nonsense", None, "ref must be"),
+        ("entity:", None, "ref must be"),
+        ("01M145SMNET1XRYA713EWAQTD3", None, "no memory"),
+        ("episode:01M145SMNET1XRYA713EWAQTD3", None, "no episode"),
+        // The id is real, but not in the space this call looked in.
+        (elsewhere.as_str(), Some("current"), "no memory"),
+    ] {
+        let mut arguments = json!({ "ref": reference });
+        if let Some(space) = space {
+            arguments["space"] = json!(space);
+        }
+        let error = agmem
+            .call("inspect", arguments.clone())
+            .await
+            .expect_err("the call must be refused");
+        assert!(
+            matches!(&error, ServiceError::McpError(data)
+                if data.code == ErrorCode::INVALID_PARAMS && data.message.contains(expected)),
+            "{arguments} should be refused naming {expected:?}, got: {error}"
+        );
+    }
+
+    assert_eq!(
+        agmem.inspect(&elsewhere).await["found"]["memory"]["space"].as_str(),
+        Some("user"),
+        "and the default pair of spaces finds it"
     );
     agmem.shutdown().await;
 }

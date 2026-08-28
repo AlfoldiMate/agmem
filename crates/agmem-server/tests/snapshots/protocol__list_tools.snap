@@ -4,6 +4,483 @@ expression: "&tools.tools"
 ---
 [
   {
+    "name": "inspect",
+    "description": "Look behind a stored memory: where it came from, what it used to say, and what the store actually holds.\n\nUse it when a recalled claim matters enough to check, when two claims disagree, or when you need to quote the original wording rather than the distilled version. `ref` takes one of: a memory id (bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim text it was distilled from; `episode:<id>` for that text with every claim drawn from it; `entity:<name>` for everything ever said about a subject, corrected claims included; or `stats` for per-space counts.\n\nNothing is ever deleted here, so a claim that was corrected is still readable and still dated — which is what lets you tell a belief that changed from a belief that was always wrong.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "ref": {
+          "description": "What to look at: `memory:<id>` or a bare memory id for a claim's\nhistory and the text behind it, `episode:<id>` for stored verbatim\ntext, `entity:<name>` for everything said about a subject, or `stats`\nfor what each space holds.",
+          "type": "string"
+        },
+        "space": {
+          "default": null,
+          "description": "Where to look: `current`, `user`, `all`, or a space name. Defaults to\n`current` and `user` together — or to `all` for `stats`, which is a\nquestion about the whole store.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "$defs": {
+        "ChunkView": {
+          "description": "One retrieval slice of an episode.",
+          "properties": {
+            "id": {
+              "description": "The record id.",
+              "type": "string"
+            },
+            "position": {
+              "description": "Zero-based position within the episode.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "text": {
+              "description": "The slice.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "position",
+            "text"
+          ],
+          "type": "object"
+        },
+        "DecayClass": {
+          "description": "How fast a memory's retention falls off between accesses.\n\nThe rates themselves live with the scoring functions; this is the label\nstored on the row.",
+          "oneOf": [
+            {
+              "const": "pinned",
+              "description": "Never decays.",
+              "type": "string"
+            },
+            {
+              "const": "slow",
+              "description": "Fades over months.",
+              "type": "string"
+            },
+            {
+              "const": "normal",
+              "description": "The default: fades over weeks.",
+              "type": "string"
+            },
+            {
+              "const": "fast",
+              "description": "Working context: fades over days, then gets pruned at startup.",
+              "type": "string"
+            }
+          ]
+        },
+        "EpisodeView": {
+          "description": "Verbatim text as stored — never rewritten, never superseded.",
+          "properties": {
+            "content": {
+              "description": "The text, exactly as it was given.",
+              "type": "string"
+            },
+            "created_at": {
+              "description": "When the row was written, RFC3339.",
+              "type": "string"
+            },
+            "id": {
+              "description": "The record id.",
+              "type": "string"
+            },
+            "occurred_at": {
+              "description": "When the events described happened, RFC3339.",
+              "type": "string"
+            },
+            "session": {
+              "description": "The conversation or working session it belongs to.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "space": {
+              "description": "The space holding it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "space",
+            "content",
+            "occurred_at",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        "Inspected": {
+          "description": "One of the four answers, tagged by `kind`.",
+          "oneOf": [
+            {
+              "description": "A claim, where it came from, and what it used to say.",
+              "properties": {
+                "chain": {
+                  "description": "Its whole supersession chain, oldest first, this claim included. A\nclaim that has never been corrected is a chain of one; a longer one\nis a belief that changed, and each link is dated.",
+                  "items": {
+                    "$ref": "#/$defs/MemoryView"
+                  },
+                  "type": "array"
+                },
+                "episode": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/EpisodeView"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The verbatim text it was distilled from, when there is one. Quote\nfrom this rather than from the claim when precision matters."
+                },
+                "kind": {
+                  "const": "memory",
+                  "type": "string"
+                },
+                "memory": {
+                  "$ref": "#/$defs/MemoryView",
+                  "description": "The claim asked about."
+                }
+              },
+              "required": [
+                "kind",
+                "memory",
+                "chain"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Stored verbatim text and everything that came out of it.",
+              "properties": {
+                "chunks": {
+                  "description": "The slices retrieval matches against, in reading order.",
+                  "items": {
+                    "$ref": "#/$defs/ChunkView"
+                  },
+                  "type": "array"
+                },
+                "derived": {
+                  "description": "The claims distilled from it, oldest first.",
+                  "items": {
+                    "$ref": "#/$defs/MemoryView"
+                  },
+                  "type": "array"
+                },
+                "episode": {
+                  "$ref": "#/$defs/EpisodeView",
+                  "description": "The text, unedited."
+                },
+                "kind": {
+                  "const": "episode",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "episode",
+                "chunks",
+                "derived"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Everything said about one subject.",
+              "properties": {
+                "entity": {
+                  "description": "The subject asked about.",
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "entity",
+                  "type": "string"
+                },
+                "memories": {
+                  "description": "Every claim naming it, strongest first — closed ones included, so\na contradiction shows up as history rather than as a conflict.",
+                  "items": {
+                    "$ref": "#/$defs/MemoryView"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "kind",
+                "entity",
+                "memories"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "What the store holds.",
+              "properties": {
+                "counts": {
+                  "description": "One entry per space searched.",
+                  "items": {
+                    "$ref": "#/$defs/SpaceCounts"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "const": "stats",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "counts"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Kind": {
+          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
+          "oneOf": [
+            {
+              "const": "fact",
+              "description": "A distilled statement about the world, the user, or the project.",
+              "type": "string"
+            },
+            {
+              "const": "lesson",
+              "description": "A procedural insight: \"X fails when Y; do Z\".",
+              "type": "string"
+            },
+            {
+              "const": "instruction",
+              "description": "A standing behavioral rule, always part of assembled context.",
+              "type": "string"
+            }
+          ]
+        },
+        "KindCount": {
+          "description": "How many live memories of one kind a space holds.",
+          "properties": {
+            "count": {
+              "description": "How many.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "$ref": "#/$defs/Kind",
+              "description": "The kind."
+            }
+          },
+          "required": [
+            "kind",
+            "count"
+          ],
+          "type": "object"
+        },
+        "MemoryView": {
+          "description": "A memory as `inspect` renders it: the whole row, including the counters\n`recall` folds away into a score.",
+          "properties": {
+            "access_count": {
+              "description": "How often recall has returned it.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "content": {
+              "description": "The claim itself.",
+              "type": "string"
+            },
+            "created_at": {
+              "description": "When the row was written, RFC3339.",
+              "type": "string"
+            },
+            "decay_class": {
+              "$ref": "#/$defs/DecayClass",
+              "description": "How fast it fades between uses."
+            },
+            "entities": {
+              "description": "The subjects it is about.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "id": {
+              "description": "The record id.",
+              "type": "string"
+            },
+            "invalid_at": {
+              "description": "When it stopped; absent while it is still live.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "invalid_reason": {
+              "description": "Why it stopped: `superseded`, `forgotten`, or `expired`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "$ref": "#/$defs/Kind",
+              "description": "What the claim is."
+            },
+            "last_accessed": {
+              "description": "When recall last returned it, RFC3339.",
+              "type": "string"
+            },
+            "source": {
+              "description": "Where it came from: `agent`, `episode:<id>`, or `external:<origin>`.",
+              "type": "string"
+            },
+            "space": {
+              "description": "The space holding it.",
+              "type": "string"
+            },
+            "strength": {
+              "description": "Ebbinghaus stability: 1.0 when written, raised by every recall that\nreturns it. A high number on an old memory means it is still in use.",
+              "format": "double",
+              "type": "number"
+            },
+            "superseded_by": {
+              "description": "The claim that corrected this one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "supersedes": {
+              "description": "The claim this one corrected.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tags": {
+              "description": "Its labels.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "valid_from": {
+              "description": "When the claim started being true, RFC3339.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "content",
+            "space",
+            "entities",
+            "tags",
+            "source",
+            "decay_class",
+            "strength",
+            "access_count",
+            "last_accessed",
+            "valid_from",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        "SpaceCounts": {
+          "description": "What one space holds.",
+          "properties": {
+            "chunks": {
+              "description": "Retrieval slices of those episodes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "episodes": {
+              "description": "Verbatim episodes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "invalidated": {
+              "description": "Those closed — superseded, forgotten, or expired. Memories are never\ndeleted, so this is history rather than loss.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "live": {
+              "description": "Those still live.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "live_by_kind": {
+              "description": "Live memories per kind; a kind with none is absent.",
+              "items": {
+                "$ref": "#/$defs/KindCount"
+              },
+              "type": "array"
+            },
+            "memories": {
+              "description": "Every memory ever written here, live or closed.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "space": {
+              "description": "The space these counts describe.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "space",
+            "memories",
+            "live",
+            "invalidated",
+            "episodes",
+            "chunks",
+            "live_by_kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "found": {
+          "$ref": "#/$defs/Inspected",
+          "description": "The answer, shaped by what `ref` named."
+        },
+        "ref": {
+          "description": "The reference this answers, in its canonical form.",
+          "type": "string"
+        },
+        "spaces": {
+          "description": "The spaces that were searched.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ref",
+        "spaces",
+        "found"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "recall",
     "description": "Search everything past sessions stored — distilled claims and the verbatim text behind them — before assuming, guessing, or asking the user something they may already have said.\n\nCall this at the start of a session, when a new topic comes up, and before any answer that depends on what the user prefers, decided earlier, or has already been told. Ask in words: the wording is matched literally and the meaning semantically, so a question works better than keywords. Drop `query` entirely to list what `entities`, `tags` or `kinds` select on their own.\n\nHits come back ranked by how well they matched, how well they have held up since they were last used, and how important the storing agent said they were — each of those is in `signals`, so a claim that only surfaced because it never decays is visible as such. Nothing is hidden: a claim that was corrected is absent unless you ask with `as_of` or `include_invalidated`, which is how you find out what was believed at some earlier point.",
     "inputSchema": {

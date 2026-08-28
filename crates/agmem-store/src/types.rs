@@ -11,8 +11,8 @@
 //! project them and the [`MemoryRecord`] they rebuild always has `None` there.
 
 use agmem_core::{
-    ChunkId, DecayClass, EpisodeChunk, EpisodeId, InvalidReason, Kind, MemoryId, MemoryRecord,
-    Source, SpaceName,
+    ChunkId, DecayClass, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind, MemoryId,
+    MemoryRecord, Source, SpaceName,
 };
 use jiff::Timestamp;
 use surrealdb::types::{Datetime, RecordId, SurrealValue, Value};
@@ -247,6 +247,46 @@ impl ChunkReadRow {
             position: u32::try_from(self.position).unwrap_or(0),
         })
     }
+}
+
+/// Every `episode` column a read projects. Episodes carry no vector of their
+/// own — retrieval matches their chunks — so there is nothing to leave out.
+#[derive(SurrealValue)]
+pub(crate) struct EpisodeReadRow {
+    pub(crate) id: String,
+    pub(crate) space: String,
+    pub(crate) content: String,
+    pub(crate) content_hash: String,
+    pub(crate) occurred_at: Datetime,
+    pub(crate) session: Option<String>,
+    pub(crate) created_at: Datetime,
+}
+
+impl EpisodeReadRow {
+    /// The domain episode this row spells.
+    ///
+    /// # Errors
+    /// [`StoreError::MalformedRow`] when an id column is not a ULID.
+    pub(crate) fn into_episode(self) -> Result<Episode, StoreError> {
+        Ok(Episode {
+            id: EpisodeId::new(self.id)?,
+            space: SpaceName::new(self.space)?,
+            content: self.content,
+            content_hash: self.content_hash,
+            occurred_at: to_timestamp(&self.occurred_at),
+            session: self.session,
+            created_at: to_timestamp(&self.created_at),
+        })
+    }
+}
+
+/// The single object an episode lookup returns: the verbatim row, the slices
+/// retrieval matches, and the claims distilled from it.
+#[derive(SurrealValue)]
+pub(crate) struct EpisodeDetailRow {
+    pub(crate) episode: EpisodeReadRow,
+    pub(crate) chunks: Vec<ChunkReadRow>,
+    pub(crate) derived: Vec<MemoryReadRow>,
 }
 
 /// The nearest live memory to one probe vector: which row, and how far.

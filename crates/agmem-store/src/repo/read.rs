@@ -12,7 +12,9 @@
 
 use std::collections::HashMap;
 
-use agmem_core::{EpisodeChunk, Kind, MemoryId, MemoryRecord, SpaceName, dedup};
+use agmem_core::{
+    Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName, dedup,
+};
 use jiff::Timestamp;
 use surrealdb::engine::any::Any;
 use surrealdb::method::Query;
@@ -23,7 +25,8 @@ use crate::StoreError;
 use crate::db::Db;
 use crate::queries::read as queries;
 use crate::types::{
-    self, ChainRow, ChunkReadRow, MemoryReadRow, NeighbourRow, SearchRow, StatsRow,
+    self, ChainRow, ChunkReadRow, EpisodeDetailRow, MemoryReadRow, NeighbourRow, SearchRow,
+    StatsRow,
 };
 
 /// The candidate pool one recall considers, before `k` truncates it
@@ -156,6 +159,17 @@ pub struct Neighbour {
     /// one. Converted from the engine's distance by [`dedup`], so the gate and
     /// its threshold speak the same units.
     pub similarity: f64,
+}
+
+/// An episode with everything that came out of it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EpisodeDetail {
+    /// The verbatim text, as stored.
+    pub episode: Episode,
+    /// Its retrieval slices, in reading order.
+    pub chunks: Vec<EpisodeChunk>,
+    /// The claims distilled from it, oldest first.
+    pub derived: Vec<MemoryRecord>,
 }
 
 /// Per-space counts, for `inspect`.
@@ -374,6 +388,50 @@ pub async fn history_chain(
                 .into_record()
         })
         .collect()
+}
+
+/// One episode, its retrieval slices, and the claims distilled from it.
+///
+/// The provenance half of `inspect` (design §3.1): given a distilled claim's
+/// `source`, this is the verbatim text it came from, unedited and quotable,
+/// alongside everything else that came out of the same text. Chunks are in
+/// reading order and derived memories in the order they were written.
+///
+/// # Errors
+/// [`StoreError::UnknownEpisode`] when `id` is not in `space`,
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn episode(
+    db: &Db,
+    space: &SpaceName,
+    id: &EpisodeId,
+) -> Result<EpisodeDetail, StoreError> {
+    let script = queries::episode();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("target", types::episode_ref(id)))
+            .bind(("space", types::space_str(space)))
+            .await?,
+    )?;
+    let row: EpisodeDetailRow = resp
+        .take::<Option<EpisodeDetailRow>>(script.result_index)?
+        .ok_or_else(|| StoreError::UnknownEpisode {
+            space: space.clone(),
+            id: id.clone(),
+        })?;
+    Ok(EpisodeDetail {
+        episode: row.episode.into_episode()?,
+        chunks: row
+            .chunks
+            .into_iter()
+            .map(ChunkReadRow::into_chunk)
+            .collect::<Result<_, StoreError>>()?,
+        derived: row
+            .derived
+            .into_iter()
+            .map(MemoryReadRow::into_record)
+            .collect::<Result<_, StoreError>>()?,
+    })
 }
 
 /// Every space this store knows about, alphabetically.

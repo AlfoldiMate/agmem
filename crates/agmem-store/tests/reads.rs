@@ -11,7 +11,7 @@
 //! fulltext arm's order arbitrary. Every term asserted on here appears in
 //! exactly one row of several.
 
-use agmem_core::{Kind, MemoryId, SpaceName, dedup};
+use agmem_core::{EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
 use agmem_store::db::Db;
 use agmem_store::repo::{
     self, Batch, Candidate, Filters, Hit, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Search,
@@ -475,4 +475,60 @@ async fn stats_count_what_a_space_holds() {
         .expect("stats");
     assert_eq!((empty.memories, empty.episodes), (0, 0));
     assert!(empty.live_by_kind.is_empty());
+}
+
+#[tokio::test]
+async fn an_episode_comes_back_with_its_slices_and_what_it_produced() {
+    let db = seeded().await;
+    let seeded_memories = repo::direct_lookup(&db, &Lookup::new(vec![space()]))
+        .await
+        .expect("lookup");
+    let Source::Episode { episode: id } = &seeded_memories[0].source else {
+        panic!("the fixture writes every memory alongside its episode");
+    };
+
+    let detail = repo::episode(&db, &space(), id).await.expect("episode");
+    assert_eq!(
+        detail.episode.content, "a long conversation",
+        "the verbatim text, unedited — this is what makes a claim quotable"
+    );
+    assert_eq!(
+        detail
+            .chunks
+            .iter()
+            .map(|chunk| (chunk.position, chunk.text.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            (0, "the borrow checker took an hour to explain"),
+            (1, "then somebody made coffee"),
+            (2, "and the meeting ended"),
+        ],
+        "slices in reading order, not the order the engine happened to store them"
+    );
+    assert_eq!(
+        detail.derived.len(),
+        5,
+        "and every claim distilled from it, however many"
+    );
+    assert!(
+        detail
+            .derived
+            .iter()
+            .all(|memory| matches!(&memory.source, Source::Episode { episode } if episode == id)),
+        "the link is `source.ref`, walked backwards"
+    );
+
+    let absent = EpisodeId::new("01M145SMNET1XRYA713EWAQTD3").expect("ulid");
+    assert!(matches!(
+        repo::episode(&db, &space(), &absent).await,
+        Err(StoreError::UnknownEpisode { .. })
+    ));
+    let elsewhere: SpaceName = "other".parse().expect("valid slug");
+    assert!(
+        matches!(
+            repo::episode(&db, &elsewhere, id).await,
+            Err(StoreError::UnknownEpisode { .. })
+        ),
+        "an id is a capability inside a space, not across them"
+    );
 }

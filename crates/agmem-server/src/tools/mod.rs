@@ -4,7 +4,10 @@
 //! them; [`crate::service`] owns only the `#[tool]` attribute that routes to
 //! it. What lives here besides the modules is the one thing every tool has to
 //! get right and cannot discover on its own: what its annotations must say,
-//! and which failures are the caller's fault.
+//! and which failures are the caller's fault. Two tools' worth of shared
+//! vocabulary sits here too — [`spaces`] resolves `current|user|all|<name>`
+//! the same way for every read, and [`provenance`] spells a `source` the same
+//! way in every answer.
 //!
 //! # The annotation contract (design §3.1)
 //!
@@ -34,13 +37,64 @@
 //! )]
 //! ```
 
+pub mod inspect;
 pub mod recall;
 pub mod remember;
 
 use std::borrow::Cow;
 
-use agmem_store::StoreError;
+use agmem_core::{Source, SpaceName};
+use agmem_store::{StoreError, repo};
 use rmcp::ErrorData;
+
+use crate::service::AgmemService;
+
+/// Which spaces a read looks in (design §3.1).
+///
+/// `current` and `all` are keywords, not names, so a space actually called one
+/// of those is unreachable — the documented vocabulary wins over a slug that
+/// collides with it. `user` needs no such rule: the keyword and the reserved
+/// space are the same thing, so it falls through and parses.
+///
+/// Unset means the pair an agent nearly always wants together — this project,
+/// and the person behind it.
+///
+/// # Errors
+/// [`ErrorData`] with `INVALID_PARAMS` for a name that is not a valid slug.
+pub(crate) async fn spaces(
+    service: &AgmemService,
+    requested: Option<&str>,
+) -> Result<Vec<SpaceName>, ErrorData> {
+    let current = service.config().space.clone();
+    Ok(match requested {
+        None => {
+            let mut both = vec![current, SpaceName::user()];
+            both.dedup();
+            both
+        }
+        Some("current") => vec![current],
+        Some("all") => repo::spaces(service.db())
+            .await
+            .map_err(|error| store_error(&error))?,
+        Some(name) => vec![
+            name.parse()
+                .map_err(|error| invalid(format!("space: {error}")))?,
+        ],
+    })
+}
+
+/// A memory's provenance in the form `inspect`'s `ref` takes.
+///
+/// One string rather than a nested object, because it is a *pointer*: an agent
+/// reading `episode:01M…` on a recall hit can pass it straight back to
+/// `inspect` and get the verbatim text behind the claim.
+pub(crate) fn provenance(source: &Source) -> String {
+    match source {
+        Source::Agent => "agent".to_owned(),
+        Source::Episode { episode } => format!("episode:{episode}"),
+        Source::External { origin } => format!("external:{origin}"),
+    }
+}
 
 /// The caller sent something that cannot be acted on.
 ///

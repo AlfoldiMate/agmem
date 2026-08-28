@@ -5,6 +5,7 @@
 
 pub mod error;
 pub mod model;
+pub mod scoring;
 
 pub use error::CoreError;
 pub use model::{

@@ -1,0 +1,22 @@
+[package]
+name = "agmem-embed"
+description = "agmem embedding backends: local models behind a narrow trait."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["onnx"]
+# fastembed/ONNX backend (wired in with the embedder issue; feature reserved
+# so downstream `--no-default-features` builds stay stable from day one)
+onnx = []
+static = []
+
+[dependencies]
+agmem-core = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

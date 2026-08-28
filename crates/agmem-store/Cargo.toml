@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 agmem-core = { workspace = true }
+jiff = { workspace = true }
 serde = { workspace = true }
 surrealdb = { workspace = true }
 thiserror = { workspace = true }

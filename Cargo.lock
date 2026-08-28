@@ -81,6 +81,7 @@ name = "agmem-store"
 version = "0.1.0"
 dependencies = [
  "agmem-core",
+ "jiff",
  "serde",
  "serde_json",
  "surrealdb",

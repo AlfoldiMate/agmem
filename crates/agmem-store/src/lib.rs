@@ -8,5 +8,9 @@
 pub mod db;
 pub mod error;
 pub mod migrate;
+mod queries;
+pub mod repo;
+mod types;
 
 pub use error::StoreError;
+pub use repo::{Batch, BatchOutcome, NewChunk, NewEpisode, NewMemory, Written};

@@ -189,14 +189,15 @@ DEFINE FIELD last_accessed ON memory TYPE datetime DEFAULT time::now();
 DEFINE FIELD access_count  ON memory TYPE int DEFAULT 0;
 DEFINE FIELD valid_from    ON memory TYPE datetime DEFAULT time::now();
 DEFINE FIELD invalid_at    ON memory TYPE option<datetime>;    -- none = live
-DEFINE FIELD invalid_reason ON memory TYPE option<string>;     -- "superseded"|"forgotten"|"expired"
+DEFINE FIELD invalid_reason ON memory TYPE option<string>
+    ASSERT $value IN ["superseded", "forgotten", "expired"];    -- skipped when NONE
 DEFINE FIELD supersedes    ON memory TYPE option<record<memory>>;
 DEFINE FIELD superseded_by ON memory TYPE option<record<memory>>;
 DEFINE FIELD source        ON memory TYPE object;   -- { kind: "episode"|"agent"|"external", ref: option }
 DEFINE FIELD created_at    ON memory TYPE datetime DEFAULT time::now();
 DEFINE INDEX mem_hash     ON memory COLUMNS space, content_hash UNIQUE;
-DEFINE INDEX mem_entities ON memory COLUMNS entities;
-DEFINE INDEX mem_tags     ON memory COLUMNS tags;
+DEFINE INDEX mem_entities ON memory COLUMNS entities.*;   -- .* = per element
+DEFINE INDEX mem_tags     ON memory COLUMNS tags.*;
 DEFINE INDEX mem_ft  ON memory COLUMNS content FULLTEXT ANALYZER english BM25 HIGHLIGHTS;
 DEFINE INDEX mem_vec ON memory FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 ```
@@ -207,6 +208,10 @@ which makes "recent N" range scans and stable pagination free.
 Notes:
 - `embedding` is `option<…>` so `--embedder none` (BM25-only degraded mode)
   and deferred embedding both work; HNSW ignores rows without vectors.
+- Array indexes need `COLUMNS <field>.*` and are only used by
+  `field CONTAINS $x`. Without the `.*` the index covers the whole array, and
+  the planner then serves `field = $x` from it — returning nothing, silently
+  (verified on 3.2.4).
 - The unique `(space, content_hash)` index is the exact-dup gate; the
   semantic near-dup gate (cosine ≥ 0.95 against top-1 neighbor) runs in Rust
   during `remember` because it needs the query-side embedding anyway.

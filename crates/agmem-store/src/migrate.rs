@@ -17,11 +17,17 @@ const BOOTSTRAP: &str = "DEFINE TABLE IF NOT EXISTS meta SCHEMAFULL;
      DEFINE FIELD IF NOT EXISTS created_at ON meta TYPE datetime DEFAULT time::now();";
 
 /// Ordered migration batches; index + 1 is the schema version they produce.
-/// The full data-model DDL (design §2.2) lands with the schema issue.
-const MIGRATIONS: &[&str] = &[];
+const MIGRATIONS: &[&str] = &[include_str!("migrations/v1_schema.surql")];
 
 /// The schema version this binary produces.
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
+
+/// Embedding width the HNSW indexes are defined with (design §2.2).
+///
+/// The dimension is baked into the index definitions, so changing embedder
+/// families needs a new migration plus a re-embed, never a silent swap —
+/// startup compares this against `meta:main.embedder_dim`.
+pub const EMBEDDING_DIM: usize = 384;
 
 /// Read the applied schema version (0 = fresh store).
 ///

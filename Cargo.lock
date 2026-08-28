@@ -73,6 +73,7 @@ version = "0.1.0"
 dependencies = [
  "agmem-core",
  "serde",
+ "serde_json",
  "surrealdb",
  "thiserror",
  "tokio",

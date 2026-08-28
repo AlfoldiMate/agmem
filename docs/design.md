@@ -411,8 +411,13 @@ agmem/
 │   │       └── noop.rs           # BM25-only mode (dim 0)
 │   └── agmem-server/             # the binary: `agmem`
 │       └── src/
-│           ├── main.rs           # clap → config → telemetry → lock → connect
-│           │                     #   → migrate → embedder → serve(stdio)
+│           ├── main.rs           # clap → config → telemetry → one of three
+│           │                     #   routes: be the daemon, attach to it,
+│           │                     #   or own the store here
+│           ├── daemon/           # the shared store (#37), unix only
+│           │   ├── mod.rs        #   socket path, handshake, wanted()
+│           │   ├── serve.rs      #   owns the store, one service per session
+│           │   └── client.rs     #   find or start it, then pump stdio
 │           ├── config.rs         # flags + AGMEM_* env; --doctor self-check
 │           ├── service.rs        # AgmemService { repo, embedder, cfg,
 │           │                     #   tool_router, prompt_router }
@@ -466,17 +471,38 @@ framework (there is no HTTP).
 main()
  1. clap + AGMEM_* env  → Config { data_dir, db_url, space, embedder, log }
  2. telemetry: tracing → stderr / file      (before anything can fail)
- 3. if db_url is embedded (surrealkv://, default):
-      acquire exclusive lock file <data_dir>/agmem.lock
+ 3. route:
+    a. unix + embedded + not --no-daemon → attach to the shared daemon (#37):
+         connect <data_dir>/agmem.sock
+         └─ nothing there → take <data_dir>/agmem.spawn.lock, clear a stale
+            socket, spawn `argv[0] --daemon-serve` in its own process group,
+            wait for it to accept
+         send one JSON handshake line
+            { version, db_url, embedder, space, pool, max_k }
+         then pump stdio ↔ socket, and decide nothing else
+         └─ unreachable → stderr naming <data_dir>/daemon.log, exit 1. Never
+            fall back to opening the store: that is the second writer.
+    b. --no-daemon, ws://, mem://, or a non-unix platform → steps 4–9 here,
+       holding the lock for this process lifetime.
+
+ the daemon (--daemon-serve) and route (b) both then:
+ 4. acquire exclusive lock file <data_dir>/agmem.lock (embedded engines only)
       └─ held by another pid → exit with MCP-friendly stderr message
-         ("another agmem owns this store; close it or use ws:// sharing")
- 4. any::connect(db_url); USE NS agmem DB main
- 5. migrate::ensure()     — idempotent DEFINEs, meta.schema_version gate
- 6. embedder init (async — model may download on very first run)
+         ("that pid is usually the daemon; drop --no-daemon, or use ws://")
+ 5. any::connect(db_url); USE NS agmem DB main
+ 6. migrate::ensure()     — idempotent DEFINEs, meta.schema_version gate
+ 7. embedder init (async — model may download on very first run)
       meta.embedder_model/dim  vs  configured backend
       └─ mismatch → hard error naming the `reindex` remedy (no silent mixing)
- 7. startup_prune()       — lazy TTL close of decayed `fast` records
- 8. ensure space row; AgmemService.serve(stdio()); waiting()
+ 8. startup_prune()       — lazy TTL close of decayed `fast` records
+ 9. ensure space row; AgmemService.serve(transport); waiting()
+
+ The daemon binds its socket only after 4–8 have succeeded, so one that dies
+ at migrate cannot invite every session to respawn it forever. Step 9 is per
+ *connection* there: the store is shared and the space is not, so each session
+ gets its own Config and its own AgmemService over the one Db and embedder —
+ which is also where `ensure space row` has to happen, since the daemon has
+ never heard of a project until one attaches.
 ```
 
 ### 5.2 Write path (`remember`)
@@ -588,6 +614,9 @@ points, keeping the process count at one:
 | `AGMEM_POOL` / `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
 | `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
+| `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process instead of through the shared daemon (#37) |
+| `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it until reboot |
+| `--daemon-serve` | — | Be the daemon. Started automatically; hidden from `--help` |
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip; prints report, exits |
 
 Client registration (the entire install story):
@@ -654,7 +683,10 @@ Each phase is releasable; later phases only add.
    session and the data dir is shared by every project, so the second
    concurrent session gets no memory tools at all. One store per machine is
    the design (`space: "all"`, the shared `user` space), so the answer is a
-   shared endpoint rather than per-project data dirs — issue #37.
+   shared endpoint rather than per-project data dirs — issue #37, **closed**:
+   one process owns the store and the rest attach over a unix socket carrying
+   MCP (§5.1 step 3a). surrealdb ships clients only, so the shared endpoint is
+   agmem's own rather than SurrealDB's.
 3. **rmcp API churn** (3 majors in 2026) — pin minor, snapshot-test schemas.
 4. **Will agents actually call it?** The whole system rides on tool
    descriptions + prompts out-signaling Claude Code's built-in auto memory.

@@ -58,13 +58,19 @@ doctor: all checks passed
 reserved `user` space for what follows the person everywhere — preferences,
 working style, things true regardless of repo. This repo's own `.mcp.json` is the working example.
 
-**One session at a time, for now.** The embedded store is single-writer and
-the data directory is shared by every project, so the second concurrent Claude
-Code session starts a second `agmem`, fails to take the lock, and comes up
-without memory tools ([#37](https://github.com/AlfoldiMate/agmem/issues/37)).
-Until that lands, either keep one agmem-enabled session open, or give a project
-its own store with `"AGMEM_DATA": "/path/to/its/own/dir"` — at the cost of the
-shared `user` space.
+**Several sessions at once, one store.** The embedded store is single-writer,
+so the first session that needs it starts a small background daemon to own it
+and every session after that attaches to the same one. Nothing to install and
+nothing to start: the first `agmem` does it, and the daemon shuts itself down
+ten minutes after the last session detaches.
+
+That is what keeps one memory across projects — a second window, another repo,
+a `--resume` alongside a running session all read and write the same store, so
+`space: "all"` and the shared `user` space mean what they say.
+`ls <data dir>/agmem.sock` says whether one is up, `agmem --doctor` reports it,
+and its log is `<data dir>/daemon.log`. `--no-daemon` goes back to one process
+owning the store; `AGMEM_IDLE_TIMEOUT=0` keeps the daemon until the machine
+restarts.
 
 ## The loop
 
@@ -171,6 +177,8 @@ included), or `stats` for per-space counts.
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `--log` / `AGMEM_LOG`, `--log-file` / `AGMEM_LOG_FILE` | agmem at `info`, its dependencies at `warn`, stderr | Telemetry |
+| `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process; one session at a time |
+| `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it |
 | `--doctor` | — | Self-check, then exit |
 
 stdout is the MCP wire: all logging goes to stderr or `--log-file`, never
@@ -194,16 +202,15 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
    marked `superseded`. `inspect entity:user` shows both; `inspect stats`
    counts `live: 3, invalidated: 1, episodes: 1`.
 
-## Known limitations
-
-- Only one session at a time can hold the store
-  ([#37](https://github.com/AlfoldiMate/agmem/issues/37)) — see above.
-
 ## Troubleshooting
 
-- **`another agmem process (pid N) already owns the data dir …`** — the
-  embedded store is single-writer. Stop the other instance, or point both at
-  one shared SurrealDB server with `AGMEM_DB=ws://…`.
+- **`another agmem process (pid N) already owns the data dir …`** — that pid
+  is usually the shared daemon, and the usual cause is `--no-daemon` on a
+  session that could have attached to it. Drop the flag, stop that process, or
+  point both at one SurrealDB server with `AGMEM_DB=ws://…`.
+- **A session came up with no memory tools** — read `<data dir>/daemon.log`:
+  the shared store failed to start, and the session refused rather than open a
+  second copy of a single-writer store.
 - **First call is slow** — the model loads on start; `--doctor` once after
   install gets the download out of the way.
 - **No ONNX Runtime on the platform** — `--embedder none` runs BM25-only, and

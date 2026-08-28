@@ -13,8 +13,12 @@ fn second_acquire_fails_then_release_frees() {
     let msg = err.to_string();
     assert!(msg.contains("another agmem process"), "got: {msg}");
     assert!(
+        msg.contains("--no-daemon"),
+        "the usual cause is a session that opted out of the shared daemon: {msg}"
+    );
+    assert!(
         msg.contains("ws://"),
-        "must point at the sharing alternative: {msg}"
+        "must point at the sharing alternative too: {msg}"
     );
     assert!(
         msg.contains(&std::process::id().to_string()),

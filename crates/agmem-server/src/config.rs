@@ -59,10 +59,32 @@ pub struct Cli {
     /// Run the installation self-check and exit.
     #[arg(long)]
     pub doctor: bool,
+
+    /// Open the store in this process instead of through the shared daemon.
+    /// One process can hold an embedded store, so this is the old
+    /// one-session-at-a-time behaviour.
+    #[arg(long, env = "AGMEM_NO_DAEMON")]
+    pub no_daemon: bool,
+
+    /// Be the shared store daemon. Started automatically by the first session
+    /// that needs one; not meant to be run by hand.
+    #[arg(long, hide = true)]
+    pub daemon_serve: bool,
+
+    /// Seconds the shared daemon stays up with no sessions attached. 0 keeps
+    /// it until the machine restarts.
+    #[arg(
+        long,
+        env = "AGMEM_IDLE_TIMEOUT",
+        default_value_t = 600,
+        value_name = "SECONDS"
+    )]
+    pub idle_timeout: u64,
 }
 
 /// Embedding backend selector (`docs/design.md` §6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum EmbedderKind {
     /// fastembed/ONNX local model (default).
     Fastembed,
@@ -72,8 +94,23 @@ pub enum EmbedderKind {
     None,
 }
 
+impl EmbedderKind {
+    /// The spelling `--embedder` takes, which is also what crosses the daemon
+    /// handshake and what a freshly spawned daemon is started with.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fastembed => "fastembed",
+            Self::Static => "static",
+            Self::None => "none",
+        }
+    }
+}
+
 /// Fully resolved configuration: all defaults applied.
-#[derive(Debug)]
+///
+/// Cloneable because the daemon builds one per attached session: the store is
+/// shared, the space and the retrieval limits are not.
+#[derive(Debug, Clone)]
 pub struct Config {
     pub data_dir: PathBuf,
     pub db_url: String,
@@ -84,6 +121,9 @@ pub struct Config {
     pub log: String,
     pub log_file: Option<PathBuf>,
     pub doctor: bool,
+    pub no_daemon: bool,
+    pub daemon_serve: bool,
+    pub idle_timeout: u64,
 }
 
 impl Config {
@@ -118,6 +158,9 @@ impl Cli {
             log: self.log,
             log_file: self.log_file,
             doctor: self.doctor,
+            no_daemon: self.no_daemon,
+            daemon_serve: self.daemon_serve,
+            idle_timeout: self.idle_timeout,
         })
     }
 }

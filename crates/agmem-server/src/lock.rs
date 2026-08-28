@@ -24,7 +24,8 @@ pub struct DataDirLock {
 ///
 /// # Errors
 /// Fails when another process already holds the lock, with a message naming
-/// the owning pid and the `ws://` sharing alternative.
+/// the owning pid and both ways to share it — the daemon (issue #37) and a
+/// remote `ws://` engine.
 pub fn acquire(data_dir: &Path) -> anyhow::Result<DataDirLock> {
     fs::create_dir_all(data_dir)
         .with_context(|| format!("cannot create data dir {}", data_dir.display()))?;
@@ -48,8 +49,9 @@ pub fn acquire(data_dir: &Path) -> anyhow::Result<DataDirLock> {
             let owner = owner.trim();
             bail!(
                 "another agmem process (pid {owner}) already owns the data dir {}. \
-                 Close that session, or point AGMEM_DB=ws://<host> at a shared \
-                 SurrealDB server to let multiple clients use one store.",
+                 Sessions normally share it through the daemon that pid is running, \
+                 so drop --no-daemon to attach to it — or point AGMEM_DB=ws://<host> \
+                 at a shared SurrealDB server.",
                 data_dir.display()
             )
         }

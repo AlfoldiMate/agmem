@@ -1,0 +1,234 @@
+//! Two sessions, one embedded store (issue #37).
+//!
+//! The daemon runs in this process and the sessions attach over the real Unix
+//! socket with the real handshake, so what is under test is the whole
+//! arrangement: one owner of a single-writer store, several MCP services on
+//! top of it, and the per-connection configuration that keeps two projects
+//! apart while they share it.
+
+#![cfg(unix)]
+
+use std::path::Path;
+use std::time::Duration;
+
+use agmem_server::config::{Cli, Config};
+use agmem_server::daemon::{self, Handshake};
+use clap::Parser as _;
+use rmcp::model::{CallToolRequestParams, ProtocolVersion};
+use rmcp::service::RunningService;
+use rmcp::{RoleClient, ServiceExt as _};
+use serde_json::{Value, json};
+use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
+use tokio::net::UnixStream;
+
+/// One session's configuration against a shared data dir.
+///
+/// `--idle-timeout 0` because the test decides when the daemon stops; an
+/// idle timer would be a race against the assertions.
+fn config(data: &Path, space: &str) -> Config {
+    Cli::try_parse_from([
+        "agmem",
+        "--data",
+        &data.display().to_string(),
+        "--space",
+        space,
+        "--embedder",
+        "none",
+        "--idle-timeout",
+        "0",
+    ])
+    .expect("parse")
+    .resolve()
+    .expect("resolve")
+}
+
+/// A daemon owning a temp data dir, and the sessions that attach to it.
+struct Shared {
+    data: tempfile::TempDir,
+    daemon: tokio::task::JoinHandle<anyhow::Result<()>>,
+}
+
+impl Shared {
+    /// A daemon that has opened the store and is accepting.
+    async fn start() -> Self {
+        let data = tempfile::tempdir().expect("tempdir");
+        let daemon = tokio::spawn(daemon::serve::run(config(data.path(), "owner")));
+
+        let socket = daemon::socket_path(data.path()).expect("socket path");
+        for _ in 0..600 {
+            if UnixStream::connect(&socket).await.is_ok() {
+                return Self { data, daemon };
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        panic!("the daemon never bound {}", socket.display());
+    }
+
+    async fn connect(&self) -> UnixStream {
+        UnixStream::connect(daemon::socket_path(self.data.path()).expect("socket path"))
+            .await
+            .expect("connect to the daemon")
+    }
+
+    /// The line a session sends before MCP starts.
+    fn handshake(&self, space: &str) -> Vec<u8> {
+        let mut line = serde_json::to_vec(&Handshake::new(&config(self.data.path(), space)))
+            .expect("serialize the handshake");
+        line.push(b'\n');
+        line
+    }
+
+    /// A session attached as a real MCP client, past initialize.
+    async fn attach(&self, space: &str) -> RunningService<RoleClient, ()> {
+        let (read, mut write) = self.connect().await.into_split();
+        write
+            .write_all(&self.handshake(space))
+            .await
+            .expect("send the handshake");
+        ().serve((read, write)).await.expect("initialize")
+    }
+}
+
+impl Drop for Shared {
+    fn drop(&mut self) {
+        self.daemon.abort();
+    }
+}
+
+/// One `tools/call` through an attached session.
+async fn call(
+    session: &RunningService<RoleClient, ()>,
+    name: &'static str,
+    arguments: Value,
+) -> Value {
+    let arguments = arguments.as_object().expect("an object").clone();
+    let result = session
+        .call_tool(CallToolRequestParams::new(name).with_arguments(arguments))
+        .await
+        .unwrap_or_else(|error| panic!("{name}: {error}"));
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    result
+        .structured_content
+        .expect("a tool answers with structured content")
+}
+
+#[tokio::test]
+async fn two_sessions_share_one_store() {
+    let shared = Shared::start().await;
+    let first = shared.attach("project-a").await;
+    let second = shared.attach("project-b").await;
+
+    let stored = call(
+        &first,
+        "remember",
+        json!({ "memories": [{ "content": "The daemon lets two sessions hold one store" }] }),
+    )
+    .await;
+    assert_eq!(
+        stored["created"].as_array().expect("created").len(),
+        1,
+        "{stored}"
+    );
+
+    let found = call(&second, "recall", json!({ "space": "all" })).await;
+    let contents: Vec<&str> = found["hits"]
+        .as_array()
+        .expect("hits")
+        .iter()
+        .filter_map(|hit| hit["content"].as_str())
+        .collect();
+    assert_eq!(
+        contents,
+        ["The daemon lets two sessions hold one store"],
+        "a write through one session is visible to a recall through the other: {found}"
+    );
+
+    let spaces: Vec<&str> = found["spaces"]
+        .as_array()
+        .expect("spaces")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(
+        spaces.contains(&"project-a") && spaces.contains(&"project-b"),
+        "each attached session registers its own project, the way startup does \
+         for a lone one: {found}"
+    );
+}
+
+#[tokio::test]
+async fn a_handshake_and_a_request_in_one_write_are_both_seen() {
+    let shared = Shared::start().await;
+    let mut bytes = shared.handshake("one-write");
+    bytes.extend_from_slice(
+        format!(
+            "{}\n",
+            json!({
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {
+                    "protocolVersion": ProtocolVersion::LATEST.as_str(),
+                    "capabilities": {},
+                    "clientInfo": { "name": "agmem-daemon-test", "version": "0" },
+                },
+            })
+        )
+        .as_bytes(),
+    );
+
+    let (read, mut write) = shared.connect().await.into_split();
+    write
+        .write_all(&bytes)
+        .await
+        .expect("both lines in one write");
+
+    let mut reply = String::new();
+    BufReader::new(read)
+        .read_line(&mut reply)
+        .await
+        .expect("a reply");
+    let reply: Value = serde_json::from_str(&reply).expect("the reply is JSON");
+    assert_eq!(
+        reply["result"]["serverInfo"]["name"],
+        json!("agmem"),
+        "reading the handshake reads ahead, so the request sharing its write \
+         must survive the buffer: {reply}"
+    );
+}
+
+#[tokio::test]
+async fn a_session_expecting_another_store_is_refused() {
+    let shared = Shared::start().await;
+    let mut asked = Handshake::new(&config(shared.data.path(), "elsewhere"));
+    asked.db_url = "surrealkv:///somewhere/else".to_owned();
+    let mut line = serde_json::to_vec(&asked).expect("serialize");
+    line.push(b'\n');
+
+    let (read, mut write) = shared.connect().await.into_split();
+    write.write_all(&line).await.expect("send the handshake");
+
+    let mut reply = String::new();
+    let bytes = BufReader::new(read)
+        .read_line(&mut reply)
+        .await
+        .expect("read");
+    assert_eq!(
+        bytes, 0,
+        "a daemon that cannot serve what was asked for closes, rather than \
+         serving something else: {reply:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_probe_that_says_nothing_does_not_wedge_the_daemon() {
+    let shared = Shared::start().await;
+    // Connect and leave — what `--doctor` does to find out whether a daemon
+    // is here at all.
+    drop(shared.connect().await);
+
+    let session = shared.attach("after-the-probe").await;
+    let found = call(&session, "recall", json!({})).await;
+    assert!(
+        found["hits"].as_array().expect("hits").is_empty(),
+        "the daemon still serves after a probe came and went: {found}"
+    );
+}

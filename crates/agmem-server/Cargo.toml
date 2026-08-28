@@ -24,8 +24,10 @@ agmem-core = { workspace = true, features = ["schema"] }
 agmem-store = { workspace = true }
 agmem-embed = { workspace = true }
 # io-util carries tokio::io::duplex, which the in-process protocol tests
-# stand the client and the server up on.
-tokio = { workspace = true, features = ["io-util"] }
+# stand the client and the server up on; net/io-std/sync/time are the shared
+# daemon (issue #37) — a unix socket, the stdio it pumps into, the channel
+# counting attached sessions, and the idle timeout.
+tokio = { workspace = true, features = ["io-util", "io-std", "net", "sync", "time"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }

@@ -638,6 +638,11 @@ Each phase is releasable; later phases only add.
    backend is the contingency if ONNX linking breaks on a platform.
 2. **SurrealKV cross-process behavior undocumented** — mitigated by the
    lockfile; revisit if SurrealDB documents multi-process embedded access.
+   **Confirmed a real limit at #18**: Claude Code runs one stdio server per
+   session and the data dir is shared by every project, so the second
+   concurrent session gets no memory tools at all. One store per machine is
+   the design (`space: "all"`, the shared `user` space), so the answer is a
+   shared endpoint rather than per-project data dirs — issue #37.
 3. **rmcp API churn** (3 majors in 2026) — pin minor, snapshot-test schemas.
 4. **Will agents actually call it?** The whole system rides on tool
    descriptions + prompts out-signaling Claude Code's built-in auto memory.

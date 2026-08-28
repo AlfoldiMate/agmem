@@ -38,6 +38,9 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let schema = agmem_store::migrate::ensure(&db).await?;
     let embedder = embedder::build(&cfg)?;
     agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
+    // A daemon is where the sweep belongs: it is the process a machine starts
+    // once, and the sessions attaching to it never start anything.
+    let pruned = crate::startup::prune(&db).await;
 
     // Bind last, and only once everything above has worked. A daemon that
     // advertises itself and then dies on migrate would invite every session
@@ -49,6 +52,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         schema,
         embedder = embedder.model_id(),
         dim = embedder.dim(),
+        pruned,
         socket = %path.display(),
         "shared store ready"
     );

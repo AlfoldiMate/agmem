@@ -16,7 +16,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use agmem_server::daemon;
 use agmem_server::service::{self, AgmemService};
-use agmem_server::{config, doctor, embedder, lock, telemetry};
+use agmem_server::{config, doctor, embedder, lock, startup, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -60,11 +60,13 @@ async fn in_process(cfg: config::Config) -> anyhow::Result<()> {
     let schema = agmem_store::migrate::ensure(&db).await?;
     let embedder = embedder::build(&cfg)?;
     agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
+    let pruned = startup::prune(&db).await;
     agmem_store::repo::ensure_space(&db, &cfg.space).await?;
     tracing::info!(
         schema,
         embedder = embedder.model_id(),
         dim = embedder.dim(),
+        pruned,
         "store ready"
     );
 

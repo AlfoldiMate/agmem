@@ -130,6 +130,28 @@ pub(crate) const FORGET_SOFT: &str = "UPDATE $memories
      WHERE space IN $spaces AND invalid_at IS NONE
      RETURN VALUE record::id(id)";
 
+/// Close every live memory of `$class` whose retention has fallen past the
+/// prune threshold (design §2.3, §5.5).
+///
+/// The decay curve is not repeated here. `$horizon` is the idle time at which
+/// unit strength reaches the threshold (`core::scoring::decay_horizon_secs`)
+/// and a row's own horizon is that scaled by its `strength`, floored at
+/// `$floor` the way the Rust formula floors it.
+///
+/// The comparison is written forwards — `last_accessed + horizon < now` rather
+/// than `now − last_accessed > horizon` — because SurrealDB durations are
+/// unsigned: subtracting a `last_accessed` in the future either errors the
+/// whole statement ("the operation results in a negative value") or comes back
+/// as a large *positive* duration, and either one expires a clock-skewed row
+/// that has barely aged. Adding to the row's own timestamp has no such edge.
+pub(crate) const PRUNE_EXPIRED: &str = "UPDATE memory
+     SET invalid_at = time::now(), invalid_reason = 'expired'
+     WHERE decay_class = $class AND invalid_at IS NONE
+       AND last_accessed
+           + duration::from_secs(<int> math::round($horizon * math::max([strength, $floor])))
+           < time::now()
+     RETURN VALUE record::id(id)";
+
 /// Delete rows outright, an episode's slices along with it (design §5.4).
 ///
 /// `DELETE … RETURN VALUE record::id(id)` is an *error*, not an empty list —

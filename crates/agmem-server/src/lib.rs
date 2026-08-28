@@ -10,5 +10,6 @@ pub mod doctor;
 pub mod embedder;
 pub mod lock;
 pub mod service;
+pub mod startup;
 pub mod telemetry;
 pub mod tools;

@@ -533,7 +533,9 @@ main()
  7. embedder init (async — model may download on very first run)
       meta.embedder_model/dim  vs  configured backend
       └─ mismatch → hard error naming the `reindex` remedy (no silent mixing)
- 8. startup_prune()       — lazy TTL close of decayed `fast` records
+ 8. repo::prune_expired() — lazy TTL close of decayed `fast` records, every
+      space at once, and never fatal: the schema and the embedder are up, so a
+      failed sweep is logged and the session is served anyway
  9. ensure space row; AgmemService.serve(transport); waiting()
 
  The daemon binds its socket only after 4–8 have succeeded, so one that dies
@@ -664,10 +666,33 @@ points, keeping the process count at one:
 | Spectron job | agmem equivalent |
 |---|---|
 | Decay sweep (importance × rate daily) | Computed in the scoring formula at read time — nothing to run |
-| TTL expiry of context-category | `startup_prune()` closes decayed `fast` records |
+| TTL expiry of context-category | `repo::prune_expired` closes decayed `fast` records at every start |
 | Consolidation / elaboration | Phase 3: `consolidate` returns *candidates* (near-dup clusters, stale contradictions); the **agent** decides merges via `remember(supersedes)` — the LLM stays client-side |
 | Reindex / re-embed | Phase 4 explicit maintenance op (`agmem --reindex`), required for embedder change |
 | fsck duplicate audit | Folded into `inspect stats` + `consolidate` candidates |
+
+The prune is one `UPDATE`, and the decay curve is not repeated in it. The
+selector is the **inverse** of the retention formula, computed once in
+`core::scoring::decay_horizon_secs`: the idle time at which unit strength
+falls to 0.05 — about twenty days for `fast` — which the engine then scales by
+each row's own `strength`. So the comparison is
+`last_accessed + horizon·strength < now`, written forwards on purpose:
+SurrealDB durations are unsigned, and `now − last_accessed` on a row with a
+future timestamp either errors the statement or comes back large and positive,
+expiring exactly the row that has barely aged.
+
+Three properties the sweep is designed around:
+
+- **Only `fast` expires.** It is the TTL class by construction; a `normal`
+  fact 400 days old ranks near zero and stays live, because a fact's end is a
+  correction or a `forget`, not a timeout.
+- **Reinforcement buys time.** Strength scales the horizon, so a working note
+  recalled five times survives five times as long — the same reinforcement
+  that flattens its decay curve at read time.
+- **Soft, and idempotent.** `invalid_reason = "expired"`, chain intact,
+  readable through `inspect`; `invalid_at IS NONE` guards the update, so a
+  second start moves no date and a row a `forget` already closed keeps its own
+  reason.
 
 ---
 

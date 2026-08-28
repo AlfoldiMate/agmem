@@ -5,7 +5,7 @@
 //! reported result rather than an aborted transaction, that a rejected row
 //! takes the whole batch down with it — are proven here rather than assumed.
 
-use agmem_core::{InvalidReason, Kind, MemoryId, Source, SpaceName};
+use agmem_core::{DecayClass, InvalidReason, Kind, MemoryId, Source, SpaceName};
 use agmem_store::db::Db;
 use agmem_store::repo::{
     self, Batch, Forget, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Written,
@@ -579,5 +579,167 @@ async fn a_purge_takes_an_episodes_slices_and_leaves_the_claims_drawn_from_it() 
         all_memories(&db, &other).await.len(),
         1,
         "the outsider was never in scope"
+    );
+}
+
+/// Backdate a row's last use and set the strength a few recalls would have
+/// left it with — the two inputs to the decay curve, and the only two no write
+/// API sets directly.
+async fn age(db: &Db, id: &MemoryId, days: i64, strength: f64) {
+    db.query(
+        "UPDATE type::record('memory', $id)
+         SET last_accessed = time::now() - duration::from_secs($idle),
+             strength = $strength",
+    )
+    .bind(("id", id.to_string()))
+    .bind(("idle", days * 86_400))
+    .bind(("strength", strength))
+    .await
+    .expect("age the row")
+    .check()
+    .expect("statements");
+}
+
+#[tokio::test]
+async fn the_startup_prune_expires_stale_working_context_and_nothing_else() {
+    let db = store().await;
+    let working = |content: &str| {
+        let mut memory = NewMemory::new(Kind::Fact, content);
+        memory.decay_class = Some(DecayClass::Fast);
+        memory
+    };
+    let outcome = repo::insert_batch(
+        &db,
+        batch(vec![
+            working("the build is running in the second terminal"),
+            working("the branch under review is called spike"),
+            working("the failing test is called roundtrip"),
+            // Their kinds' default classes: normal, slow, pinned.
+            NewMemory::new(Kind::Fact, "the office is on the third floor"),
+            NewMemory::new(Kind::Lesson, "the lift is out on Tuesdays"),
+            NewMemory::new(Kind::Instruction, "answer in English"),
+        ]),
+    )
+    .await
+    .expect("write");
+    let ids: Vec<MemoryId> = outcome.memories.into_iter().map(Written::into_id).collect();
+    let (stale, reinforced, fresh) = (ids[0].clone(), ids[1].clone(), ids[2].clone());
+
+    age(&db, &stale, 30, 1.0).await;
+    age(&db, &reinforced, 30, 5.0).await;
+    age(&db, &fresh, 3, 1.0).await;
+    for slower in &ids[3..] {
+        age(&db, slower, 400, 1.0).await;
+    }
+
+    let closed = repo::prune_expired(&db).await.expect("prune");
+
+    assert_eq!(
+        closed,
+        vec![stale.clone()],
+        "only the working note nothing has touched in twenty days"
+    );
+    let rows = all_memories(&db, &space()).await;
+    let row = |id: &MemoryId| {
+        rows.iter()
+            .find(|row| row.id == *id)
+            .expect("the row is still there")
+    };
+    assert_eq!(
+        row(&stale).invalid_reason,
+        Some(InvalidReason::Expired),
+        "closed, not deleted: the history is still readable"
+    );
+    assert!(row(&stale).invalid_at.is_some());
+    assert_eq!(
+        row(&reinforced).invalid_reason,
+        None,
+        "five recalls buy a working note five times the horizon"
+    );
+    assert_eq!(row(&fresh).invalid_reason, None);
+    for slower in &ids[3..] {
+        assert_eq!(
+            row(slower).invalid_reason,
+            None,
+            "only `fast` has a TTL — the rest end at a correction or a forget"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_second_prune_moves_nothing_the_first_one_left() {
+    let db = store().await;
+    let working = |content: &str| {
+        let mut memory = NewMemory::new(Kind::Fact, content);
+        memory.decay_class = Some(DecayClass::Fast);
+        memory
+    };
+    let ids: Vec<MemoryId> = repo::insert_batch(
+        &db,
+        batch(vec![
+            working("the build is running in the second terminal"),
+            working("the branch under review is called spike"),
+        ]),
+    )
+    .await
+    .expect("write")
+    .memories
+    .into_iter()
+    .map(Written::into_id)
+    .collect();
+    let (stale, retired) = (ids[0].clone(), ids[1].clone());
+
+    repo::forget(
+        &db,
+        &Forget {
+            spaces: vec![space()],
+            memories: vec![retired.clone()],
+            episodes: Vec::new(),
+            purge: false,
+        },
+    )
+    .await
+    .expect("forget");
+    age(&db, &stale, 30, 1.0).await;
+    age(&db, &retired, 30, 1.0).await;
+
+    assert_eq!(
+        repo::prune_expired(&db).await.expect("first prune"),
+        vec![stale.clone()],
+        "the row a forget already closed is not expired a second time"
+    );
+    let after_first: Vec<(MemoryId, Option<InvalidReason>, Option<jiff::Timestamp>)> =
+        all_memories(&db, &space())
+            .await
+            .into_iter()
+            .map(|row| (row.id, row.invalid_reason, row.invalid_at))
+            .collect();
+
+    assert!(
+        repo::prune_expired(&db)
+            .await
+            .expect("second prune")
+            .is_empty(),
+        "a start with nothing new to expire is a no-op"
+    );
+    let after_second: Vec<(MemoryId, Option<InvalidReason>, Option<jiff::Timestamp>)> =
+        all_memories(&db, &space())
+            .await
+            .into_iter()
+            .map(|row| (row.id, row.invalid_reason, row.invalid_at))
+            .collect();
+
+    assert_eq!(
+        after_first, after_second,
+        "no date moves on a second run: a close happens once"
+    );
+    assert_eq!(
+        after_first
+            .iter()
+            .find(|(id, ..)| id == &retired)
+            .expect("the forgotten row")
+            .1,
+        Some(InvalidReason::Forgotten),
+        "and it keeps the reason it was closed for"
     );
 }

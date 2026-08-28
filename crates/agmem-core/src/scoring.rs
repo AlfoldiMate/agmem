@@ -19,7 +19,16 @@ pub const WEIGHT_IMPORTANCE: f64 = 0.15;
 
 /// Floor on Ebbinghaus stability, so a zero or corrupt `strength` decays fast
 /// instead of producing NaN.
-const MIN_STABILITY: f64 = 0.01;
+pub const MIN_STABILITY: f64 = 0.01;
+
+/// Retention below which a `fast` record is closed at startup (`docs/design.md`
+/// §2.3, §5.5).
+///
+/// The one place decay is acted on rather than merely computed: working
+/// context nothing has touched in weeks is not a low-ranking memory, it is a
+/// finished one, and leaving it live is how a memory store grows without
+/// bound.
+pub const PRUNE_RETENTION: f64 = 0.05;
 
 /// Seconds in a day; decay rates are per day.
 const SECONDS_PER_DAY: f64 = 86_400.0;
@@ -78,6 +87,43 @@ pub fn retention(
     let days = days_between(last_accessed, now);
     let stability = strength.max(MIN_STABILITY);
     (-days * rate / stability).exp()
+}
+
+/// How long a memory of `decay_class` and **unit strength** may sit untouched
+/// before [`retention`] falls to `threshold`, in seconds.
+///
+/// The inverse of [`retention`]: `days = −ln(threshold) · strength / rate`, so
+/// a particular row's horizon is this scaled by its own `strength` (floored at
+/// [`MIN_STABILITY`], exactly as `retention` floors it).
+///
+/// `None` when there is no such time — a class that never decays never reaches
+/// a threshold below 1, and a threshold outside `(0, 1)` is not one the curve
+/// crosses.
+///
+/// This exists so the startup prune can select rows with one comparison the
+/// engine can evaluate — `last_accessed + horizon · strength < now` — instead
+/// of reading every candidate back to score it here. The curve stays in this
+/// module either way.
+///
+/// ```
+/// use agmem_core::{DecayClass, scoring};
+/// use jiff::{SignedDuration, Timestamp};
+///
+/// let horizon = scoring::decay_horizon_secs(DecayClass::Fast, 0.05).unwrap();
+/// let strength = 3.0;
+/// let idle = SignedDuration::from_secs((horizon * strength) as i64);
+/// let then = Timestamp::UNIX_EPOCH;
+///
+/// let left = scoring::retention(DecayClass::Fast, strength, then, then + idle);
+/// assert!((left - 0.05).abs() < 1e-6, "the horizon is where retention is 0.05: {left}");
+/// assert_eq!(scoring::decay_horizon_secs(DecayClass::Pinned, 0.05), None);
+/// ```
+pub fn decay_horizon_secs(decay_class: DecayClass, threshold: f64) -> Option<f64> {
+    let rate = decay_class.rate();
+    if rate == 0.0 || threshold <= 0.0 || threshold >= 1.0 {
+        return None;
+    }
+    Some(-threshold.ln() / rate * SECONDS_PER_DAY)
 }
 
 /// Elapsed days, clamped at zero so a future `last_accessed` (clock skew, an
@@ -287,6 +333,55 @@ mod tests {
     fn future_timestamps_cannot_inflate_retention() {
         let ahead = now() + SignedDuration::from_hours(48);
         assert_eq!(retention(DecayClass::Fast, 1.0, ahead, now()), 1.0);
+    }
+
+    #[test]
+    fn the_horizon_is_exactly_where_retention_reaches_the_threshold() {
+        for class in [DecayClass::Fast, DecayClass::Normal, DecayClass::Slow] {
+            for strength in [0.5, 1.0, 7.0] {
+                let horizon = decay_horizon_secs(class, PRUNE_RETENTION).expect("a decaying class");
+                let idle = SignedDuration::from_secs((horizon * strength) as i64);
+                let at = retention(class, strength, now() - idle, now());
+                assert!(
+                    (at - PRUNE_RETENTION).abs() < 1e-6,
+                    "{class:?} at strength {strength}: {at}"
+                );
+                // A second either side of it decides the prune, so the
+                // comparison the store makes has to be the strict one.
+                let inside = retention(
+                    class,
+                    strength,
+                    now() - idle + SignedDuration::from_secs(1),
+                    now(),
+                );
+                assert!(inside > PRUNE_RETENTION, "{class:?}: {inside}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_class_that_never_decays_has_no_horizon() {
+        assert_eq!(
+            decay_horizon_secs(DecayClass::Pinned, PRUNE_RETENTION),
+            None
+        );
+        // Thresholds the curve never crosses: retention is in (0, 1], so 0 is
+        // reached at infinity and 1 only at zero idle time — a horizon of
+        // either would expire every row or none of them.
+        assert_eq!(decay_horizon_secs(DecayClass::Fast, 0.0), None);
+        assert_eq!(decay_horizon_secs(DecayClass::Fast, 1.0), None);
+        assert_eq!(decay_horizon_secs(DecayClass::Fast, -1.0), None);
+    }
+
+    #[test]
+    fn the_fast_horizon_is_about_three_weeks_and_reinforcement_extends_it() {
+        let horizon = decay_horizon_secs(DecayClass::Fast, PRUNE_RETENTION).expect("fast decays");
+        let days = horizon / 86_400.0;
+        assert!((19.0..21.0).contains(&days), "fast horizon in days: {days}");
+        assert!(
+            decay_horizon_secs(DecayClass::Slow, PRUNE_RETENTION).expect("slow decays") > horizon,
+            "the slower the class, the longer it survives untouched"
+        );
     }
 
     #[test]

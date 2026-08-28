@@ -5,7 +5,7 @@
 //! either created or an exact duplicate, never as an error. The agent decides
 //! what a duplicate means.
 
-use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
+use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup, scoring};
 use jiff::Timestamp;
 use surrealdb::types::RecordId;
 
@@ -403,6 +403,46 @@ pub async fn forget(db: &Db, request: &Forget) -> Result<Forgotten, StoreError> 
         chunks: usize::try_from(row.chunks).unwrap_or(0),
     })
 }
+
+/// Close working-context memories that have decayed past the point of use
+/// (design §5.5) — agmem's whole answer to unbounded growth.
+///
+/// It runs at startup because there is no scheduler to run it on: decay is
+/// otherwise computed at read time and nothing sweeps. Only `fast` rows are
+/// considered. That is the TTL class by definition, while the others' end of
+/// life is a correction or a `forget`, so an untouched working note stops
+/// answering `recall` after about twenty days — longer for every recall that
+/// reinforced it, since strength scales the horizon.
+///
+/// The close is soft, exactly as `forget`'s is: `invalid_reason = "expired"`,
+/// the chain intact, still readable through `inspect`. A second run changes
+/// nothing the first one left, because `invalid_at IS NONE` guards it. Every
+/// space is swept, not just the caller's: at startup the store has no current
+/// space yet, and expiry is a property of the row rather than of who asked.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for an id the engine reported that is not a
+/// ULID.
+pub async fn prune_expired(db: &Db) -> Result<Vec<MemoryId>, StoreError> {
+    // A class that never decays never crosses the threshold, so there is
+    // nothing to select — an empty sweep is the right answer, not an error.
+    let Some(horizon) = scoring::decay_horizon_secs(PRUNE_CLASS, scoring::PRUNE_RETENTION) else {
+        return Ok(Vec::new());
+    };
+    let mut resp = checked(
+        db.query(queries::PRUNE_EXPIRED)
+            .bind(("class", types::decay_class_str(PRUNE_CLASS)))
+            .bind(("horizon", horizon))
+            .bind(("floor", scoring::MIN_STABILITY))
+            .await?,
+    )?;
+    let closed: Vec<String> = resp.take(0)?;
+    ids(closed, MemoryId::new)
+}
+
+/// The one decay class with a TTL (design §2.3).
+const PRUNE_CLASS: DecayClass = DecayClass::Fast;
 
 /// Parse a list of reported ids, failing on the first the schema cannot have
 /// minted.

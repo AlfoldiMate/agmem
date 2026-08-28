@@ -203,6 +203,12 @@ Three rules worth knowing before you call it:
   validity window — and purging it leaves the claims distilled from it
   standing, still naming where they came from.
 
+**Working context expires on its own.** A memory written with
+`decay_class: "fast"` — the class for what is only true this week — is closed
+at the next server start once about twenty days have passed without a recall,
+marked `expired`. Every recall pushes that horizon out. Nothing else expires:
+a `fact` written a year ago is still live, just ranked lower.
+
 **`inspect`** — the paper trail. `ref` takes a memory id (the correction chain,
 oldest first, plus the verbatim text behind it), `episode:<id>`,
 `entity:<name>` (everything ever said about a subject, corrected claims

@@ -16,7 +16,7 @@ pub use read::{
 };
 pub use write::{
     Batch, BatchOutcome, Forget, Forgotten, NewChunk, NewEpisode, NewMemory, Written, ensure_space,
-    forget, insert_batch, supersede,
+    forget, insert_batch, prune_expired, supersede,
 };
 
 use agmem_core::{MemoryId, SpaceName};

@@ -621,7 +621,7 @@ expression: "&tools.tools"
               "type": "number"
             },
             "rrf_normalized": {
-              "description": "`rrf` against the best match in this call: 1.0 for the strongest\nretrieval hit, 0.0 when nothing matched on words or meaning at all.",
+              "description": "`rrf` on a 0–1 scale against the rest of this call: 1.0 for the\nstrongest retrieval hit, 0.0 for the weakest one returned — or 0.0\neverywhere when nothing matched on words or meaning at all.",
               "format": "double",
               "type": "number"
             }

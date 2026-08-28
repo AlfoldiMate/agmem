@@ -201,8 +201,6 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
 
 - Only one session at a time can hold the store
   ([#37](https://github.com/AlfoldiMate/agmem/issues/37)) — see above.
-- Ranking leans on decay class more than on the match — a pinned instruction
-  can outrank a directly matching fact ([#34](https://github.com/AlfoldiMate/agmem/issues/34)).
 - SurrealKV logs its configuration at INFO on every start, which clutters
   `--doctor` and the client's MCP log ([#35](https://github.com/AlfoldiMate/agmem/issues/35)).
   Workaround: `AGMEM_LOG=info,surrealdb=warn,surrealkv=warn`.

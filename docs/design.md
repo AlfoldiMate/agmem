@@ -517,6 +517,7 @@ recall(q)
       -- then project the survivors by id, in the same request
  4. rescore in Rust (core::scoring):
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
+      norm  = min–max over the pool: (rrf − min) / (max − min)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history)
  5. take k; fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
  6. → hits with per-signal scores (agent can see *why* something surfaced)
@@ -525,6 +526,15 @@ recall(q)
 Pool size 64 default (`AGMEM_POOL`), k default 10 / max 50. Tier-2 semantic
 response caching à la Spectron is intentionally absent — there is no
 generation step to save; retrieval itself is the whole cost, and it is local.
+
+`norm` is **min–max, not max-only** (issue #34). RRF barely spreads —
+`1/(60 + rank)` differs by 3% between the first hit and the fourth — so
+dividing by the best candidate left the 0.6 retrieval term varying by 0.02
+across a pool while the 0.15 importance term varied by 0.075, and decay class
+decided every order. Min–max gives the retrieval signal the range its weight
+implies; the price is that the pool's weakest candidate scores zero on it. A
+pool where nothing was retrieved (the tier-1 path) normalises to 0 throughout;
+one where every candidate tied, to 1.
 
 Three engine details the sketch has to obey (verified on 3.2, issue #13):
 

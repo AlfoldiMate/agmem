@@ -140,7 +140,8 @@ impl Signals {
 pub struct Ranked {
     /// The raw signals.
     pub signals: Signals,
-    /// `rrf` divided by the best `rrf` in the pool.
+    /// `rrf` scaled across the pool: 1.0 for the best match, 0.0 for the
+    /// weakest — or 0.0 throughout when nothing was retrieved at all.
     pub rrf_normalized: f64,
     /// The weighted final score the order is taken from.
     pub score: f64,
@@ -148,24 +149,45 @@ pub struct Ranked {
 
 /// Rank candidates best-first, returning each with its score breakdown.
 ///
-/// `score = 0.6·norm(rrf) + 0.25·retention + 0.15·importance` (design §5.3).
-/// RRF scores have no fixed scale — they depend on pool size and how many
-/// lists matched — so they are normalised against the best candidate in this
-/// pool, which preserves the ratios between candidates instead of stretching
-/// the worst one to zero the way min-max would.
+/// `score = 0.6·norm(rrf) + 0.25·retention + 0.15·importance` (design §5.3),
+/// where `norm` is min–max across the pool.
+///
+/// RRF barely spreads: `1/(60 + rank)` differs by 3% between the first hit and
+/// the fourth, so dividing by the best candidate — the obvious normalisation,
+/// and the one that shipped first — left the 0.6 retrieval term varying by
+/// 0.02 across a pool while the 0.15 importance term varied by 0.075. Decay
+/// class decided the order and the match never did (issue #34). Stretching the
+/// pool over the whole range gives each signal the weight it is documented to
+/// have. The price is that the weakest candidate always scores zero on
+/// retrieval, which is the honest answer for the least relevant thing the pool
+/// contains.
+///
+/// Two kinds of pool have no spread to stretch. When nothing was retrieved —
+/// the filters-only path, where every `rrf` is 0 — normalisation stays 0
+/// throughout and the order is retention and importance alone. When every
+/// candidate tied at a positive score, they all normalise to 1.
 ///
 /// The sort is stable: equal scores keep the order the store returned them in.
 pub fn rank<T>(candidates: impl IntoIterator<Item = (T, Signals)>) -> Vec<(T, Ranked)> {
     let candidates: Vec<(T, Signals)> = candidates.into_iter().collect();
-    let best = candidates
+    let (worst, best) = candidates
         .iter()
         .map(|(_, signals)| signals.rrf)
-        .fold(0.0_f64, f64::max);
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), rrf| {
+            (lo.min(rrf), hi.max(rrf))
+        });
+    let spread = best - worst;
 
     let mut ranked: Vec<(T, Ranked)> = candidates
         .into_iter()
         .map(|(item, signals)| {
-            let rrf_normalized = if best > 0.0 { signals.rrf / best } else { 0.0 };
+            let rrf_normalized = if best <= 0.0 {
+                0.0
+            } else if spread > 0.0 {
+                (signals.rrf - worst) / spread
+            } else {
+                1.0
+            };
             let score = WEIGHT_RRF * rrf_normalized
                 + WEIGHT_RETENTION * signals.retention
                 + WEIGHT_IMPORTANCE * signals.importance;
@@ -313,6 +335,10 @@ mod tests {
 
         assert_eq!(order, ["a", "b", "c"], "ties keep the store's order");
         assert!(ranked.iter().all(|(_, r)| r.score == ranked[0].1.score));
+        assert!(
+            ranked.iter().all(|(_, r)| r.rrf_normalized == 1.0),
+            "a pool with no spread normalises to 1, not to 0: {ranked:?}"
+        );
     }
 
     #[test]
@@ -322,5 +348,42 @@ mod tests {
         let ranked = rank([("only", Signals::for_episode_chunk(0.0))]);
         assert_eq!(ranked[0].1.rrf_normalized, 0.0);
         assert!((ranked[0].1.score - (0.25 + 0.15 * 0.5)).abs() < 1e-9);
+    }
+
+    /// What `search::rrf` hands back for a hit at `position` in one list.
+    fn rrf_at(position: f64) -> f64 {
+        1.0 / (60.0 + position)
+    }
+
+    #[test]
+    fn a_matching_fact_outranks_a_pinned_instruction_it_beat_on_retrieval() {
+        // The case #34 was filed for: the answer to the query came back at
+        // rank 1 and was rescored last, because max-normalisation left the
+        // pinned class worth several times the entire retrieval spread.
+        let fact = Signals::for_memory(rrf_at(1.0), &memory(DecayClass::Normal, 1.0, now()), now());
+        let instruction =
+            Signals::for_memory(rrf_at(3.0), &memory(DecayClass::Pinned, 1.0, now()), now());
+        let ranked = rank([("instruction", instruction), ("fact", fact)]);
+
+        assert_eq!(
+            ranked[0].0, "fact",
+            "the match decides the order, not the pin: {ranked:?}"
+        );
+    }
+
+    #[test]
+    fn normalisation_spans_the_pool_so_retrieval_keeps_its_weight() {
+        let ranked = rank([
+            ("first", Signals::for_episode_chunk(rrf_at(1.0))),
+            ("second", Signals::for_episode_chunk(rrf_at(2.0))),
+            ("third", Signals::for_episode_chunk(rrf_at(3.0))),
+        ]);
+
+        assert_eq!(ranked[0].1.rrf_normalized, 1.0, "{ranked:?}");
+        assert_eq!(ranked[2].1.rrf_normalized, 0.0, "{ranked:?}");
+        assert!(
+            ranked[0].1.score - ranked[2].1.score > 0.5,
+            "a weight of 0.6 has to be worth about 0.6 across the pool: {ranked:?}"
+        );
     }
 }

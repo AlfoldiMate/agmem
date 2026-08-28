@@ -154,8 +154,9 @@ pub struct HitSignals {
     /// has no fixed scale; compare `rrf_normalized` instead.
     pub rrf: f64,
 
-    /// `rrf` against the best match in this call: 1.0 for the strongest
-    /// retrieval hit, 0.0 when nothing matched on words or meaning at all.
+    /// `rrf` on a 0–1 scale against the rest of this call: 1.0 for the
+    /// strongest retrieval hit, 0.0 for the weakest one returned — or 0.0
+    /// everywhere when nothing matched on words or meaning at all.
     pub rrf_normalized: f64,
 
     /// How much of the memory has survived its decay curve since it was last

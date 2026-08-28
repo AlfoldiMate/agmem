@@ -4,5 +4,7 @@
 //! unit-testable in isolation. See `docs/design.md` §4.
 
 pub mod error;
+pub mod model;
 
 pub use error::CoreError;
+pub use model::SpaceName;

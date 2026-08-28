@@ -7,4 +7,7 @@ pub mod error;
 pub mod model;
 
 pub use error::CoreError;
-pub use model::SpaceName;
+pub use model::{
+    ChunkId, DecayClass, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind, MemoryId,
+    MemoryRecord, Source, SpaceName,
+};

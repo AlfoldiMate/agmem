@@ -1,8 +1,10 @@
 //! One module per MCP tool, attached to [`crate::service::AgmemService`].
 //!
-//! Empty until the tool issues land. What lives here now is the one thing
-//! every tool has to get right and cannot discover on its own: what its
-//! annotations must say.
+//! A tool module owns its request and response types and the flow between
+//! them; [`crate::service`] owns only the `#[tool]` attribute that routes to
+//! it. What lives here besides the modules is the one thing every tool has to
+//! get right and cannot discover on its own: what its annotations must say,
+//! and which failures are the caller's fault.
 //!
 //! # The annotation contract (design §3.1)
 //!
@@ -31,6 +33,43 @@
 //!     annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false)
 //! )]
 //! ```
+
+pub mod remember;
+
+use std::borrow::Cow;
+
+use agmem_store::StoreError;
+use rmcp::ErrorData;
+
+/// The caller sent something that cannot be acted on.
+///
+/// `INVALID_PARAMS` is what an agent can actually do something about: it names
+/// the field, and re-sending the same request unchanged will fail the same way.
+pub(crate) fn invalid(message: impl Into<Cow<'static, str>>) -> ErrorData {
+    ErrorData::invalid_params(message, None)
+}
+
+/// The request was fine and agmem could not serve it.
+pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> ErrorData {
+    ErrorData::internal_error(message, None)
+}
+
+/// A store failure, sorted by whose fault it is.
+///
+/// Only one variant is ever the caller's: a `supersedes` id naming a memory
+/// this space does not hold. Everything else is ours, and is logged here
+/// because the agent is not going to read a database error usefully — it is
+/// still sent, though, since a local single-user server has no one else to
+/// tell.
+pub(crate) fn store_error(error: &StoreError) -> ErrorData {
+    match error {
+        StoreError::UnknownMemory { .. } => invalid(error.to_string()),
+        other => {
+            tracing::error!(error = %other, "the store refused a tool call");
+            internal(other.to_string())
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

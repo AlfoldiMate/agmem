@@ -18,7 +18,9 @@ default = ["onnx"]
 onnx = ["agmem-embed/onnx"]
 
 [dependencies]
-agmem-core = { workspace = true }
+# `schema` puts core's enums, and their variant docs, into the tool schemas
+# agents read.
+agmem-core = { workspace = true, features = ["schema"] }
 agmem-store = { workspace = true }
 agmem-embed = { workspace = true }
 # io-util carries tokio::io::duplex, which the in-process protocol tests
@@ -32,6 +34,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 directories = { workspace = true }
+jiff = { workspace = true }
 rmcp.workspace = true
 
 [dev-dependencies]

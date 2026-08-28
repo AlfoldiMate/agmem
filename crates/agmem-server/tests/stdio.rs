@@ -75,10 +75,19 @@ fn the_binary_answers_initialize_and_tools_list_over_stdio() {
         initialize["result"]["capabilities"]["tools"].is_object(),
         "the tool capability must survive the real transport: {initialize}"
     );
-    assert_eq!(
-        reply(2)["result"]["tools"],
-        serde_json::json!([]),
-        "no tools are registered yet; the tool issues re-record this"
+    // What the surface *is* belongs to the protocol snapshot; all this has to
+    // show is that routing survives a real transport, so it names one tool
+    // rather than pinning the list every tool issue would have to re-record.
+    let listed = reply(2);
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .unwrap_or_else(|| panic!("tools/list must answer with an array: {listed}"))
+        .iter()
+        .map(|tool| tool["name"].as_str().expect("every tool has a name"))
+        .collect();
+    assert!(
+        names.contains(&"remember"),
+        "the binary must route what the service registers: {names:?}"
     );
     assert!(
         stderr.contains("agmem starting"),

@@ -283,7 +283,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
     "content": "…", "occurred_at": "RFC3339", "session": "…"
   }
 }
-// → { created: [ids], duplicates: [{id, of, similarity}], superseded: [ids] }
+// → { created: [ids],                       // in request order, minus the duplicates
+//     duplicates: [{ id, of, similarity }], // `of` = index into memories[]
+//     superseded: [ids], episode: id|null } // the episode id, written or reused
 
 // recall
 {
@@ -467,14 +469,19 @@ remember(params)
  1. validate: space slug, kinds, non-empty contents, supersedes ids exist
  2. per memory: normalize content → blake3
     exact dup? (space, hash) unique index         → report as duplicate (NOOP)
- 3. embed all new contents in one batch            (spawn_blocking, passage: prefix)
+    …but the check runs *inside* the transaction of step 5: a unique-index
+    conflict aborts the whole transaction, so a duplicate must never reach it
+ 3. embed all new contents + episode chunks in one batch
+                                                   (spawn_blocking, passage: prefix)
  4. near-dup gate: HNSW top-1 among live memories in space
     cosine ≥ 0.95                                  → report {id, similarity}; skip insert
+    skipped when the memory carries `supersedes` — the agent has already made
+    the ADD/UPDATE call, and a correction usually *is* close to what it corrects
  5. one transaction:
       episode? → insert episode + chunks (chunk.rs) + chunk embeddings
       inserts  → CREATE memory:ulid() CONTENT {...}, source.ref → episode
       supersedes? → UPDATE old SET superseded_by, invalid_at, invalid_reason
- 6. → { created, duplicates, superseded }          (structured diff, Spectron-style)
+ 6. → { created, duplicates, superseded, episode } (structured diff, Spectron-style)
 ```
 
 ### 5.3 Read path (`recall`)

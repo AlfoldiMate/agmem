@@ -181,7 +181,11 @@ fn is_ulid(candidate: &str) -> bool {
 }
 
 /// What a memory *is*, which decides how it is used and how fast it fades.
+// Under the `schema` feature these docs are also what an MCP tool's input
+// schema offers the calling agent, so keep them about the domain — an
+// implementation note here becomes noise in every agent's context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     /// A distilled statement about the world, the user, or the project.
@@ -245,6 +249,7 @@ impl std::str::FromStr for Kind {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
 )]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DecayClass {
     /// Never decays.

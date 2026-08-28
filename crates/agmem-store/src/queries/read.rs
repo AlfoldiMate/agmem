@@ -146,6 +146,31 @@ pub(crate) fn history_chain() -> Script {
     ))
 }
 
+/// One KNN probe per candidate vector: the nearest live memory in `$space`.
+///
+/// This is the near-dup gate (design §5.2 step 4), which asks the same
+/// question once per memory a `remember` batch carries — so the probes travel
+/// as one request rather than one round-trip each. `K` is 1 and, like every
+/// other `K`, a literal.
+///
+/// `(SELECT … LIMIT 1)[0]` is `NONE` when the space holds no vectors at all,
+/// which is what an empty store answers with; the distance is cast because a
+/// vector identical to a stored one gives an integral 0 that `f64` refuses.
+pub(crate) fn nearest_live(count: usize) -> Script {
+    let mut builder = Builder::plain();
+    for index in 0..count {
+        builder.push(format!(
+            "LET $n{index} = (SELECT record::id(id) AS id,
+                 <float> vector::distance::knn() AS distance FROM memory
+                 WHERE space = $space AND invalid_at IS NONE
+                     AND embedding <|1,{EF_SEARCH}|> $vec{index}
+                 ORDER BY distance LIMIT 1)[0]"
+        ));
+    }
+    let probes: Vec<String> = (0..count).map(|index| format!("$n{index}")).collect();
+    builder.finish(format!("RETURN [{}]", probes.join(", ")))
+}
+
 /// Recall's reinforcement (design §5.3 step 5), for a whole page of hits.
 ///
 /// An id naming no row is a silent no-op `UPDATE`, which is what makes this

@@ -7,11 +7,17 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# JSON Schema for the enums that appear in an MCP tool's input schema. Only
+# the server needs it; the store and the embedder do not pay for it.
+schema = ["dep:schemars"]
+
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
 blake3 = { workspace = true }
 jiff = { workspace = true }
+schemars = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

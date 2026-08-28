@@ -10,8 +10,8 @@ mod read;
 mod write;
 
 pub use read::{
-    Candidate, DEFAULT_POOL, Filters, Hit, Liveness, Lookup, MAX_POOL, Search, SpaceStats,
-    direct_lookup, history_chain, reinforce, search_hybrid, stats,
+    Candidate, DEFAULT_POOL, Filters, Hit, Liveness, Lookup, MAX_POOL, Neighbour, Search,
+    SpaceStats, direct_lookup, history_chain, nearest_live, reinforce, search_hybrid, stats,
 };
 pub use write::{
     Batch, BatchOutcome, NewChunk, NewEpisode, NewMemory, Written, ensure_space, insert_batch,

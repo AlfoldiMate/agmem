@@ -11,7 +11,7 @@
 //! fulltext arm's order arbitrary. Every term asserted on here appears in
 //! exactly one row of several.
 
-use agmem_core::{Kind, MemoryId, SpaceName};
+use agmem_core::{Kind, MemoryId, SpaceName, dedup};
 use agmem_store::db::Db;
 use agmem_store::repo::{
     self, Batch, Candidate, Filters, Hit, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Search,
@@ -384,6 +384,74 @@ async fn a_history_walk_returns_the_whole_chain_from_any_link() {
             Err(StoreError::UnknownMemory { .. })
         ),
         "a chain is only walkable from the space that holds it"
+    );
+}
+
+#[tokio::test]
+async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
+    let db = seeded().await;
+    let profile = live_id(&db, "the user prefers Rust").await;
+
+    let probes = repo::nearest_live(&db, &space(), &[axis(5), axis(2)])
+        .await
+        .expect("probe");
+
+    assert_eq!(probes.len(), 2, "one answer per probe, in input order");
+    let exact = probes[0].as_ref().expect("the space holds vectors");
+    assert_eq!(exact.id, profile);
+    assert!(
+        (exact.similarity - 1.0).abs() < 1e-6,
+        "a vector identical to a stored one is a similarity of 1: {}",
+        exact.similarity
+    );
+    assert!(dedup::is_near_duplicate(exact.similarity));
+    let orthogonal = probes[1].as_ref().expect("the space holds vectors");
+    assert!(
+        !dedup::is_near_duplicate(orthogonal.similarity),
+        "every fixture axis is orthogonal to every other: {}",
+        orthogonal.similarity
+    );
+
+    let elsewhere = "other".parse().expect("valid slug");
+    assert_eq!(
+        repo::nearest_live(&db, &elsewhere, &[axis(5)])
+            .await
+            .expect("probe"),
+        vec![None],
+        "a space holding no vectors has no neighbour to offer"
+    );
+    assert!(
+        repo::nearest_live(&db, &space(), &[])
+            .await
+            .expect("probe")
+            .is_empty(),
+        "and nothing to probe costs no round-trip"
+    );
+
+    // A correction closes the row it replaces, and the gate stops seeing it —
+    // otherwise re-stating a claim that was already corrected would come back
+    // as a duplicate of the version that is no longer true.
+    let mut correction = NewMemory::new(Kind::Fact, "the user prefers Rust over Go");
+    correction.supersedes = Some(profile.clone());
+    correction.embedding = Some(axis(3));
+    repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: None,
+            memories: vec![correction],
+        },
+    )
+    .await
+    .expect("correction");
+
+    let after = repo::nearest_live(&db, &space(), &[axis(5)])
+        .await
+        .expect("probe");
+    assert_ne!(
+        after[0].as_ref().expect("neighbour").id,
+        profile,
+        "the gate compares against what is still true, not what once was"
     );
 }
 

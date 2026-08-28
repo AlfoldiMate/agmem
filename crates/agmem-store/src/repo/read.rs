@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use agmem_core::{EpisodeChunk, Kind, MemoryId, MemoryRecord, SpaceName};
+use agmem_core::{EpisodeChunk, Kind, MemoryId, MemoryRecord, SpaceName, dedup};
 use jiff::Timestamp;
 use surrealdb::engine::any::Any;
 use surrealdb::method::Query;
@@ -22,7 +22,9 @@ use super::{checked, ensure_memories_exist};
 use crate::StoreError;
 use crate::db::Db;
 use crate::queries::read as queries;
-use crate::types::{self, ChainRow, ChunkReadRow, MemoryReadRow, SearchRow, StatsRow};
+use crate::types::{
+    self, ChainRow, ChunkReadRow, MemoryReadRow, NeighbourRow, SearchRow, StatsRow,
+};
 
 /// The candidate pool one recall considers, before `k` truncates it
 /// (design §5.3, `AGMEM_POOL`).
@@ -145,6 +147,17 @@ pub struct Candidate {
     pub hit: Hit,
 }
 
+/// The nearest live memory to a candidate, and how close it is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Neighbour {
+    /// The memory already in the store.
+    pub id: MemoryId,
+    /// Cosine similarity: 1.0 for an identical vector, 0.0 for an orthogonal
+    /// one. Converted from the engine's distance by [`dedup`], so the gate and
+    /// its threshold speak the same units.
+    pub similarity: f64,
+}
+
 /// Per-space counts, for `inspect`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpaceStats {
@@ -245,6 +258,57 @@ pub async fn direct_lookup(db: &Db, lookup: &Lookup) -> Result<Vec<MemoryRecord>
     let mut resp = checked(bind_filters(query, &lookup.filters, lookup.liveness).await?)?;
     let rows: Vec<MemoryReadRow> = resp.take(0)?;
     rows.into_iter().map(MemoryReadRow::into_record).collect()
+}
+
+/// The nearest live memory in `space` to each of `vectors`, in input order.
+///
+/// The near-dup gate of the write path (design §5.2 step 4): a memory whose
+/// nearest live neighbour is close enough is the same claim in different
+/// words, and `remember` reports it instead of storing it again. Deciding
+/// *how* close is [`dedup::is_near_duplicate`]'s; this only measures.
+///
+/// `None` in a slot means the space holds no vector to compare against yet.
+/// Every vector must be the width the schema's HNSW indexes were defined at —
+/// the engine rejects any other at query time — so callers running without an
+/// embedder pass nothing here rather than passing empty vectors.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for an id that is not a ULID.
+pub async fn nearest_live(
+    db: &Db,
+    space: &SpaceName,
+    vectors: &[Vec<f32>],
+) -> Result<Vec<Option<Neighbour>>, StoreError> {
+    if vectors.is_empty() {
+        return Ok(Vec::new());
+    }
+    let script = queries::nearest_live(vectors.len());
+    let mut query = db
+        .query(&script.text)
+        .bind(("space", types::space_str(space)));
+    for (index, vector) in vectors.iter().enumerate() {
+        query = query.bind((format!("vec{index}"), vector.clone()));
+    }
+
+    let mut resp = checked(query.await?)?;
+    let rows: Vec<Option<NeighbourRow>> = resp.take(script.result_index)?;
+    if rows.len() != vectors.len() {
+        return Err(StoreError::UnexpectedResponse(
+            "the gate probed a different number of vectors than it was given",
+        ));
+    }
+    rows.into_iter()
+        .map(|row| {
+            row.map(|row| {
+                Ok(Neighbour {
+                    id: MemoryId::new(row.id)?,
+                    similarity: dedup::similarity_from_distance(row.distance),
+                })
+            })
+            .transpose()
+        })
+        .collect()
 }
 
 /// Reinforce every memory a recall returned, in one statement.

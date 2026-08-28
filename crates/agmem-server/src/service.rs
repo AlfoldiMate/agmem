@@ -14,14 +14,16 @@ use std::sync::Arc;
 use agmem_embed::Embedder;
 use agmem_store::db::Db;
 use rmcp::{
-    ServerHandler, ServiceExt,
+    ErrorData, Json, ServerHandler, ServiceExt,
+    handler::server::wrapper::Parameters,
     model::{Implementation, ServerCapabilities, ServerInfo},
     service::ServerInitializeError,
-    tool_handler, tool_router,
+    tool, tool_handler, tool_router,
     transport::stdio,
 };
 
 use crate::config::Config;
+use crate::tools::remember::{self, RememberParams, RememberResult};
 
 /// What the agent is told agmem is for, at `initialize`.
 ///
@@ -76,11 +78,42 @@ impl AgmemService {
 /// The tools, and only the tools.
 ///
 /// Every `#[tool]` in this block becomes a route on the `tool_router()` the
-/// macro generates, which [`ServerHandler`] below dispatches through. It is
-/// empty until the tool issues land: `remember`, `recall` and `inspect` in
-/// phase 1, `context` and `forget` in phase 2 (design §3.1).
+/// macro generates, which [`ServerHandler`] below dispatches through. Each body
+/// is one call into [`crate::tools`]; the doc comment above it is not a comment
+/// but the tool's description on the wire — the extraction contract the model
+/// reads before deciding to call. `recall` and `inspect` follow in phase 1,
+/// `context` and `forget` in phase 2 (design §3.1).
 #[tool_router]
-impl AgmemService {}
+impl AgmemService {
+    /// The write verb (design §5.2). `description` below is the extraction
+    /// contract on the wire — a doc comment would work too, but the macro
+    /// joins its lines with a single `\n`, which flattens the paragraphs into
+    /// one wall the model has to re-segment.
+    #[tool(
+        name = "remember",
+        description = "Store distilled memories, and optionally the verbatim text they came \
+from, so a future session does not have to rediscover them.\n\n\
+Distil before you call: one atomic, self-contained claim per entry, in the third person, \
+understandable with no conversation around it — \"the user prefers Rust over Python for CLI \
+tools\", not \"he said he likes it better\". Store what a later session would otherwise have to \
+work out again: a preference, a decision and its reason, a convention, a lesson from something \
+that failed. Do not store what the code or the ticket already records, or what only matters to \
+this turn.\n\n\
+Nothing here is ever rewritten. When a stored claim turns out to be wrong, send the correction \
+with `supersedes` set to the old id instead of storing a contradiction: the old claim stays \
+readable and dated, and only one of them is live.\n\n\
+Returns a diff rather than an acknowledgement — what was created, what was already stored (with \
+how close a match, so you can decide between a no-op and a correction), what was closed, and the \
+episode's id.",
+        annotations(destructive_hint = false, idempotent_hint = true)
+    )]
+    async fn remember(
+        &self,
+        Parameters(params): Parameters<RememberParams>,
+    ) -> Result<Json<RememberResult>, ErrorData> {
+        remember::run(self, params).await.map(Json)
+    }
+}
 
 #[tool_handler]
 impl ServerHandler for AgmemService {

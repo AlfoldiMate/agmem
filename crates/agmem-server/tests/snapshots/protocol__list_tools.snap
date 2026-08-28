@@ -2,4 +2,260 @@
 source: crates/agmem-server/tests/protocol.rs
 expression: "&tools.tools"
 ---
-[]
+[
+  {
+    "name": "remember",
+    "description": "Store distilled memories, and optionally the verbatim text they came from, so a future session does not have to rediscover them.\n\nDistil before you call: one atomic, self-contained claim per entry, in the third person, understandable with no conversation around it — \"the user prefers Rust over Python for CLI tools\", not \"he said he likes it better\". Store what a later session would otherwise have to work out again: a preference, a decision and its reason, a convention, a lesson from something that failed. Do not store what the code or the ticket already records, or what only matters to this turn.\n\nNothing here is ever rewritten. When a stored claim turns out to be wrong, send the correction with `supersedes` set to the old id instead of storing a contradiction: the old claim stays readable and dated, and only one of them is live.\n\nReturns a diff rather than an acknowledgement — what was created, what was already stored (with how close a match, so you can decide between a no-op and a correction), what was closed, and the episode's id.",
+    "inputSchema": {
+      "$defs": {
+        "DecayClass": {
+          "description": "How fast a memory's retention falls off between accesses.\n\nThe rates themselves live with the scoring functions; this is the label\nstored on the row.",
+          "oneOf": [
+            {
+              "const": "pinned",
+              "description": "Never decays.",
+              "type": "string"
+            },
+            {
+              "const": "slow",
+              "description": "Fades over months.",
+              "type": "string"
+            },
+            {
+              "const": "normal",
+              "description": "The default: fades over weeks.",
+              "type": "string"
+            },
+            {
+              "const": "fast",
+              "description": "Working context: fades over days, then gets pruned at startup.",
+              "type": "string"
+            }
+          ]
+        },
+        "EpisodeInput": {
+          "description": "Verbatim ground truth to store alongside what was distilled from it.",
+          "properties": {
+            "content": {
+              "description": "The text, unedited. It is chunked for retrieval but never rewritten.",
+              "type": "string"
+            },
+            "occurred_at": {
+              "default": null,
+              "description": "When the events described happened, RFC3339. Defaults to now.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session": {
+              "default": null,
+              "description": "A grouping key for one conversation or working session.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "type": "object"
+        },
+        "Kind": {
+          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
+          "oneOf": [
+            {
+              "const": "fact",
+              "description": "A distilled statement about the world, the user, or the project.",
+              "type": "string"
+            },
+            {
+              "const": "lesson",
+              "description": "A procedural insight: \"X fails when Y; do Z\".",
+              "type": "string"
+            },
+            {
+              "const": "instruction",
+              "description": "A standing behavioral rule, always part of assembled context.",
+              "type": "string"
+            }
+          ]
+        },
+        "MemoryInput": {
+          "description": "One claim to store.",
+          "properties": {
+            "content": {
+              "description": "One atomic, self-contained statement in the third person — it has to\nstill make sense with no conversation around it. \"The user prefers Rust\nover Python for CLI tools\", not \"he said he likes it better\".",
+              "type": "string"
+            },
+            "decay_class": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DecayClass"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "How fast this fades between uses. Defaults by kind: facts `normal`,\nlessons `slow`, instructions `pinned`."
+            },
+            "entities": {
+              "default": [],
+              "description": "The subjects this claim is about (\"user\", \"project-x\"), for filtered\nrecall.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Kind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "What the claim is; defaults to `fact`."
+            },
+            "supersedes": {
+              "default": null,
+              "description": "The id of a live memory this claim corrects. The old one is closed and\nstays readable and dated; only the correction is live afterwards.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tags": {
+              "default": [],
+              "description": "Free labels. `identity` marks a fact that belongs in every session's\nprofile.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "valid_from": {
+              "default": null,
+              "description": "When the claim started being true, RFC3339. Defaults to now — set it\nwhen recording something that became true earlier.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "episode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EpisodeInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verbatim text these claims came from, stored unedited as ground\ntruth. Every memory in the same call is provenanced to it."
+        },
+        "memories": {
+          "description": "The distilled claims, one per entry. May be empty only when `episode`\nis present.",
+          "items": {
+            "$ref": "#/$defs/MemoryInput"
+          },
+          "type": "array"
+        },
+        "space": {
+          "default": null,
+          "description": "Where to store this. Defaults to the space this server was started\nwith; `user` is the reserved space for memory that follows the person\nacross every project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "memories"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "$defs": {
+        "Duplicate": {
+          "description": "A claim that was already in the store.",
+          "properties": {
+            "id": {
+              "description": "The id of the memory that already holds this claim.",
+              "type": "string"
+            },
+            "of": {
+              "description": "Which entry of the `memories` you sent this refers to, zero-based.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "similarity": {
+              "description": "How close the two are: 1.0 when the text is identical once case and\nwhitespace are folded, otherwise the cosine similarity that tripped the\nnear-duplicate gate.",
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "of",
+            "similarity"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "created": {
+          "description": "Ids of the memories stored, in the order they were sent, skipping the\npositions reported in `duplicates`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "duplicates": {
+          "description": "The claims that were already stored. Nothing was written for these:\naccept that as a no-op, or re-send the claim with `supersedes` set to\nthe id here if it is genuinely a correction.",
+          "items": {
+            "$ref": "#/$defs/Duplicate"
+          },
+          "type": "array"
+        },
+        "episode": {
+          "description": "Id of the episode, whether it was written now or already stored.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "superseded": {
+          "description": "Ids of the memories closed by a `supersedes` in this call.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "created",
+        "duplicates",
+        "superseded"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true
+    }
+  }
+]

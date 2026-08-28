@@ -249,6 +249,13 @@ impl ChunkReadRow {
     }
 }
 
+/// The nearest live memory to one probe vector: which row, and how far.
+#[derive(SurrealValue)]
+pub(crate) struct NeighbourRow {
+    pub(crate) id: String,
+    pub(crate) distance: f64,
+}
+
 /// One fused candidate: which row, and the score that surfaced it.
 #[derive(SurrealValue)]
 pub(crate) struct ScoreRow {

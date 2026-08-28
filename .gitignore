@@ -1,0 +1,12 @@
+.DS_Store
+
+# ctx-flow local state (never share dev notes / local settings)
+.claude/notes/
+.claude/settings.local.json
+.claude/sgconfig.yml
+
+# Rust
+target/
+
+# local embedding model cache
+.fastembed_cache/

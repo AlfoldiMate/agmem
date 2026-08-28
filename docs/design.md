@@ -289,16 +289,22 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 
 // recall
 {
-  "query": "string",
-  "k": 10,                    // max 50
+  "query": "string",          // optional — omitted takes the tier-1 path
+  "k": 10,                    // max AGMEM_MAX_K (50); refused, not clamped
   "space": "current|user|all|<name>",   // default: current + user
   "kinds": ["fact","lesson"],           // optional filter
   "entities": [], "tags": [],           // optional filters (tier-1 path)
   "as_of": "RFC3339",         // optional: what was believed valid at T
-  "include_invalidated": false
+  "include_invalidated": false          // ignored when as_of is set
 }
-// → { hits: [{id, content, kind, space, score, signals: {ft, vec, recency},
-//             valid_from, invalid_at, source, entities, tags}] }
+// → { spaces: [names actually searched],
+//     hits: [{ id, kind: "fact|lesson|instruction|episode", content, space,
+//              score, signals: { rrf, rrf_normalized, retention, importance },
+//              source: "agent|episode:<id>|external:<origin>",
+//              entities, tags,
+//              valid_from, invalid_at, invalid_reason, superseded_by }] }
+// Episode chunks compete in the same order as memories (`kind: "episode"`);
+// they carry no validity window and rank on retrieval alone.
 
 // context
 { "query": "optional focus string", "space": "…", "budget_chars": 6000 }
@@ -628,6 +634,11 @@ Each phase is releasable; later phases only add.
    descriptions + prompts out-signaling Claude Code's built-in auto memory.
    Phase 2's rituals and description-tuning are first-class work, not polish.
 5. Open: exact wording of tool descriptions (deserves its own iteration);
-   whether `recall` unions episodes by default or behind `include_episodes`;
    whether `user` space writes need an explicit `space: "user"` (current
    answer: yes — cross-project writes should be deliberate).
+6. Settled at #16: **`recall` unions episodes by default**, with no
+   `include_episodes` flag. The §5.3 flow already fuses `$ft_ec`/`$vs_ec` into
+   the same pool, distillation is lossy by design, and a chunk that outranks
+   every memory is exactly the case the verbatim copy exists for. `kind:
+   "episode"` on the hit is what makes the two distinguishable, so the flag
+   would buy nothing a filter cannot.

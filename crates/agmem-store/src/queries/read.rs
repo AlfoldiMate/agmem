@@ -179,6 +179,12 @@ pub(crate) const REINFORCE: &str = "UPDATE $ids
      SET strength += 1.0, access_count += 1, last_accessed = time::now()
      RETURN VALUE record::id(id)";
 
+/// Every registered space, alphabetically.
+///
+/// The registry is a listing rather than a gate (see `repo::ensure_space`), so
+/// this is the complete set of names a read may be pointed at.
+pub(crate) const SPACES: &str = "SELECT VALUE name FROM space ORDER BY name";
+
 /// Per-space counts for `inspect`.
 pub(crate) const STATS: &str = "RETURN {
      memories: (SELECT count() AS count FROM memory

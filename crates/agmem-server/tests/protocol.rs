@@ -65,6 +65,13 @@ impl Harness {
             .await
             .expect("connect mem://");
         migrate::ensure(&db).await.expect("migrate");
+        // Startup registers the configured space before it serves anything
+        // (design §5.1 step 8, `main.rs`). The registry is a listing, so
+        // nothing fails without it — `recall`'s `space: "all"` just quietly
+        // leaves out the space the server is actually serving.
+        repo::ensure_space(&db, &space())
+            .await
+            .expect("register the space");
         let service = AgmemService::new(db.clone(), embedder, Arc::new(config));
 
         let (server_end, client_end) = tokio::io::duplex(4096);
@@ -103,6 +110,15 @@ impl Harness {
         result
             .structured_content
             .expect("remember answers with structured content, not just text")
+    }
+
+    /// One successful `recall`, as the structured result an agent reads.
+    async fn recall(&self, arguments: Value) -> Value {
+        let result = self.call("recall", arguments).await.expect("recall");
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        result
+            .structured_content
+            .expect("recall answers with structured content, not just text")
     }
 
     /// Every memory the default space holds, closed ones included.
@@ -193,6 +209,19 @@ fn ids(value: &Value) -> Vec<&str> {
         .expect("an array of ids")
         .iter()
         .map(|id| id.as_str().expect("an id"))
+        .collect()
+}
+
+/// Every hit of a `recall`, in the order it ranked them.
+fn hits(found: &Value) -> &Vec<Value> {
+    found["hits"].as_array().expect("an array of hits")
+}
+
+/// What each hit says, in rank order.
+fn hit_contents(found: &Value) -> Vec<&str> {
+    hits(found)
+        .iter()
+        .map(|hit| hit["content"].as_str().expect("content"))
         .collect()
 }
 
@@ -508,6 +537,270 @@ async fn a_request_that_cannot_be_stored_names_what_is_wrong() {
     assert!(
         agmem.memories().await.is_empty(),
         "a refused call writes nothing at all"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn recall_fuses_claims_with_the_text_they_came_from_and_says_why() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let stored = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The user prefers Rust over Python for CLI tools" },
+                { "content": "The kitchen tap drips at night" }
+            ],
+            "episode": { "content": "I'd rather write CLIs in Rust than Python." }
+        }))
+        .await;
+    let episode = stored["episode"].as_str().expect("the episode id");
+
+    let found = agmem
+        .recall(json!({ "query": "which language does the user reach for in Rust projects" }))
+        .await;
+
+    assert_eq!(
+        found["spaces"],
+        json!(["default", "user"]),
+        "an unset space searches this project and the person behind it"
+    );
+    assert_eq!(
+        hits(&found).len(),
+        3,
+        "both claims and the episode's one chunk compete in a single order: {found}"
+    );
+    assert_eq!(
+        hit_contents(&found).last(),
+        Some(&"The kitchen tap drips at night"),
+        "what the query is not about ranks last: {found}"
+    );
+
+    let best = &hits(&found)[0];
+    assert_eq!(
+        best["signals"]["rrf_normalized"].as_f64(),
+        Some(1.0),
+        "the strongest retrieval hit normalises to 1"
+    );
+    for hit in hits(&found) {
+        let signals = &hit["signals"];
+        for signal in ["rrf", "rrf_normalized", "retention", "importance"] {
+            assert!(
+                signals[signal].is_f64(),
+                "every hit shows why it surfaced, {signal} included: {hit}"
+            );
+        }
+        assert!(hit["score"].is_f64(), "{hit}");
+        assert_eq!(
+            hit["source"].as_str(),
+            Some(format!("episode:{episode}").as_str()),
+            "a claim points back at the verbatim text it was distilled from, \
+             and a chunk at the episode it slices: {hit}"
+        );
+    }
+
+    let verbatim = hits(&found)
+        .iter()
+        .find(|hit| hit["kind"] == "episode")
+        .expect("the verbatim chunk is in the pool");
+    assert_eq!(
+        verbatim["content"].as_str(),
+        Some("I'd rather write CLIs in Rust than Python."),
+        "unedited, and marked as ground truth rather than a claim"
+    );
+    assert!(
+        verbatim["valid_from"].is_null(),
+        "verbatim text has no validity window to report: {verbatim}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn recall_unions_the_current_space_with_the_user_space() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [{ "content": "This project pins surrealdb to 3.x" }] }))
+        .await;
+    agmem
+        .remember(json!({
+            "space": "user",
+            "memories": [{ "content": "The user works in Europe/Budapest" }]
+        }))
+        .await;
+
+    // No query at all: the filters-only path, so the order is decay and
+    // importance rather than anything a search engine decided.
+    let both = agmem.recall(json!({})).await;
+    assert_eq!(both["spaces"], json!(["default", "user"]));
+    let mut contents = hit_contents(&both);
+    contents.sort_unstable();
+    assert_eq!(
+        contents,
+        [
+            "The user works in Europe/Budapest",
+            "This project pins surrealdb to 3.x"
+        ],
+        "memory that follows the person is recalled alongside the project's"
+    );
+
+    for (space, expected) in [
+        ("current", "This project pins surrealdb to 3.x"),
+        ("user", "The user works in Europe/Budapest"),
+    ] {
+        let scoped = agmem.recall(json!({ "space": space })).await;
+        assert_eq!(hit_contents(&scoped), [expected], "space {space}: {scoped}");
+    }
+
+    let all = agmem.recall(json!({ "space": "all" })).await;
+    assert_eq!(
+        all["spaces"],
+        json!(["default", "user"]),
+        "`all` expands through the registry every write registers"
+    );
+    assert_eq!(hits(&all).len(), 2);
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn as_of_returns_the_claim_that_was_live_then() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let first = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The user deploys from a laptop",
+                "valid_from": "2026-01-01T00:00:00Z"
+            }]
+        }))
+        .await;
+    let old = ids(&first["created"])[0].to_owned();
+    let second = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The user deploys from CI",
+                "supersedes": old,
+                "valid_from": "2026-06-01T00:00:00Z"
+            }]
+        }))
+        .await;
+    let new = ids(&second["created"])[0].to_owned();
+
+    assert_eq!(
+        hit_contents(&agmem.recall(json!({})).await),
+        ["The user deploys from CI"],
+        "a recall answers with what is true now"
+    );
+
+    let then = agmem
+        .recall(json!({ "as_of": "2026-03-01T00:00:00Z" }))
+        .await;
+    assert_eq!(
+        hit_contents(&then),
+        ["The user deploys from a laptop"],
+        "and with what was true then, not what replaced it: {then}"
+    );
+    let superseded = &hits(&then)[0];
+    assert_eq!(
+        (
+            superseded["id"].as_str(),
+            superseded["invalid_at"].as_str(),
+            superseded["invalid_reason"].as_str(),
+            superseded["superseded_by"].as_str(),
+        ),
+        (
+            Some(old.as_str()),
+            Some("2026-06-01T00:00:00Z"),
+            Some("superseded"),
+            Some(new.as_str()),
+        ),
+        "dated, and pointing at what took over: {superseded}"
+    );
+
+    let everything = agmem.recall(json!({ "include_invalidated": true })).await;
+    assert_eq!(
+        hits(&everything).len(),
+        2,
+        "asking for history gets both: {everything}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_filters_only_recall_ranks_on_decay_alone() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "Never force-push to main", "kind": "instruction" },
+                { "content": "The build breaks on a cold cargo cache", "kind": "lesson" },
+                { "content": "The user prefers Rust", "tags": ["identity"] }
+            ]
+        }))
+        .await;
+
+    let rules = agmem.recall(json!({ "kinds": ["instruction"] })).await;
+    assert_eq!(hit_contents(&rules), ["Never force-push to main"]);
+    let only = &hits(&rules)[0];
+    assert_eq!(
+        (
+            only["signals"]["rrf"].as_f64(),
+            only["signals"]["rrf_normalized"].as_f64(),
+            only["signals"]["importance"].as_f64()
+        ),
+        (Some(0.0), Some(0.0), Some(1.0)),
+        "nothing was retrieved — the filter selected it and the pinned class \
+         ranked it: {only}"
+    );
+    assert_eq!(only["kind"].as_str(), Some("instruction"));
+    assert_eq!(only["source"].as_str(), Some("agent"));
+
+    assert_eq!(
+        hit_contents(&agmem.recall(json!({ "tags": ["identity"] })).await),
+        ["The user prefers Rust"]
+    );
+    assert_eq!(
+        hits(&agmem.recall(json!({ "entities": ["nobody"] })).await).len(),
+        0,
+        "a filter nothing matches is an empty answer, not an error"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [{ "content": "The user prefers Rust" }] }))
+        .await;
+
+    let found = agmem.recall(json!({ "k": 1 })).await;
+    assert_eq!(hits(&found).len(), 1);
+    let memory = agmem.memories().await.remove(0);
+    assert_eq!(
+        (memory.strength, memory.access_count),
+        (2.0, 1),
+        "being recalled is what keeps a memory alive"
+    );
+
+    for (arguments, expected) in [
+        (json!({ "k": 0 }), "k must be between 1 and 50"),
+        (json!({ "k": 200 }), "k must be between 1 and 50"),
+        (json!({ "space": "Not A Slug" }), "space:"),
+        (json!({ "as_of": "last tuesday" }), "as_of:"),
+    ] {
+        let error = agmem
+            .call("recall", arguments.clone())
+            .await
+            .expect_err("the call must be refused");
+        assert!(
+            matches!(&error, ServiceError::McpError(data)
+                if data.code == ErrorCode::INVALID_PARAMS && data.message.contains(expected)),
+            "{arguments} should be refused naming {expected:?}, got: {error}"
+        );
+    }
+
+    assert_eq!(
+        agmem.memories().await.remove(0).access_count,
+        1,
+        "a refused recall reinforces nothing"
     );
     agmem.shutdown().await;
 }

@@ -376,6 +376,27 @@ pub async fn history_chain(
         .collect()
 }
 
+/// Every space this store knows about, alphabetically.
+///
+/// `recall`'s `space: "all"` expands through this, and `inspect` walks it for
+/// per-space counts. The registry is written by [`ensure_space`] — at startup
+/// for the configured space, and on the first write to any other — so a space
+/// with no rows left in it still appears here.
+///
+/// [`ensure_space`]: super::ensure_space
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a name that is not a valid slug.
+pub async fn spaces(db: &Db) -> Result<Vec<SpaceName>, StoreError> {
+    let mut resp = checked(db.query(queries::SPACES).await?)?;
+    let names: Vec<String> = resp.take(0)?;
+    names
+        .into_iter()
+        .map(|name| Ok(SpaceName::new(name)?))
+        .collect()
+}
+
 /// Count what `space` holds.
 ///
 /// # Errors

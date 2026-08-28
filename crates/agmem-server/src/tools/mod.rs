@@ -34,6 +34,7 @@
 //! )]
 //! ```
 
+pub mod recall;
 pub mod remember;
 
 use std::borrow::Cow;

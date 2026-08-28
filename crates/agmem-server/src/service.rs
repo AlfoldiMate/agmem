@@ -23,6 +23,7 @@ use rmcp::{
 };
 
 use crate::config::Config;
+use crate::tools::recall::{self, RecallParams, RecallResult};
 use crate::tools::remember::{self, RememberParams, RememberResult};
 
 /// What the agent is told agmem is for, at `initialize`.
@@ -79,10 +80,10 @@ impl AgmemService {
 ///
 /// Every `#[tool]` in this block becomes a route on the `tool_router()` the
 /// macro generates, which [`ServerHandler`] below dispatches through. Each body
-/// is one call into [`crate::tools`]; the doc comment above it is not a comment
-/// but the tool's description on the wire — the extraction contract the model
-/// reads before deciding to call. `recall` and `inspect` follow in phase 1,
-/// `context` and `forget` in phase 2 (design §3.1).
+/// is one call into [`crate::tools`]; the `description` beside it is not a
+/// comment but the tool's text on the wire — the extraction contract the model
+/// reads before deciding to call. `inspect` follows in phase 1, `context` and
+/// `forget` in phase 2 (design §3.1).
 #[tool_router]
 impl AgmemService {
     /// The write verb (design §5.2). `description` below is the extraction
@@ -112,6 +113,34 @@ episode's id.",
         Parameters(params): Parameters<RememberParams>,
     ) -> Result<Json<RememberResult>, ErrorData> {
         remember::run(self, params).await.map(Json)
+    }
+
+    /// The read verb (design §5.3).
+    #[tool(
+        name = "recall",
+        description = "Search everything past sessions stored — distilled claims and the verbatim \
+text behind them — before assuming, guessing, or asking the user something they may already have \
+said.\n\n\
+Call this at the start of a session, when a new topic comes up, and before any answer that \
+depends on what the user prefers, decided earlier, or has already been told. Ask in words: the \
+wording is matched literally and the meaning semantically, so a question works better than \
+keywords. Drop `query` entirely to list what `entities`, `tags` or `kinds` select on their own.\n\n\
+Hits come back ranked by how well they matched, how well they have held up since they were last \
+used, and how important the storing agent said they were — each of those is in `signals`, so a \
+claim that only surfaced because it never decays is visible as such. Nothing is hidden: a claim \
+that was corrected is absent unless you ask with `as_of` or `include_invalidated`, which is how \
+you find out what was believed at some earlier point.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn recall(
+        &self,
+        Parameters(params): Parameters<RecallParams>,
+    ) -> Result<Json<RecallResult>, ErrorData> {
+        recall::run(self, params).await.map(Json)
     }
 }
 

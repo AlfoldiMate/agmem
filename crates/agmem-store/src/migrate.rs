@@ -41,6 +41,65 @@ pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
     Ok(versions.first().copied().unwrap_or(0))
 }
 
+/// Record the embedder this store's vectors belong to, or refuse to run.
+///
+/// The HNSW indexes carry one dimension and the vectors one geometry, so two
+/// models in one store means silently wrong neighbours. First run writes the
+/// pair into `meta`; later runs must match it.
+///
+/// A dimensionless backend (`--embedder none`) claims no vector space: it is
+/// neither recorded nor checked, so BM25-only mode opens any store and only
+/// the rows it writes lack vectors.
+///
+/// # Errors
+/// [`StoreError::EmbedderMismatch`] when the store was embedded with another
+/// model or width.
+pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), StoreError> {
+    if dim == 0 {
+        return Ok(());
+    }
+    let dim = i64::try_from(dim).unwrap_or(i64::MAX);
+
+    let mut resp = db
+        .query(
+            "SELECT VALUE embedder_model FROM meta:main;
+             SELECT VALUE embedder_dim FROM meta:main;",
+        )
+        .await?
+        .check()?;
+    let stored_model: Option<String> = resp
+        .take::<Vec<Option<String>>>(0)?
+        .into_iter()
+        .flatten()
+        .next();
+    let stored_dim: Option<i64> = resp
+        .take::<Vec<Option<i64>>>(1)?
+        .into_iter()
+        .flatten()
+        .next();
+
+    match (stored_model, stored_dim) {
+        (Some(model), Some(width)) if model != model_id || width != dim => {
+            Err(StoreError::EmbedderMismatch {
+                stored_model: model,
+                stored_dim: width,
+                configured_model: model_id.to_owned(),
+                configured_dim: dim,
+            })
+        }
+        (Some(_), Some(_)) => Ok(()),
+        _ => {
+            tracing::info!(model = model_id, dim, "recording store embedder");
+            db.query("UPSERT meta:main SET embedder_model = $model, embedder_dim = $dim")
+                .bind(("model", model_id.to_owned()))
+                .bind(("dim", dim))
+                .await?
+                .check()?;
+            Ok(())
+        }
+    }
+}
+
 /// Apply the bootstrap plus any pending migrations; returns the version.
 ///
 /// A store written by a newer agmem fails with [`StoreError::SchemaTooNew`]

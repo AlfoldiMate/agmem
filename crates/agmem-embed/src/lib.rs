@@ -1,6 +1,90 @@
 //! agmem embedding backends.
 //!
-//! A narrow `Embedder` trait with local implementations: fastembed/ONNX
-//! (feature `onnx`, default), model2vec static embeddings (feature `static`),
-//! and a no-op backend for BM25-only mode. No network at runtime after the
-//! first model fetch. See `docs/design.md` §4.
+//! A narrow [`Embedder`] trait with local implementations: fastembed/ONNX
+//! (feature `onnx`, default) and a no-op backend for BM25-only mode. Nothing
+//! here touches the network at runtime once the model is cached; see
+//! `docs/design.md` §4.
+//!
+//! Backends are synchronous — ONNX inference is CPU-bound, and pretending
+//! otherwise would only hide it. The async wrappers [`embed_passages`] and
+//! [`embed_query`] move that work off the runtime with `spawn_blocking`, so
+//! the MCP server never stalls its reactor on a model.
+
+use std::sync::Arc;
+
+#[cfg(feature = "onnx")]
+pub mod fastembed;
+pub mod noop;
+
+pub use noop::NoopEmbedder;
+
+/// Turns text into vectors, one backend at a time.
+///
+/// Implementations are blocking and must be usable from several tasks at
+/// once; the server holds exactly one behind an [`Arc`] for the process.
+pub trait Embedder: Send + Sync + 'static {
+    /// Width of the vectors this backend produces.
+    ///
+    /// Zero means the backend produces none at all (BM25-only mode) — callers
+    /// store `embedding: NONE` and skip the vector half of retrieval.
+    fn dim(&self) -> usize;
+
+    /// Stable model identifier, recorded in `meta` so a later run cannot
+    /// silently mix vector spaces.
+    fn model_id(&self) -> &str;
+
+    /// Embed documents for storage, in input order.
+    ///
+    /// # Errors
+    /// [`EmbedError::Backend`] when the model fails to load or run.
+    fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError>;
+
+    /// Embed a single query.
+    ///
+    /// Asymmetric models want queries and passages marked differently, so this
+    /// is a separate call rather than a one-element batch.
+    ///
+    /// # Errors
+    /// [`EmbedError::Backend`] when the model fails to load or run.
+    fn embed_query(&self, query: &str) -> Result<Vec<f32>, EmbedError>;
+}
+
+/// Failures from an embedding backend.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum EmbedError {
+    /// The backend could not load its model or run inference.
+    #[error("embedder {backend}: {message}")]
+    Backend {
+        /// Which backend failed.
+        backend: &'static str,
+        /// What it said.
+        message: String,
+    },
+
+    /// The blocking embedding task panicked or was cancelled.
+    #[error("embedding task failed: {0}")]
+    Join(#[from] tokio::task::JoinError),
+}
+
+/// Embed passages on a blocking thread.
+///
+/// # Errors
+/// Whatever the backend reports, or [`EmbedError::Join`] if the task died.
+pub async fn embed_passages(
+    embedder: Arc<dyn Embedder>,
+    passages: Vec<String>,
+) -> Result<Vec<Vec<f32>>, EmbedError> {
+    tokio::task::spawn_blocking(move || embedder.embed_passages(&passages)).await?
+}
+
+/// Embed one query on a blocking thread.
+///
+/// # Errors
+/// Whatever the backend reports, or [`EmbedError::Join`] if the task died.
+pub async fn embed_query(
+    embedder: Arc<dyn Embedder>,
+    query: String,
+) -> Result<Vec<f32>, EmbedError> {
+    tokio::task::spawn_blocking(move || embedder.embed_query(&query)).await?
+}

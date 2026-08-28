@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use crate::config::{Config, EmbedderKind};
+use crate::config::Config;
 
 /// Run all checks; error (→ exit 1) when any failed.
 pub async fn run(cfg: &Config, lock_held: bool) -> anyhow::Result<()> {
@@ -27,7 +27,7 @@ pub async fn run(cfg: &Config, lock_held: bool) -> anyhow::Result<()> {
         eprintln!("  FAIL  single-writer lock    not held");
     }
 
-    match agmem_store::db::connect(&cfg.db_url).await {
+    let opened = match agmem_store::db::connect(&cfg.db_url).await {
         Ok(db) => {
             eprintln!("  ok    database open        {}", cfg.db_url);
             match agmem_store::migrate::ensure(&db).await {
@@ -46,18 +46,43 @@ pub async fn run(cfg: &Config, lock_held: bool) -> anyhow::Result<()> {
                     eprintln!("  FAIL  write/read roundtrip {err}");
                 }
             }
+            Some(db)
         }
         Err(err) => {
             failures += 1;
             eprintln!("  FAIL  database open        {}: {err}", cfg.db_url);
+            None
         }
-    }
+    };
 
-    match cfg.embedder {
-        EmbedderKind::None => eprintln!("  ok    embedder             none (BM25-only mode)"),
-        other => eprintln!(
-            "  skip  embedder             {other:?} configured; backend wiring lands with the embedder issue"
-        ),
+    // Loading the model is the check: on a fresh install this is where the
+    // download happens, and a missing one should fail here, not at first use.
+    match crate::embedder::build(cfg) {
+        Ok(embedder) if embedder.dim() == 0 => {
+            eprintln!("  ok    embedder             none (BM25-only mode)");
+        }
+        Ok(embedder) => {
+            eprintln!(
+                "  ok    embedder             {} ({}d)",
+                embedder.model_id(),
+                embedder.dim()
+            );
+            if let Some(db) = &opened {
+                match agmem_store::migrate::ensure_embedder(db, embedder.model_id(), embedder.dim())
+                    .await
+                {
+                    Ok(()) => eprintln!("  ok    embedder vs store    same model and width"),
+                    Err(err) => {
+                        failures += 1;
+                        eprintln!("  FAIL  embedder vs store    {err}");
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            failures += 1;
+            eprintln!("  FAIL  embedder             {err:#}");
+        }
     }
 
     if failures == 0 {

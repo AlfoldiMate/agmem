@@ -27,3 +27,5 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The BM25-only build must keep compiling: no ONNX Runtime, no model.
+      - run: cargo check --workspace --no-default-features --all-targets

@@ -3,7 +3,7 @@
 //! stdout is the MCP wire: nothing in this binary may write to stdout except
 //! the protocol transport (enforced by `clippy::print_stdout = deny`).
 
-use agmem_server::{config, doctor, lock, telemetry};
+use agmem_server::{config, doctor, embedder, lock, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -23,6 +23,17 @@ async fn main() -> anyhow::Result<()> {
     if cfg.doctor {
         return doctor::run(&cfg, lock.is_some()).await;
     }
+
+    let db = agmem_store::db::connect(&cfg.db_url).await?;
+    let schema = agmem_store::migrate::ensure(&db).await?;
+    let embedder = embedder::build(&cfg)?;
+    agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
+    tracing::info!(
+        schema,
+        embedder = embedder.model_id(),
+        dim = embedder.dim(),
+        "store ready"
+    );
 
     // The MCP serve loop lands with the rmcp skeleton issue (design §5.1).
     Ok(())

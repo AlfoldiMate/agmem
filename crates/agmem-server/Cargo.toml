@@ -11,6 +11,12 @@ repository.workspace = true
 name = "agmem"
 path = "src/main.rs"
 
+[features]
+default = ["onnx"]
+# The local ONNX embedder. Without it the binary still runs, BM25-only, and
+# needs no ONNX Runtime at build time.
+onnx = ["agmem-embed/onnx"]
+
 [dependencies]
 agmem-core = { workspace = true }
 agmem-store = { workspace = true }

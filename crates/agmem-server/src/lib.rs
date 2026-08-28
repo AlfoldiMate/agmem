@@ -6,5 +6,6 @@
 
 pub mod config;
 pub mod doctor;
+pub mod embedder;
 pub mod lock;
 pub mod telemetry;

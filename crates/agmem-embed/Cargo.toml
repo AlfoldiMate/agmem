@@ -1,6 +1,6 @@
 [package]
 name = "agmem-embed"
-description = "agmem embedding backends: local models behind a narrow trait."
+description = "agmem embedding backends: fastembed/ONNX, and a no-op for BM25-only mode."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,14 +9,15 @@ repository.workspace = true
 
 [features]
 default = ["onnx"]
-# fastembed/ONNX backend (wired in with the embedder issue; feature reserved
-# so downstream `--no-default-features` builds stay stable from day one)
-onnx = []
-static = []
+# The fastembed/ONNX backend. Off in BM25-only builds, which then need no
+# ONNX Runtime binaries at all.
+onnx = ["dep:fastembed"]
 
 [dependencies]
-agmem-core = { workspace = true }
+fastembed = { workspace = true, optional = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

@@ -4,18 +4,27 @@
 //! here are a second spelling of the domain types in `agmem-core` — deliberate
 //! duplication that keeps `core` free of any database dependency (design §4).
 //!
-//! Only the fields a *write* supplies appear below: everything the schema
+//! Write rows carry only the fields a write supplies — everything the schema
 //! defaults (`strength`, `last_accessed`, `access_count`, `created_at`) is left
-//! to the engine, and everything a *read* projects arrives with issue #13.
+//! to the engine. Read rows carry everything *except* `embedding`: vectors are
+//! large and nothing downstream of retrieval looks at them, so reads never
+//! project them and the [`MemoryRecord`] they rebuild always has `None` there.
 
-use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName};
+use agmem_core::{
+    ChunkId, DecayClass, EpisodeChunk, EpisodeId, InvalidReason, Kind, MemoryId, MemoryRecord,
+    Source, SpaceName,
+};
 use jiff::Timestamp;
 use surrealdb::types::{Datetime, RecordId, SurrealValue, Value};
+
+use crate::StoreError;
 
 /// Table holding distilled memories.
 pub(crate) const MEMORY: &str = "memory";
 /// Table holding verbatim episodes.
 pub(crate) const EPISODE: &str = "episode";
+/// Table holding retrieval slices of episodes.
+pub(crate) const EPISODE_CHUNK: &str = "episode_chunk";
 
 /// A jiff instant as a SurrealDB datetime.
 ///
@@ -25,6 +34,20 @@ pub(crate) fn to_datetime(stamp: Timestamp) -> Datetime {
     let nanos = u32::try_from(stamp.subsec_nanosecond()).unwrap_or(0);
     Datetime::from_timestamp(stamp.as_second(), nanos)
         .expect("jiff timestamps are inside chrono's range")
+}
+
+/// A SurrealDB datetime as a jiff instant.
+///
+/// The conversion the other way is the lossy one: chrono's range is the wider
+/// of the two, so a datetime outside jiff's saturates rather than failing the
+/// whole read. Nothing agmem writes can land there.
+pub(crate) fn to_timestamp(value: &Datetime) -> Timestamp {
+    let nanos = i32::try_from(value.timestamp_subsec_nanos()).unwrap_or(0);
+    Timestamp::new(value.timestamp(), nanos).unwrap_or(if value.timestamp() < 0 {
+        Timestamp::MIN
+    } else {
+        Timestamp::MAX
+    })
 }
 
 /// The full record id for a memory ULID.
@@ -117,6 +140,153 @@ pub(crate) struct WriteRow {
 pub(crate) struct BatchRow {
     pub(crate) episode: Option<WriteRow>,
     pub(crate) memories: Vec<WriteRow>,
+}
+
+/// Every `memory` column a read projects, minus `embedding`.
+///
+/// `source` arrives flattened into two scalars because its `ref` is a record
+/// link for an episode and a plain string for an external origin; the query
+/// unwraps the link so this side never has to guess at a [`Value`]'s shape.
+#[derive(SurrealValue)]
+pub(crate) struct MemoryReadRow {
+    pub(crate) id: String,
+    pub(crate) space: String,
+    pub(crate) kind: String,
+    pub(crate) content: String,
+    pub(crate) content_hash: String,
+    pub(crate) entities: Vec<String>,
+    pub(crate) tags: Vec<String>,
+    pub(crate) decay_class: String,
+    pub(crate) strength: f64,
+    pub(crate) last_accessed: Datetime,
+    pub(crate) access_count: i64,
+    pub(crate) valid_from: Datetime,
+    pub(crate) invalid_at: Option<Datetime>,
+    pub(crate) invalid_reason: Option<String>,
+    pub(crate) supersedes: Option<String>,
+    pub(crate) superseded_by: Option<String>,
+    pub(crate) source_kind: String,
+    pub(crate) source_ref: Option<String>,
+    pub(crate) created_at: Datetime,
+}
+
+impl MemoryReadRow {
+    /// The domain record this row spells, with no vector (see the module doc).
+    ///
+    /// # Errors
+    /// [`StoreError::MalformedRow`] when an id or an enum column holds
+    /// something this agmem's schema cannot have written.
+    pub(crate) fn into_record(self) -> Result<MemoryRecord, StoreError> {
+        Ok(MemoryRecord {
+            id: MemoryId::new(self.id)?,
+            space: SpaceName::new(self.space)?,
+            kind: self.kind.parse()?,
+            content: self.content,
+            content_hash: self.content_hash,
+            entities: self.entities,
+            tags: self.tags,
+            embedding: None,
+            decay_class: self.decay_class.parse()?,
+            strength: self.strength,
+            last_accessed: to_timestamp(&self.last_accessed),
+            // The column is a non-negative counter; a negative one could only
+            // come from a hand-edited store, and reads it as "never accessed".
+            access_count: u32::try_from(self.access_count).unwrap_or(0),
+            valid_from: to_timestamp(&self.valid_from),
+            invalid_at: self.invalid_at.as_ref().map(to_timestamp),
+            invalid_reason: self
+                .invalid_reason
+                .map(|reason| reason.parse::<InvalidReason>())
+                .transpose()?,
+            supersedes: self.supersedes.map(MemoryId::new).transpose()?,
+            superseded_by: self.superseded_by.map(MemoryId::new).transpose()?,
+            source: to_source(&self.source_kind, self.source_ref)?,
+            created_at: to_timestamp(&self.created_at),
+        })
+    }
+}
+
+/// The domain provenance the flattened `source.kind`/`source.ref` pair spells.
+fn to_source(kind: &str, reference: Option<String>) -> Result<Source, StoreError> {
+    match (kind, reference) {
+        ("agent", _) => Ok(Source::Agent),
+        ("episode", Some(id)) => Ok(Source::Episode {
+            episode: EpisodeId::new(id)?,
+        }),
+        ("external", Some(origin)) => Ok(Source::External { origin }),
+        _ => Err(StoreError::UnexpectedResponse(
+            "a memory's source names a kind with no matching ref",
+        )),
+    }
+}
+
+/// Every `episode_chunk` column a read projects, minus `embedding`.
+#[derive(SurrealValue)]
+pub(crate) struct ChunkReadRow {
+    pub(crate) id: String,
+    pub(crate) episode: String,
+    pub(crate) space: String,
+    pub(crate) text: String,
+    pub(crate) position: i64,
+}
+
+impl ChunkReadRow {
+    /// The domain chunk this row spells, with no vector (see the module doc).
+    ///
+    /// # Errors
+    /// [`StoreError::MalformedRow`] when an id column is not a ULID.
+    pub(crate) fn into_chunk(self) -> Result<EpisodeChunk, StoreError> {
+        Ok(EpisodeChunk {
+            id: ChunkId::new(self.id)?,
+            episode: EpisodeId::new(self.episode)?,
+            space: SpaceName::new(self.space)?,
+            text: self.text,
+            embedding: None,
+            // Positions are assigned from a `Vec` index, so this cannot be
+            // negative unless the store was edited by hand.
+            position: u32::try_from(self.position).unwrap_or(0),
+        })
+    }
+}
+
+/// One fused candidate: which row, and the score that surfaced it.
+#[derive(SurrealValue)]
+pub(crate) struct ScoreRow {
+    pub(crate) id: String,
+    pub(crate) table: String,
+    pub(crate) rrf: f64,
+}
+
+/// The single object a hybrid search returns: the fused order, and the rows.
+#[derive(SurrealValue)]
+pub(crate) struct SearchRow {
+    pub(crate) scored: Vec<ScoreRow>,
+    pub(crate) memories: Vec<MemoryReadRow>,
+    pub(crate) chunks: Vec<ChunkReadRow>,
+}
+
+/// The single object a history walk returns: the chain order, and the rows.
+#[derive(SurrealValue)]
+pub(crate) struct ChainRow {
+    pub(crate) ids: Vec<String>,
+    pub(crate) rows: Vec<MemoryReadRow>,
+}
+
+/// One `GROUP BY kind` bucket.
+#[derive(SurrealValue)]
+pub(crate) struct KindCountRow {
+    pub(crate) kind: String,
+    pub(crate) count: i64,
+}
+
+/// The single object a stats query returns.
+#[derive(SurrealValue)]
+pub(crate) struct StatsRow {
+    pub(crate) memories: i64,
+    pub(crate) live: i64,
+    pub(crate) episodes: i64,
+    pub(crate) chunks: i64,
+    pub(crate) live_by_kind: Vec<KindCountRow>,
 }
 
 /// The row spelling of a space name.

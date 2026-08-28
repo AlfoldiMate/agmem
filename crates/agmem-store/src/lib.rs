@@ -13,4 +13,7 @@ pub mod repo;
 mod types;
 
 pub use error::StoreError;
-pub use repo::{Batch, BatchOutcome, NewChunk, NewEpisode, NewMemory, Written};
+pub use repo::{
+    Batch, BatchOutcome, Candidate, Filters, Hit, Liveness, Lookup, NewChunk, NewEpisode,
+    NewMemory, Search, SpaceStats, Written,
+};

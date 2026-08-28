@@ -1,18 +1,17 @@
-//! The repository: everything that reads or writes rows.
+//! The write half (design §5.2).
 //!
-//! This module is the write half (design §5.2). A `remember` call lands as one
-//! transaction — episode, chunks, memories and supersessions commit together
-//! or not at all — and reports each row as either created or an exact
-//! duplicate, never as an error. The agent decides what a duplicate means.
+//! A `remember` call lands as one transaction — episode, chunks, memories and
+//! supersessions commit together or not at all — and reports each row as
+//! either created or an exact duplicate, never as an error. The agent decides
+//! what a duplicate means.
 
 use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
 use jiff::Timestamp;
-use surrealdb::IndexedResults;
-use surrealdb::types::RecordId;
 
+use super::{checked, ensure_memories_exist};
 use crate::StoreError;
 use crate::db::Db;
-use crate::queries::{self, MemoryShape};
+use crate::queries::write::{self as queries, MemoryShape};
 use crate::types::{self, BatchRow, ChunkRow, EpisodeRow, MemoryRow, SourceRow, WriteRow};
 
 /// A memory to write.
@@ -297,63 +296,6 @@ pub async fn supersede(
             .await?,
     )?;
     Ok(())
-}
-
-/// Reject ids that name no memory in `space` before a transaction depends on
-/// them — a missing target would otherwise be a silent no-op `UPDATE`.
-async fn ensure_memories_exist(
-    db: &Db,
-    space: &SpaceName,
-    ids: &[&MemoryId],
-) -> Result<(), StoreError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    let refs: Vec<RecordId> = ids.iter().copied().map(types::memory_ref).collect();
-    let mut resp = checked(
-        db.query(queries::EXISTING_MEMORIES)
-            .bind(("space", types::space_str(space)))
-            .bind(("ids", refs))
-            .await?,
-    )?;
-    let found: Vec<String> = resp.take(0)?;
-    for id in ids {
-        if !found.iter().any(|hit| hit == id.as_str()) {
-            return Err(StoreError::UnknownMemory {
-                space: space.clone(),
-                id: (*id).clone(),
-            });
-        }
-    }
-    Ok(())
-}
-
-/// Fail with the error that actually explains a failed transaction.
-///
-/// When one statement fails, every other statement reports a follow-on
-/// ("not executed", "Cannot COMMIT"), and `IndexedResults::check` returns
-/// whichever has the lowest index — which is nearly always one of those. This
-/// prefers the first error that says something.
-fn checked(mut resp: IndexedResults) -> Result<IndexedResults, StoreError> {
-    let mut errors: Vec<(usize, surrealdb::Error)> = resp.take_errors().into_iter().collect();
-    errors.sort_by_key(|(index, _)| *index);
-    let mut fallback = None;
-    for (_, error) in errors {
-        if !is_follow_on(&error) {
-            return Err(error.into());
-        }
-        fallback.get_or_insert(error);
-    }
-    match fallback {
-        Some(error) => Err(error.into()),
-        None => Ok(resp),
-    }
-}
-
-/// Whether an error only reports another statement's failure.
-fn is_follow_on(error: &surrealdb::Error) -> bool {
-    let text = error.to_string();
-    text.contains("failed transaction") || text.contains("Cannot COMMIT")
 }
 
 /// Turn one reported row into a typed outcome.

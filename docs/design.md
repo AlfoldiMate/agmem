@@ -484,14 +484,15 @@ recall(q)
  1. filters-only / entity-exact?  → tier-1 direct lookup (indexed WHERE, no embed)
  2. embed query (query: prefix)
  3. ONE SurrealQL round-trip (per searched table set):
-      LET $ft = SELECT id, search::score(1) AS s FROM memory
-                WHERE space IN $spaces AND invalid_at IS NONE AND content @1@ $q
-                ORDER BY s DESC LIMIT $pool;
-      LET $vs = SELECT id FROM memory
-                WHERE space IN $spaces AND invalid_at IS NONE
-                  AND embedding <|$pool,80|> $vec;
+      LET $ft = (SELECT id, search::score(1) AS s FROM memory
+                 WHERE space IN $spaces AND invalid_at IS NONE AND content @1@ $q
+                 ORDER BY s DESC LIMIT 64);
+      LET $vs = (SELECT id, vector::distance::knn() AS d FROM memory
+                 WHERE space IN $spaces AND invalid_at IS NONE
+                   AND embedding <|64,80|> $vec ORDER BY d);
       -- same pair over episode_chunk; fuse all lists:
-      search::rrf([$ft, $vs, $ft_ec, $vs_ec], $pool, 60)
+      LET $fused = search::rrf([$ft, $vs, $ft_ec, $vs_ec], 64, 60);
+      -- then project the survivors by id, in the same request
  4. rescore in Rust (core::scoring):
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history)
@@ -502,6 +503,21 @@ recall(q)
 Pool size 64 default (`AGMEM_POOL`), k default 10 / max 50. Tier-2 semantic
 response caching à la Spectron is intentionally absent — there is no
 generation step to save; retrieval itself is the whole cost, and it is local.
+
+Three engine details the sketch has to obey (verified on 3.2, issue #13):
+
+- The KNN operator's `K` must be an **integer literal** — `<|$pool,80|>` is a
+  parse error — so the pool is formatted into the query text and clamped there.
+- `ORDER BY` may only name an idiom the projection carries, which is why each
+  arm selects the column it sorts on (`s`, `d`).
+- `search::rrf` fuses by **rank**, returning each input object with an added
+  `rrf_score`; lists from different tables merge cleanly, so memories and
+  episode chunks compete in one fused order.
+
+Entity and tag filters use `CONTAINSANY`, which the `entities.*` / `tags.*`
+indexes serve as a `UnionIndexScan` (one `IndexScan` per value). An empty
+filter list must be **omitted from the query**, not bound: `CONTAINSANY []`
+matches nothing.
 
 ### 5.4 `forget`
 

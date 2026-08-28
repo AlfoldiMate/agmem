@@ -15,9 +15,10 @@ pub enum StoreError {
     #[error("memory {id} does not exist in space {space}")]
     UnknownMemory { space: SpaceName, id: MemoryId },
 
-    /// A record id came back in a shape the schema cannot have minted.
-    #[error("malformed record id from the store: {0}")]
-    MalformedId(#[from] CoreError),
+    /// A row came back in a shape the schema cannot have minted — a record id
+    /// that is not a ULID, or an enum spelling this agmem does not know.
+    #[error("malformed row from the store: {0}")]
+    MalformedRow(#[from] CoreError),
 
     /// The engine answered with a shape the query cannot produce; a bug here,
     /// not a caller error.

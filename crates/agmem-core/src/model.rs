@@ -220,6 +220,24 @@ impl std::fmt::Display for Kind {
     }
 }
 
+impl std::str::FromStr for Kind {
+    type Err = CoreError;
+
+    /// # Errors
+    /// [`CoreError::UnknownVariant`] for anything but a row spelling.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "fact" => Ok(Self::Fact),
+            "lesson" => Ok(Self::Lesson),
+            "instruction" => Ok(Self::Instruction),
+            other => Err(CoreError::UnknownVariant {
+                name: "kind",
+                value: other.to_owned(),
+            }),
+        }
+    }
+}
+
 /// How fast a memory's retention falls off between accesses.
 ///
 /// The rates themselves live with the scoring functions; this is the label
@@ -258,6 +276,25 @@ impl std::fmt::Display for DecayClass {
     }
 }
 
+impl std::str::FromStr for DecayClass {
+    type Err = CoreError;
+
+    /// # Errors
+    /// [`CoreError::UnknownVariant`] for anything but a row spelling.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pinned" => Ok(Self::Pinned),
+            "slow" => Ok(Self::Slow),
+            "normal" => Ok(Self::Normal),
+            "fast" => Ok(Self::Fast),
+            other => Err(CoreError::UnknownVariant {
+                name: "decay class",
+                value: other.to_owned(),
+            }),
+        }
+    }
+}
+
 /// Why a memory stopped being live. Memories are closed, never deleted, so
 /// the reason is part of the history the agent can walk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -285,6 +322,24 @@ impl InvalidReason {
 impl std::fmt::Display for InvalidReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for InvalidReason {
+    type Err = CoreError;
+
+    /// # Errors
+    /// [`CoreError::UnknownVariant`] for anything but a row spelling.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "superseded" => Ok(Self::Superseded),
+            "forgotten" => Ok(Self::Forgotten),
+            "expired" => Ok(Self::Expired),
+            other => Err(CoreError::UnknownVariant {
+                name: "invalid reason",
+                value: other.to_owned(),
+            }),
+        }
     }
 }
 
@@ -471,6 +526,27 @@ mod tests {
         assert_eq!(
             serde_json::to_value(Kind::Lesson).unwrap(),
             serde_json::json!("lesson")
+        );
+    }
+
+    #[test]
+    fn enums_parse_back_from_the_row_spellings() {
+        assert_eq!("lesson".parse::<Kind>().unwrap(), Kind::Lesson);
+        assert_eq!("slow".parse::<DecayClass>().unwrap(), DecayClass::Slow);
+        assert_eq!(
+            "expired".parse::<InvalidReason>().unwrap(),
+            InvalidReason::Expired
+        );
+        for spelling in ["", "Fact", "note"] {
+            assert!(spelling.parse::<Kind>().is_err(), "{spelling:?}");
+        }
+        assert!(
+            "glacial"
+                .parse::<DecayClass>()
+                .unwrap_err()
+                .to_string()
+                .contains("decay class"),
+            "the error must name which enum failed"
         );
     }
 

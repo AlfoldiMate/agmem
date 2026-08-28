@@ -12,4 +12,14 @@ pub enum CoreError {
     /// often a full `table:id` that should have been stripped first.
     #[error("invalid record id: {0:?}; expected a 26-character ULID")]
     InvalidRecordId(String),
+
+    /// A stored or supplied string named no variant of a domain enum — a row
+    /// written by a newer agmem, or a hand-edited store.
+    #[error("unknown {name}: {value:?}")]
+    UnknownVariant {
+        /// Which enum was being parsed.
+        name: &'static str,
+        /// The spelling that matched nothing.
+        value: String,
+    },
 }

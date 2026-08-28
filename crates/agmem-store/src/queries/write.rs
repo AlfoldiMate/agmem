@@ -1,10 +1,6 @@
 //! The SurrealQL behind the write path (design §5.2).
 //!
-//! Everything a caller supplies travels as a bound parameter; the text built
-//! here only ever varies in *shape* — how many memories, whether an episode
-//! comes with them, whether a memory closes an older one.
-//!
-//! Two engine behaviours dictate that shape:
+//! Two engine behaviours dictate the shape of a batch:
 //!
 //! - A unique-index conflict inside a transaction aborts the **whole**
 //!   transaction, so an exact duplicate can never be allowed to reach the
@@ -17,14 +13,7 @@
 
 use agmem_core::MemoryId;
 
-/// A transaction's text plus the index of the statement carrying its result.
-///
-/// SurrealDB counts `BEGIN` and `COMMIT` as statements, so the index is
-/// tracked while building rather than guessed afterwards.
-pub(crate) struct Script {
-    pub(crate) text: String,
-    pub(crate) result_index: usize,
-}
+use super::{Builder, Script};
 
 /// What the query text needs to know about one memory; everything else about
 /// it travels as a bound parameter.
@@ -36,33 +25,10 @@ pub(crate) struct MemoryShape<'a> {
     pub(crate) supersedes: Option<&'a MemoryId>,
 }
 
-/// Collects statements and remembers where the result lands.
-struct Builder(Vec<String>);
-
-impl Builder {
-    fn new() -> Self {
-        Self(vec!["BEGIN".to_owned()])
-    }
-
-    fn push(&mut self, statement: impl Into<String>) {
-        self.0.push(statement.into());
-    }
-
-    fn finish(mut self, result: String) -> Script {
-        self.push(result);
-        let result_index = self.0.len() - 1;
-        self.push("COMMIT");
-        Script {
-            text: format!("{};", self.0.join(";\n")),
-            result_index,
-        }
-    }
-}
-
 /// The whole write of one `remember` call: an optional episode with its
 /// chunks, then the memories, then any supersessions — atomically.
 pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> Script {
-    let mut builder = Builder::new();
+    let mut builder = Builder::transaction();
     builder.push("LET $out = []");
 
     if with_episode {

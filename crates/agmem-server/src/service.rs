@@ -16,13 +16,14 @@ use agmem_store::db::Db;
 use rmcp::{
     ErrorData, Json, ServerHandler, ServiceExt,
     handler::server::wrapper::Parameters,
-    model::{Implementation, ServerCapabilities, ServerInfo},
+    model::{CallToolResult, Implementation, ServerCapabilities, ServerInfo},
     service::ServerInitializeError,
     tool, tool_handler, tool_router,
     transport::stdio,
 };
 
 use crate::config::Config;
+use crate::tools::context::{self, ContextParams};
 use crate::tools::inspect::{self, InspectParams, InspectResult};
 use crate::tools::recall::{self, RecallParams, RecallResult};
 use crate::tools::remember::{self, RememberParams, RememberResult};
@@ -83,8 +84,7 @@ impl AgmemService {
 /// macro generates, which [`ServerHandler`] below dispatches through. Each body
 /// is one call into [`crate::tools`]; the `description` beside it is not a
 /// comment but the tool's text on the wire — the extraction contract the model
-/// reads before deciding to call. `context` and `forget` follow in phase 2
-/// (design §3.1).
+/// reads before deciding to call. `forget` follows in phase 2 (design §3.1).
 #[tool_router]
 impl AgmemService {
     /// The write verb (design §5.2). `description` below is the extraction
@@ -142,6 +142,40 @@ you find out what was believed at some earlier point.",
         Parameters(params): Parameters<RecallParams>,
     ) -> Result<Json<RecallResult>, ErrorData> {
         recall::run(self, params).await.map(Json)
+    }
+
+    /// The session-start verb (design §3.2).
+    ///
+    /// The only tool that does not answer with `Json<T>`. Its whole payload is
+    /// one markdown block meant to go into the prompt as written, and `Json`
+    /// puts the JSON serialisation in `content` — so every client would show
+    /// the model an escaped string with `\n` in it instead of the block. There
+    /// is nothing to parse here, so there is nothing an output schema would
+    /// describe.
+    #[tool(
+        name = "context",
+        description = "Read this before your first move in a session: the standing instructions, \
+who the user is, what is relevant right now, and the lessons earlier sessions paid for — as one \
+markdown block.\n\n\
+Call it once at the start of a session, and again when the topic shifts enough that a different \
+set of memories matters. Pass `query` to aim the Relevant section at what you are about to do; \
+leave it out for a general orientation. The other sections do not change with it.\n\n\
+The block is capped at `budget_chars` (6000 by default) and fills its sections in priority order, \
+dropping whole entries rather than cutting one in half — so it is a briefing, not an inventory. \
+Use `recall` for anything it left out, including the verbatim text, which never appears here.\n\n\
+Every line ends with its memory id. Hand that to `inspect` to see where the claim came from, or \
+to `remember`'s `supersedes` the moment you learn it is wrong.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn context(
+        &self,
+        Parameters(params): Parameters<ContextParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        context::run(self, params).await
     }
 
     /// The audit verb (design §3.1).

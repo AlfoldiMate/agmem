@@ -359,6 +359,35 @@ whole entries are dropped, never truncated mid-sentence. This is Spectron's
 best idea (`context` verb) merged with its `profile` layout, minus the LLM
 synthesis — pure retrieval and formatting.
 
+What the sketch leaves out, settled while building it (#19):
+
+- **Every line ends with its memory id**, in backticks. 26 characters of the
+  budget per entry buys a block an agent can act on: a stale claim goes to
+  `remember`'s `supersedes` or to `inspect` without a `recall` in between.
+- **A claim appears once.** The sections are filled in order and an id already
+  written is skipped, so an identity fact that is also the best match for the
+  query stays in Profile.
+- **A heading is charged to the first entry under it that fits**, so a section
+  the store had nothing for — or one the budget ate whole — leaves nothing
+  behind. An entry too long for what is left is skipped rather than ending the
+  section; the next one may fit.
+- **Verbatim episode chunks are excluded** from the Relevant search (the
+  store's `Search::episodes`). A chunk runs to ~1500 chars, so one would take a
+  quarter of the default budget and the Lessons section with it. The block is a
+  briefing; `recall` is the route to the text.
+- **`context` reinforces nothing.** It is called on a schedule rather than
+  because something was needed, so counting it as use would flatten every decay
+  curve to permanent within a few sessions.
+- The non-search sections rank through `core::scoring::rank` on a pool with no
+  retrieval score — retention and importance — which is what §3.2's "by
+  strength" and "by strength·recency" reduce to, since strength *is* the
+  stability term of the retention curve.
+- `budget_chars` below 200 is refused: a block too small for a heading and one
+  claim comes back as a bare title, which reads exactly like an empty store.
+- It answers with **text content, not `Json<T>`**: the payload is markdown
+  meant for the prompt, and the `Json` wrapper puts the JSON serialisation in
+  `content`, so every client would show the model an escaped string.
+
 ### 3.3 Prompts (MCP prompts — rituals, v1.5)
 
 - `agmem_checkpoint` — instructs the agent: review the session, distill new

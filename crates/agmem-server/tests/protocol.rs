@@ -24,7 +24,7 @@ use agmem_store::repo::{self, Liveness, Lookup, SpaceStats};
 use clap::Parser as _;
 use rmcp::RoleClient;
 use rmcp::ServiceExt as _;
-use rmcp::model::{CallToolRequestParams, CallToolResult, ErrorCode};
+use rmcp::model::{CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode};
 use rmcp::service::{RunningService, ServiceError};
 use serde_json::{Value, json};
 
@@ -119,6 +119,20 @@ impl Harness {
         result
             .structured_content
             .expect("recall answers with structured content, not just text")
+    }
+
+    /// One successful `context`, as the markdown block an agent reads.
+    async fn context(&self, arguments: Value) -> String {
+        let result = self.call("context", arguments).await.expect("context");
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        assert!(
+            result.structured_content.is_none(),
+            "context is a block for the prompt, not a record to parse"
+        );
+        match result.content.first().expect("one content block") {
+            ContentBlock::Text(text) => text.text.clone(),
+            other => panic!("context answers with text, got {other:?}"),
+        }
     }
 
     /// One successful `inspect`, as the structured result an agent reads.
@@ -227,6 +241,14 @@ fn ids(value: &Value) -> Vec<&str> {
 /// Every hit of a `recall`, in the order it ranked them.
 fn hits(found: &Value) -> &Vec<Value> {
     found["hits"].as_array().expect("an array of hits")
+}
+
+/// The section headings of a `context` block, in the order they appear.
+fn headings(block: &str) -> Vec<&str> {
+    block
+        .lines()
+        .filter(|line| line.starts_with("## "))
+        .collect()
 }
 
 /// What each hit says, in rank order.
@@ -872,6 +894,155 @@ async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
         1,
         "a refused recall reinforces nothing"
     );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn context_lays_out_the_sections_in_a_fixed_order_and_reinforces_nothing() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let written = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "Never force-push to main", "kind": "instruction" },
+                { "content": "The user prefers Rust", "tags": ["identity"] },
+                { "content": "The build breaks on a cold cargo cache", "kind": "lesson" },
+                { "content": "The API gateway is deployed from the infra repo" }
+            ]
+        }))
+        .await;
+    let instruction = ids(&written["created"])[0].to_owned();
+
+    let block = agmem.context(json!({})).await;
+    assert!(
+        block.starts_with("# Memory context (spaces: default + user)"),
+        "{block}"
+    );
+    assert_eq!(
+        headings(&block),
+        ["## Instructions", "## Profile", "## Relevant", "## Lessons"],
+        "{block}"
+    );
+    for claim in [
+        "Never force-push to main",
+        "The user prefers Rust",
+        "The build breaks on a cold cargo cache",
+        "The API gateway is deployed from the infra repo",
+    ] {
+        assert!(block.contains(claim), "{claim:?} is missing from {block}");
+    }
+    assert!(
+        block.contains(&format!("`{instruction}`")),
+        "every line carries the id that leads back to it: {block}"
+    );
+    assert_eq!(
+        block.matches("The user prefers Rust").count(),
+        1,
+        "an identity fact belongs to the profile, not to both sections: {block}"
+    );
+
+    assert!(
+        agmem
+            .memories()
+            .await
+            .iter()
+            .all(|memory| memory.access_count == 0),
+        "context is called on a schedule, so being in the block is not use"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_query_aims_the_relevant_section_and_verbatim_text_stays_out() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The user prefers Rust over Python for command-line tools" },
+                { "content": "The kitchen renovation starts in March" }
+            ],
+            "episode": {
+                "content": "We went back and forth over rust and python and settled on rust."
+            }
+        }))
+        .await;
+
+    let block = agmem
+        .context(json!({ "query": "which language for command-line tools?" }))
+        .await;
+    assert!(
+        block.contains("The user prefers Rust over Python for command-line tools"),
+        "{block}"
+    );
+    assert!(
+        !block.contains("We went back and forth"),
+        "the block is a briefing; the verbatim text is what recall is for: {block}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_small_budget_keeps_the_first_section_and_says_it_trimmed() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "Never force-push to main", "kind": "instruction" },
+                { "content": "The build breaks on a cold cargo cache", "kind": "lesson" },
+                { "content": "The API gateway is deployed from the infra repo" }
+            ]
+        }))
+        .await;
+
+    let budget = 200;
+    let block = agmem.context(json!({ "budget_chars": budget })).await;
+    assert!(
+        block.chars().count() <= budget,
+        "{} characters against a budget of {budget}: {block}",
+        block.chars().count()
+    );
+    assert!(
+        block.contains("Never force-push to main"),
+        "instructions come first and survive the budget: {block}"
+    );
+    assert!(
+        block.contains("_Trimmed to fit"),
+        "a block that lost entries has to say so: {block}"
+    );
+    assert!(
+        !block.contains("cold cargo cache"),
+        "whole entries go, never half of one: {block}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_empty_space_says_so_and_an_unusable_budget_is_refused() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    let block = agmem.context(json!({})).await;
+    assert!(
+        block.ends_with("_Nothing stored for these spaces yet._"),
+        "an empty store is an answer, not a blank: {block}"
+    );
+    assert!(headings(&block).is_empty(), "{block}");
+
+    for (arguments, expected) in [
+        (
+            json!({ "budget_chars": 10 }),
+            "budget_chars must be at least 200",
+        ),
+        (json!({ "space": "Not A Slug" }), "space:"),
+    ] {
+        let error = agmem
+            .call("context", arguments.clone())
+            .await
+            .expect_err("the call must be refused");
+        assert!(
+            matches!(&error, ServiceError::McpError(data)
+                if data.code == ErrorCode::INVALID_PARAMS && data.message.contains(expected)),
+            "{arguments} should be refused naming {expected:?}, got: {error}"
+        );
+    }
     agmem.shutdown().await;
 }
 

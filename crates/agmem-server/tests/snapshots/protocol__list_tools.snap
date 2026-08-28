@@ -4,6 +4,47 @@ expression: "&tools.tools"
 ---
 [
   {
+    "name": "context",
+    "description": "Read this before your first move in a session: the standing instructions, who the user is, what is relevant right now, and the lessons earlier sessions paid for — as one markdown block.\n\nCall it once at the start of a session, and again when the topic shifts enough that a different set of memories matters. Pass `query` to aim the Relevant section at what you are about to do; leave it out for a general orientation. The other sections do not change with it.\n\nThe block is capped at `budget_chars` (6000 by default) and fills its sections in priority order, dropping whole entries rather than cutting one in half — so it is a briefing, not an inventory. Use `recall` for anything it left out, including the verbatim text, which never appears here.\n\nEvery line ends with its memory id. Hand that to `inspect` to see where the claim came from, or to `remember`'s `supersedes` the moment you learn it is wrong.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "budget_chars": {
+          "default": null,
+          "description": "How many characters the block may take, 6000 by default. Sections fill\nin priority order until it runs out; whole entries are dropped, never\ncut mid-sentence.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "query": {
+          "default": null,
+          "description": "What this session is about, in words. It aims the Relevant section at\nthe work in front of you; the other three sections do not change with\nit. Leave it out for a general orientation.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "space": {
+          "default": null,
+          "description": "Where to look: `current` for this project, `user` for the person,\n`all` for every space, or a space name. Defaults to `current` and\n`user` together.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "inspect",
     "description": "Look behind a stored memory: where it came from, what it used to say, and what the store actually holds.\n\nUse it when a recalled claim matters enough to check, when two claims disagree, or when you need to quote the original wording rather than the distilled version. `ref` takes one of: a memory id (bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim text it was distilled from; `episode:<id>` for that text with every claim drawn from it; `entity:<name>` for everything ever said about a subject, corrected claims included; or `stats` for per-space counts.\n\nNothing is ever deleted here, so a claim that was corrected is still readable and still dated — which is what lets you tell a belief that changed from a belief that was always wrong.",
     "inputSchema": {

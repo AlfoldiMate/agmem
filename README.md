@@ -4,10 +4,10 @@ Memory for coding agents, over MCP. One local process, one embedded database,
 no server-side LLM: the agent distils what is worth keeping, agmem stores it,
 dates it, ranks it, and shows its work.
 
-Three tools — `remember`, `recall`, `inspect`.
+Four tools — `remember`, `recall`, `context`, `inspect`.
 
-> Status: Phase 1 (MVP). The loop works end to end from Claude Code.
-> `forget`, `context` assembly and consolidation are Phase 2+.
+> Status: Phase 1 (MVP) plus the `context` block. The loop works end to end
+> from Claude Code. `forget` and consolidation are Phase 2+.
 
 ## Install
 
@@ -140,6 +140,37 @@ compete in the same ranking and come back as `kind: "episode"`.
 ```
 
 The old claim stays readable and dated; only the new one is live.
+
+**`context`** — the session-start block. Four fixed sections in a fixed order,
+capped at `budget_chars`, dropping whole entries rather than cutting one in
+half. Read it before your first move; pass `query` to aim the Relevant section
+at the work in front of you.
+
+```json
+{ "query": "what am I doing in the API gateway?", "budget_chars": 6000 }
+```
+
+```markdown
+# Memory context (spaces: myproject + user)
+
+## Instructions
+- Never force-push to main `01M14XWWAXJG…`
+
+## Profile
+- The user prefers Rust over Python for command-line tools `01M14XY6T7RX…`
+
+## Relevant
+- The API gateway is deployed from the infra repo `01M14XZ2QK8M…`
+
+## Lessons
+- The build breaks on a cold cargo cache `01M14Y0PB3WD…`
+```
+
+Every line carries its id, so a claim you find is wrong goes straight back
+through `remember`'s `supersedes` without a `recall` in between. Verbatim
+episode text never appears — one chunk would eat a quarter of the budget, and
+`recall` is the way to it. Nothing is reinforced either: the block is read on a
+schedule, so being in it is no evidence a memory was useful.
 
 **`inspect`** — the paper trail. `ref` takes a memory id (the correction chain,
 oldest first, plus the verbatim text behind it), `episode:<id>`,

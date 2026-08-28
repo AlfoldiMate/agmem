@@ -12,8 +12,6 @@
 //! it; an agent handed a bare list of sentences cannot. That is also what
 //! makes a bad memory diagnosable instead of mysterious.
 
-use std::sync::Arc;
-
 use agmem_core::scoring::{self, Ranked, Signals};
 use agmem_core::{Kind, MemoryId};
 use agmem_store::repo::{self, Candidate, Filters, Hit as StoreHit, Liveness, Lookup, Search};
@@ -23,7 +21,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::service::AgmemService;
-use crate::tools::{self, internal, invalid, provenance, store_error};
+use crate::tools::{self, embed_query, invalid, provenance, store_error};
 
 /// How many hits a call that does not say gets back.
 const DEFAULT_K: u16 = 10;
@@ -351,17 +349,6 @@ fn resolve_liveness(as_of: Option<&str>, include_invalidated: bool) -> Result<Li
         None if include_invalidated => Ok(Liveness::Any),
         None => Ok(Liveness::Live),
     }
-}
-
-/// The query vector for the semantic arms, or `None` in BM25-only mode.
-async fn embed_query(service: &AgmemService, text: &str) -> Result<Option<Vec<f32>>, ErrorData> {
-    if service.embedder().dim() == 0 {
-        return Ok(None);
-    }
-    agmem_embed::embed_query(Arc::clone(service.embedder()), text.to_owned())
-        .await
-        .map(Some)
-        .map_err(|error| internal(format!("embedding the query failed: {error}")))
 }
 
 /// Push every memory this call returned back up its decay curve (§5.3 step 5).

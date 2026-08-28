@@ -4,10 +4,11 @@
 //! them; [`crate::service`] owns only the `#[tool]` attribute that routes to
 //! it. What lives here besides the modules is the one thing every tool has to
 //! get right and cannot discover on its own: what its annotations must say,
-//! and which failures are the caller's fault. Two tools' worth of shared
-//! vocabulary sits here too — [`spaces`] resolves `current|user|all|<name>`
-//! the same way for every read, and [`provenance`] spells a `source` the same
-//! way in every answer.
+//! and which failures are the caller's fault. The vocabulary the reading tools
+//! share sits here too — [`spaces`] resolves `current|user|all|<name>` the same
+//! way for every read, [`embed_query`] decides once what a dimensionless
+//! embedder means, and [`provenance`] spells a `source` the same way in every
+//! answer.
 //!
 //! # The annotation contract (design §3.1)
 //!
@@ -37,11 +38,13 @@
 //! )]
 //! ```
 
+pub mod context;
 pub mod inspect;
 pub mod recall;
 pub mod remember;
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use agmem_core::{Source, SpaceName};
 use agmem_store::{StoreError, repo};
@@ -81,6 +84,28 @@ pub(crate) async fn spaces(
                 .map_err(|error| invalid(format!("space: {error}")))?,
         ],
     })
+}
+
+/// The query vector for the semantic arms, or `None` in BM25-only mode.
+///
+/// Both reading tools need one and neither should decide separately what a
+/// dimensionless embedder means: `--embedder none` is a degraded but working
+/// mode (design §6), not a failure, so it drops the vector arms rather than
+/// refusing the call.
+///
+/// # Errors
+/// [`ErrorData`] with `INTERNAL_ERROR` when the embedder fails.
+pub(crate) async fn embed_query(
+    service: &AgmemService,
+    text: &str,
+) -> Result<Option<Vec<f32>>, ErrorData> {
+    if service.embedder().dim() == 0 {
+        return Ok(None);
+    }
+    agmem_embed::embed_query(Arc::clone(service.embedder()), text.to_owned())
+        .await
+        .map(Some)
+        .map_err(|error| internal(format!("embedding the query failed: {error}")))
 }
 
 /// A memory's provenance in the form `inspect`'s `ref` takes.

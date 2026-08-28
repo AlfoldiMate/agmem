@@ -6,10 +6,8 @@
 //! bumping `meta:main.schema_version` after each batch. Statements use
 //! `IF NOT EXISTS` so a half-applied batch is safe to re-run.
 
-use surrealdb::Surreal;
-use surrealdb::engine::any::Any;
-
 use crate::StoreError;
+use crate::db::Db;
 
 /// The migration gate itself; always applied, idempotent, unversioned.
 const BOOTSTRAP: &str = "DEFINE TABLE IF NOT EXISTS meta SCHEMAFULL;
@@ -29,7 +27,7 @@ pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
 ///
 /// Requires [`ensure`] to have run at least once on this store — the gate
 /// table must exist.
-pub async fn current_version(db: &Surreal<Any>) -> Result<u32, StoreError> {
+pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
     let mut resp = db
         .query("SELECT VALUE schema_version FROM meta:main")
         .await?;
@@ -41,7 +39,7 @@ pub async fn current_version(db: &Surreal<Any>) -> Result<u32, StoreError> {
 ///
 /// A store written by a newer agmem fails with [`StoreError::SchemaTooNew`]
 /// instead of being touched.
-pub async fn ensure(db: &Surreal<Any>) -> Result<u32, StoreError> {
+pub async fn ensure(db: &Db) -> Result<u32, StoreError> {
     db.query(BOOTSTRAP).await?.check()?;
     let mut version = current_version(db).await?;
     if version > SCHEMA_VERSION {

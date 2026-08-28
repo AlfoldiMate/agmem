@@ -5,5 +5,6 @@
 //! the protocol transport (enforced by `clippy::print_stdout = deny`).
 
 pub mod config;
+pub mod doctor;
 pub mod lock;
 pub mod telemetry;

@@ -47,8 +47,7 @@ doctor: all checks passed
     "agmem": {
       "command": "agmem",
       "env": {
-        "AGMEM_SPACE": "myproject",
-        "AGMEM_LOG": "info,surrealdb=warn,surrealkv=warn"
+        "AGMEM_SPACE": "myproject"
       }
     }
   }
@@ -57,9 +56,7 @@ doctor: all checks passed
 
 `AGMEM_SPACE` names this project's memory. One space per project, plus the
 reserved `user` space for what follows the person everywhere — preferences,
-working style, things true regardless of repo. (`AGMEM_LOG` is only there to
-quiet the storage engine until [#35](https://github.com/AlfoldiMate/agmem/issues/35)
-lands.) This repo's own `.mcp.json` is the working example.
+working style, things true regardless of repo. This repo's own `.mcp.json` is the working example.
 
 **One session at a time, for now.** The embedded store is single-writer and
 the data directory is shared by every project, so the second concurrent Claude
@@ -173,7 +170,7 @@ included), or `stats` for per-space counts.
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed`, or `none` for BM25-only |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
-| `--log` / `AGMEM_LOG`, `--log-file` / `AGMEM_LOG_FILE` | `info`, stderr | Telemetry |
+| `--log` / `AGMEM_LOG`, `--log-file` / `AGMEM_LOG_FILE` | agmem at `info`, its dependencies at `warn`, stderr | Telemetry |
 | `--doctor` | — | Self-check, then exit |
 
 stdout is the MCP wire: all logging goes to stderr or `--log-file`, never
@@ -201,12 +198,6 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
 
 - Only one session at a time can hold the store
   ([#37](https://github.com/AlfoldiMate/agmem/issues/37)) — see above.
-- SurrealKV logs its configuration at INFO on every start, which clutters
-  `--doctor` and the client's MCP log ([#35](https://github.com/AlfoldiMate/agmem/issues/35)).
-  Workaround: `AGMEM_LOG=info,surrealdb=warn,surrealkv=warn`.
-- An episode hit's `id` is a chunk id and is not accepted by `inspect`; use the
-  hit's `source` (`episode:<id>`) instead
-  ([#36](https://github.com/AlfoldiMate/agmem/issues/36)).
 
 ## Troubleshooting
 

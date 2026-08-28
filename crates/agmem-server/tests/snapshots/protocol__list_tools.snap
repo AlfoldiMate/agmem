@@ -10,7 +10,7 @@ expression: "&tools.tools"
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "ref": {
-          "description": "What to look at: `memory:<id>` or a bare memory id for a claim's\nhistory and the text behind it, `episode:<id>` for stored verbatim\ntext, `entity:<name>` for everything said about a subject, or `stats`\nfor what each space holds.",
+          "description": "What to look at: `memory:<id>` for a claim's history and the text\nbehind it, `episode:<id>` for stored verbatim text, `entity:<name>`\nfor everything said about a subject, or `stats` for what each space\nholds. Any bare id another call handed you also works, whichever of\nthose it turns out to name.",
           "type": "string"
         },
         "space": {
@@ -649,7 +649,7 @@ expression: "&tools.tools"
               "type": "array"
             },
             "id": {
-              "description": "The id of this memory, to correct it with `remember`'s `supersedes` or\nto look it up with `inspect`.",
+              "description": "The id of this hit. Pass it to `inspect` to see where it came from, or\nto `remember`'s `supersedes` to correct it — the latter only for a claim,\nsince an `episode` hit is a slice of verbatim text and nothing to\ncorrect.",
               "type": "string"
             },
             "invalid_at": {

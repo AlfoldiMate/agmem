@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use agmem_core::{
-    Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName, dedup,
+    ChunkId, Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName, dedup,
 };
 use jiff::Timestamp;
 use surrealdb::engine::any::Any;
@@ -432,6 +432,35 @@ pub async fn episode(
             .map(MemoryReadRow::into_record)
             .collect::<Result<_, StoreError>>()?,
     })
+}
+
+/// The episode a retrieval slice belongs to, if `space` holds that slice.
+///
+/// `recall` hands out chunk ids for verbatim hits, so this is what lets one be
+/// followed back to the text it came from (issue #36) rather than dead-ending
+/// in an id no other tool accepts.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects and
+/// [`StoreError::MalformedRow`] for a link that is not a ULID. A slice that is
+/// not in `space` is `Ok(None)` rather than an error: the caller asks each
+/// searched space in turn.
+pub async fn episode_of_chunk(
+    db: &Db,
+    space: &SpaceName,
+    id: &ChunkId,
+) -> Result<Option<EpisodeId>, StoreError> {
+    let script = queries::chunk_episode();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("target", types::chunk_ref(id)))
+            .bind(("space", types::space_str(space)))
+            .await?,
+    )?;
+    Ok(resp
+        .take::<Option<String>>(script.result_index)?
+        .map(EpisodeId::new)
+        .transpose()?)
 }
 
 /// Every space this store knows about, alphabetically.

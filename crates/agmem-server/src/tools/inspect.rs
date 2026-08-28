@@ -12,14 +12,15 @@
 //!
 //! | `ref` | answer |
 //! |---|---|
-//! | `memory:<id>` (or a bare id) | the record, its whole supersession chain oldest→newest, and the text it came from |
+//! | `memory:<id>` | the record, its whole supersession chain oldest→newest, and the text it came from |
+//! | a bare id | whichever of those rows it names — a verbatim hit hands out a *chunk* id, which answers with its episode |
 //! | `episode:<id>` | the verbatim text, its retrieval slices, and every claim distilled from it |
 //! | `entity:<name>` | every claim naming that subject, closed ones included |
 //! | `stats` | per-space counts |
 
 use std::fmt;
 
-use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, MemoryRecord, Source, SpaceName};
+use agmem_core::{ChunkId, DecayClass, EpisodeId, Kind, MemoryId, MemoryRecord, Source, SpaceName};
 use agmem_store::StoreError;
 use agmem_store::repo::{self, Filters, Liveness, Lookup};
 use rmcp::ErrorData;
@@ -32,10 +33,11 @@ use crate::tools::{internal, invalid, provenance, store_error};
 /// One `inspect` call: what to look at, and where.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct InspectParams {
-    /// What to look at: `memory:<id>` or a bare memory id for a claim's
-    /// history and the text behind it, `episode:<id>` for stored verbatim
-    /// text, `entity:<name>` for everything said about a subject, or `stats`
-    /// for what each space holds.
+    /// What to look at: `memory:<id>` for a claim's history and the text
+    /// behind it, `episode:<id>` for stored verbatim text, `entity:<name>`
+    /// for everything said about a subject, or `stats` for what each space
+    /// holds. Any bare id another call handed you also works, whichever of
+    /// those it turns out to name.
     #[serde(rename = "ref")]
     pub reference: String,
 
@@ -253,6 +255,10 @@ enum Reference {
     Episode(EpisodeId),
     Entity(String),
     Stats,
+    /// A bare ULID, before the store has said which table answers to it. It
+    /// never survives a call: `run` replaces it with what it resolved to, so
+    /// the echoed `ref` is always canonical.
+    Unqualified(String),
 }
 
 /// Answer one reference (design §3.1).
@@ -274,16 +280,45 @@ pub async fn run(
         .or_else(|| (reference == Reference::Stats).then_some("all"));
     let spaces = crate::tools::spaces(service, requested).await?;
 
-    let found = match &reference {
-        Reference::Stats => Inspected::Stats {
-            counts: counts(service, &spaces).await?,
-        },
-        Reference::Entity(name) => Inspected::Entity {
-            entity: name.clone(),
-            memories: about(service, &spaces, name).await?,
-        },
-        Reference::Memory(id) => memory(service, &spaces, id).await?,
-        Reference::Episode(id) => episode(service, &spaces, id).await?,
+    // Every arm hands back the reference it *resolved* to, not the one it was
+    // given: a bare id only becomes `memory:` or `episode:` once the store has
+    // said which it is, and the echoed `ref` has to be the canonical form.
+    let (reference, found) = match reference {
+        Reference::Stats => (
+            Reference::Stats,
+            Inspected::Stats {
+                counts: counts(service, &spaces).await?,
+            },
+        ),
+        Reference::Entity(name) => {
+            let memories = about(service, &spaces, &name).await?;
+            (
+                Reference::Entity(name.clone()),
+                Inspected::Entity {
+                    entity: name,
+                    memories,
+                },
+            )
+        }
+        Reference::Memory(id) => {
+            let found = memory(service, &spaces, &id).await?.ok_or_else(|| {
+                missing(
+                    "memory",
+                    id.as_str(),
+                    &spaces,
+                    "recall it first, widen `space`, or drop the `memory:` prefix — \
+                     a bare id resolves chunks and episodes too",
+                )
+            })?;
+            (Reference::Memory(id), found)
+        }
+        Reference::Episode(id) => {
+            let found = episode(service, &spaces, &id)
+                .await?
+                .ok_or_else(|| missing("episode", id.as_str(), &spaces, FIRST_OR_WIDER))?;
+            (Reference::Episode(id), found)
+        }
+        Reference::Unqualified(id) => unqualified(service, &spaces, &id).await?,
     };
 
     Ok(InspectResult {
@@ -302,7 +337,7 @@ async fn memory(
     service: &AgmemService,
     spaces: &[SpaceName],
     id: &MemoryId,
-) -> Result<Inspected, ErrorData> {
+) -> Result<Option<Inspected>, ErrorData> {
     let mut walked = None;
     for space in spaces {
         match repo::history_chain(service.db(), space, id).await {
@@ -315,7 +350,7 @@ async fn memory(
         }
     }
     let Some((space, chain)) = walked else {
-        return Err(missing("memory", id.as_str(), spaces));
+        return Ok(None);
     };
     let target = chain
         .iter()
@@ -337,23 +372,26 @@ async fn memory(
         Source::Agent | Source::External { .. } => None,
     };
 
-    Ok(Inspected::Memory {
+    Ok(Some(Inspected::Memory {
         memory: Box::new(target.into()),
         chain: chain.into_iter().map(MemoryView::from).collect(),
         episode,
-    })
+    }))
 }
 
 /// Verbatim text, its slices, and what was distilled from it.
+///
+/// `Ok(None)` when no searched space holds it — the caller decides whether
+/// that is an error or the next thing to try.
 async fn episode(
     service: &AgmemService,
     spaces: &[SpaceName],
     id: &EpisodeId,
-) -> Result<Inspected, ErrorData> {
+) -> Result<Option<Inspected>, ErrorData> {
     for space in spaces {
         match repo::episode(service.db(), space, id).await {
             Ok(detail) => {
-                return Ok(Inspected::Episode {
+                return Ok(Some(Inspected::Episode {
                     episode: detail.episode.into(),
                     chunks: detail
                         .chunks
@@ -365,13 +403,61 @@ async fn episode(
                         })
                         .collect(),
                     derived: detail.derived.into_iter().map(MemoryView::from).collect(),
-                });
+                }));
             }
             Err(StoreError::UnknownEpisode { .. }) => continue,
             Err(error) => return Err(store_error(&error)),
         }
     }
-    Err(missing("episode", id.as_str(), spaces))
+    Ok(None)
+}
+
+/// A bare id, resolved against every table that could answer to it.
+///
+/// `recall` hands out bare ids for both kinds of hit, and a verbatim hit's id
+/// is a *chunk* id — so the obvious follow-up call was the one that failed,
+/// with an error blaming `space` for an id that was never a memory (issue
+/// #36). A ULID says nothing about its table, so each is asked in turn:
+/// memory first, since that is nearly always what an id names; then the chunk
+/// a verbatim hit points at, answered with the episode it belongs to; then the
+/// episode itself, for an id copied out of a hit's `source`.
+async fn unqualified(
+    service: &AgmemService,
+    spaces: &[SpaceName],
+    id: &str,
+) -> Result<(Reference, Inspected), ErrorData> {
+    // `parse` accepted this as a ULID and all three newtypes validate the same
+    // thing, so none of these can fail — but nothing here panics on a store
+    // that surprises us.
+    let memory_id = MemoryId::new(id).map_err(|_| grammar(id))?;
+    if let Some(found) = memory(service, spaces, &memory_id).await? {
+        return Ok((Reference::Memory(memory_id), found));
+    }
+
+    let chunk_id = ChunkId::new(id).map_err(|_| grammar(id))?;
+    for space in spaces {
+        let parent = repo::episode_of_chunk(service.db(), space, &chunk_id)
+            .await
+            .map_err(|error| store_error(&error))?;
+        if let Some(parent) = parent {
+            let found = episode(service, spaces, &parent)
+                .await?
+                .ok_or_else(unreachable_chunk)?;
+            return Ok((Reference::Episode(parent), found));
+        }
+    }
+
+    let episode_id = EpisodeId::new(id).map_err(|_| grammar(id))?;
+    if let Some(found) = episode(service, spaces, &episode_id).await? {
+        return Ok((Reference::Episode(episode_id), found));
+    }
+
+    Err(missing(
+        "memory, episode or chunk",
+        id,
+        spaces,
+        FIRST_OR_WIDER,
+    ))
 }
 
 /// Every claim naming one subject, closed ones included.
@@ -428,43 +514,50 @@ async fn counts(
 
 /// A `ref`, or a message that teaches the grammar.
 ///
-/// A bare ULID is accepted as `memory:<id>` because that is what every other
-/// tool hands the agent: `remember` returns bare ids and so does a `recall`
-/// hit, so requiring the prefix here would make the obvious call fail.
+/// A bare ULID is accepted because that is what every other tool hands the
+/// agent: `remember` returns bare ids and so does a `recall` hit, so requiring
+/// a prefix here would make the obvious call fail. It stays *unqualified*
+/// until the store answers — a verbatim hit's id is a chunk id, and nothing in
+/// the id itself says so.
 fn parse(raw: &str) -> Result<Reference, ErrorData> {
     let raw = raw.trim();
     if raw == "stats" {
         return Ok(Reference::Stats);
     }
-    let grammar = || {
-        invalid(format!(
-            "ref must be `memory:<id>`, `episode:<id>`, `entity:<name>`, `stats`, \
-             or a bare memory id; got {raw:?}"
-        ))
-    };
     match raw.split_once(':') {
         Some(("memory", id)) => MemoryId::new(id)
             .map(Reference::Memory)
-            .map_err(|_| grammar()),
+            .map_err(|_| grammar(raw)),
         Some(("episode", id)) => EpisodeId::new(id)
             .map(Reference::Episode)
-            .map_err(|_| grammar()),
+            .map_err(|_| grammar(raw)),
         Some(("entity", name)) if !name.trim().is_empty() => {
             Ok(Reference::Entity(name.trim().to_owned()))
         }
-        _ => MemoryId::new(raw)
-            .map(Reference::Memory)
-            .map_err(|_| grammar()),
+        _ if MemoryId::new(raw).is_ok() => Ok(Reference::Unqualified(raw.to_owned())),
+        _ => Err(grammar(raw)),
     }
 }
 
-/// Nothing in any of the searched spaces answers to this id.
-fn missing(table: &str, id: &str, spaces: &[SpaceName]) -> ErrorData {
-    let names: Vec<&str> = spaces.iter().map(SpaceName::as_str).collect();
+/// The grammar, as something to act on rather than guess at.
+fn grammar(raw: &str) -> ErrorData {
     invalid(format!(
-        "no {table} {id} in {}; recall it first, or widen `space`",
-        names.join(", ")
+        "ref must be `memory:<id>`, `episode:<id>`, `entity:<name>`, `stats`, \
+         or a bare id; got {raw:?}"
     ))
+}
+
+/// The advice most missing refs end with.
+const FIRST_OR_WIDER: &str = "recall it first, or widen `space`";
+
+/// Nothing in any of the searched spaces answers to this id.
+///
+/// The hint belongs to the caller, because the useful advice differs: a
+/// `memory:<id>` that misses is often a chunk id wearing the wrong prefix, and
+/// telling that caller to widen `space` sends them the wrong way (issue #36).
+fn missing(what: &str, id: &str, spaces: &[SpaceName], hint: &str) -> ErrorData {
+    let names: Vec<&str> = spaces.iter().map(SpaceName::as_str).collect();
+    invalid(format!("no {what} {id} in {}; {hint}", names.join(", ")))
 }
 
 impl From<MemoryRecord> for MemoryView {
@@ -513,6 +606,7 @@ impl fmt::Display for Reference {
             Self::Episode(id) => write!(f, "episode:{id}"),
             Self::Entity(name) => write!(f, "entity:{name}"),
             Self::Stats => f.write_str("stats"),
+            Self::Unqualified(id) => f.write_str(id),
         }
     }
 }
@@ -521,6 +615,12 @@ impl fmt::Display for Reference {
 /// not a caller error.
 fn unreachable_chain() -> ErrorData {
     internal("the history walk omitted the memory it started from")
+}
+
+/// A slice whose episode link names nothing is a store bug, not a caller
+/// error.
+fn unreachable_chunk() -> ErrorData {
+    internal("a retrieval slice names an episode the store does not hold")
 }
 
 #[cfg(test)]
@@ -535,8 +635,9 @@ mod tests {
         assert_eq!(parse(&format!("memory:{ULID}")).expect("prefixed"), memory);
         assert_eq!(
             parse(ULID).expect("bare"),
-            memory,
-            "`recall` hands out bare ids, so a bare id has to work here"
+            Reference::Unqualified(ULID.to_owned()),
+            "`recall` hands out bare ids for claims and for verbatim slices \
+             alike, so which table answers is a question for the store"
         );
         assert_eq!(
             parse(&format!(" episode:{ULID} ")).expect("episode"),
@@ -566,6 +667,7 @@ mod tests {
         for raw in [
             "stats",
             "entity:user",
+            ULID,
             &format!("memory:{ULID}"),
             &format!("episode:{ULID}"),
         ] {

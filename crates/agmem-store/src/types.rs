@@ -60,6 +60,11 @@ pub(crate) fn episode_ref(id: &EpisodeId) -> RecordId {
     RecordId::new(EPISODE, id.as_str())
 }
 
+/// The full record id for an episode-chunk ULID.
+pub(crate) fn chunk_ref(id: &ChunkId) -> RecordId {
+    RecordId::new(EPISODE_CHUNK, id.as_str())
+}
+
 /// The `memory` columns a write supplies, minus `source`.
 ///
 /// `source` is spelled by the query rather than carried here: a memory

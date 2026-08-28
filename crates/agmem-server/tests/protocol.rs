@@ -627,6 +627,64 @@ async fn recall_fuses_claims_with_the_text_they_came_from_and_says_why() {
 }
 
 #[tokio::test]
+async fn every_id_a_recall_hands_out_is_inspectable() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let stored = agmem
+        .remember(json!({
+            "memories": [{ "content": "The user prefers Rust over Python for CLI tools" }],
+            "episode": { "content": "I'd rather write CLIs in Rust than Python." }
+        }))
+        .await;
+    let episode = stored["episode"]
+        .as_str()
+        .expect("the episode id")
+        .to_owned();
+
+    let found = agmem
+        .recall(json!({ "query": "which language does the user reach for in Rust projects" }))
+        .await;
+    assert_eq!(hits(&found).len(), 2, "a claim and its slice: {found}");
+
+    for hit in hits(&found) {
+        let id = hit["id"].as_str().expect("every hit carries an id");
+        let inspected = agmem.inspect(id).await;
+
+        if hit["kind"] == "episode" {
+            // A verbatim hit hands out a *chunk* id, which is not a memory in
+            // any space. Feeding it straight back used to fail, blaming
+            // `space` for an id that was never a memory (issue #36).
+            assert_eq!(
+                inspected["ref"].as_str(),
+                Some(format!("episode:{episode}").as_str()),
+                "a slice answers as the episode it belongs to, echoed canonically: {inspected}"
+            );
+            let slices = inspected["found"]["chunks"]
+                .as_array()
+                .expect("the episode lists its slices");
+            assert!(
+                slices.iter().any(|slice| slice["id"].as_str() == Some(id)),
+                "and the slice that matched is one of them: {inspected}"
+            );
+        } else {
+            assert_eq!(
+                inspected["ref"].as_str(),
+                Some(format!("memory:{id}").as_str()),
+                "{inspected}"
+            );
+            assert_eq!(inspected["found"]["memory"]["id"].as_str(), Some(id));
+        }
+    }
+
+    let by_episode = agmem.inspect(&episode).await;
+    assert_eq!(
+        by_episode["ref"].as_str(),
+        Some(format!("episode:{episode}").as_str()),
+        "an episode id needs no prefix either: {by_episode}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn recall_unions_the_current_space_with_the_user_space() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
     agmem

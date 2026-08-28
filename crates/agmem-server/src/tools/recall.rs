@@ -85,8 +85,10 @@ pub struct RecallResult {
 /// One match, with the reasoning behind its place in the order.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct RecallHit {
-    /// The id of this memory, to correct it with `remember`'s `supersedes` or
-    /// to look it up with `inspect`.
+    /// The id of this hit. Pass it to `inspect` to see where it came from, or
+    /// to `remember`'s `supersedes` to correct it — the latter only for a claim,
+    /// since an `episode` hit is a slice of verbatim text and nothing to
+    /// correct.
     pub id: String,
 
     /// What this is: a distilled claim, or `episode` for a slice of the

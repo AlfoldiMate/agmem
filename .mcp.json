@@ -3,8 +3,7 @@
     "agmem": {
       "command": "agmem",
       "env": {
-        "AGMEM_SPACE": "agmem",
-        "AGMEM_LOG": "info,surrealdb=warn,surrealkv=warn"
+        "AGMEM_SPACE": "agmem"
       }
     }
   }

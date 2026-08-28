@@ -176,6 +176,19 @@ pub(crate) fn episode() -> Script {
     ))
 }
 
+/// Which episode a retrieval slice belongs to (design §3.1, `inspect`).
+///
+/// A `recall` hit over verbatim text carries the *chunk* id, so the id an
+/// agent is handed and the id `inspect` answers to were different things
+/// (issue #36). Resolving one to the other is a single projection. The
+/// `WHERE space` clause keeps an id a capability inside its space, exactly as
+/// [`episode`] does.
+pub(crate) fn chunk_episode() -> Script {
+    Builder::plain().finish(
+        "RETURN (SELECT VALUE record::id(episode) FROM $target WHERE space = $space)[0]".to_owned(),
+    )
+}
+
 /// One KNN probe per candidate vector: the nearest live memory in `$space`.
 ///
 /// This is the near-dup gate (design §5.2 step 4), which asks the same

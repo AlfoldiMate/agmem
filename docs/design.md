@@ -325,8 +325,10 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //       { kind: "entity",  entity, memories: [live and closed] }
 //       { kind: "stats",   counts: [{ space, memories, live, invalidated,
 //                                     episodes, chunks, live_by_kind }] } }
-// A bare ULID is `memory:<id>` — that is the form `remember` and `recall`
-// hand out, so requiring the prefix would make the obvious call fail.
+// A bare ULID resolves against memory, then episode_chunk, then episode —
+// that is the form `remember` and `recall` hand out, and a verbatim hit's id
+// is a *chunk* id, so requiring a prefix made the obvious call fail (#36).
+// A chunk answers as the episode it belongs to; the echoed `ref` says which.
 ```
 
 Behavioral rules baked into the tools:
@@ -585,7 +587,7 @@ points, keeping the process count at one:
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `static` \| `none` |
 | `AGMEM_POOL` / `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
-| `AGMEM_LOG`, `AGMEM_LOG_FILE` | `info`, stderr | Telemetry |
+| `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip; prints report, exits |
 
 Client registration (the entire install story):

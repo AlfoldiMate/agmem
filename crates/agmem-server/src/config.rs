@@ -48,7 +48,8 @@ pub struct Cli {
     pub max_k: u16,
 
     /// Log filter (tracing EnvFilter syntax, e.g. "info,agmem_store=debug").
-    #[arg(long, env = "AGMEM_LOG", default_value = "info")]
+    /// Defaults to INFO for agmem and WARN for everything it depends on.
+    #[arg(long, env = "AGMEM_LOG", default_value = crate::telemetry::DEFAULT_LOG)]
     pub log: String,
 
     /// Append logs to this file instead of stderr.

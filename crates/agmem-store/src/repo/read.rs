@@ -203,15 +203,20 @@ pub struct SpaceStats {
 /// [`StoreError::Db`] for anything the engine rejects, and
 /// [`StoreError::MalformedRow`] for a row the schema cannot have written.
 pub async fn search_hybrid(db: &Db, search: &Search) -> Result<Vec<Candidate>, StoreError> {
-    if search.text.is_none() && search.vector.is_none() {
+    // Terms rather than the raw text: `@N@` ANDs whatever one reference holds,
+    // so the fulltext arms are built from one reference per word (issue #39).
+    // Text that yields no terms — punctuation, an empty string — leaves the
+    // request with whatever vector arm it has, or nothing at all.
+    let terms = queries::terms(search.text.as_deref().unwrap_or_default());
+    if terms.is_empty() && search.vector.is_none() {
         return Ok(Vec::new());
     }
-    let script = queries::search(search);
+    let script = queries::search(search, &terms);
     let mut query = db
         .query(&script.text)
         .bind(("spaces", space_strs(&search.spaces)));
-    if let Some(text) = &search.text {
-        query = query.bind(("text", text.clone()));
+    for (index, term) in terms.iter().enumerate() {
+        query = query.bind((format!("t{index}"), term.clone()));
     }
     if let Some(vector) = &search.vector {
         query = query.bind(("vector", vector.clone()));

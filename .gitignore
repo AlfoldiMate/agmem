@@ -10,3 +10,6 @@ target/
 
 # local embedding model cache
 .fastembed_cache/
+
+# surreal sql shell history, dropped wherever the CLI is run
+history.txt

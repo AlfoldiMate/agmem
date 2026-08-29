@@ -15,12 +15,24 @@
 //!   column silently scans and finds nothing (design §2.2).
 //! - **`record::id(NONE)` is an error**, not `NONE`, so every optional record
 //!   link is unwrapped behind an `IF`.
+//! - **`@N@` ANDs the terms it is given.** `content @1@ 'who formats python'`
+//!   matches nothing unless a row contains all three words, so one absent word
+//!   — and a question always has one — takes the whole fulltext arm to empty.
+//!   OR is spelled as one match reference per term (issue #39).
 
 use super::{Builder, Script};
 use crate::repo::{Filters, Liveness, Lookup, Search};
 
 /// How many neighbours HNSW visits per query; the `EF` of `<|K,EF|>`.
 const EF_SEARCH: usize = 80;
+
+/// How many query words reach the fulltext arms.
+///
+/// Each one costs a match reference, a bound parameter and a disjunct in two
+/// `WHERE` clauses. A question is a handful of words; a pasted paragraph is
+/// not a question, and truncating it is better than building a query text
+/// proportional to whatever was pasted.
+const MAX_TERMS: usize = 12;
 
 /// RRF's rank-smoothing constant: the `60` in `1 / (60 + rank)` (design §5.3).
 const RRF_K: usize = 60;
@@ -57,18 +69,70 @@ const CHUNK_FIELDS: &str =
 const EPISODE_FIELDS: &str =
     "record::id(id) AS id, space, content, content_hash, occurred_at, session, created_at";
 
+/// The words a fulltext arm searches for, in the order they were written.
+///
+/// Split on anything that is not alphanumeric rather than on whitespace: the
+/// index's `class` tokenizer would split `don't` into two tokens itself, and a
+/// term that the engine then ANDs internally is the bug this exists to avoid.
+/// Duplicates are dropped because a repeated word buys a second match
+/// reference and no extra recall.
+///
+/// No stop-word list. A row that matches only `the` scores near zero and sits
+/// at the bottom of a pool that exists to be rescored — which is cheaper than
+/// a word list to keep, and does not silently drop a query that is *all* stop
+/// words.
+pub(crate) fn terms(text: &str) -> Vec<String> {
+    let mut terms: Vec<String> = Vec::new();
+    for token in text.split(|character: char| !character.is_alphanumeric()) {
+        if token.is_empty() {
+            continue;
+        }
+        let term = token.to_lowercase();
+        if !terms.contains(&term) {
+            terms.push(term);
+        }
+        if terms.len() == MAX_TERMS {
+            break;
+        }
+    }
+    terms
+}
+
+/// One fulltext arm: every term OR'd, scored by the sum of what matched.
+///
+/// `@N@` ANDs the words inside one reference, so the disjunction has to be
+/// written out — `content @1@ $t0 OR content @2@ $t1` — with the scores added
+/// rather than taken from a single reference. A reference that did not match
+/// contributes 0, so the sum is a term-count-weighted score rather than NONE
+/// (issue #39).
+fn fulltext(column: &str, terms: &[String]) -> (String, String) {
+    let matches: Vec<String> = terms
+        .iter()
+        .enumerate()
+        .map(|(index, _)| format!("{column} @{}@ $t{index}", index + 1))
+        .collect();
+    let scores: Vec<String> = (1..=terms.len())
+        .map(|reference| format!("search::score({reference})"))
+        .collect();
+    (matches.join(" OR "), scores.join(" + "))
+}
+
 /// The whole read of one `recall` call: every retrieval arm the request has,
 /// fused into one order, and the rows behind it.
-pub(crate) fn search(search: &Search) -> Script {
+///
+/// `terms` comes from [`terms`] and is what the caller binds as `$t0…$tn`;
+/// empty means the request has no fulltext arms, however much text it carried.
+pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
     let pool = search.pool.clamp(1, MAX_POOL);
     let memories = memory_where(&search.filters, search.liveness);
     let mut builder = Builder::plain();
     let mut arms: Vec<&str> = Vec::new();
 
-    if search.text.is_some() {
+    if !terms.is_empty() {
+        let (matches, scores) = fulltext("content", terms);
         builder.push(format!(
-            "LET $ft = (SELECT id, search::score(1) AS s FROM memory
-                 WHERE {memories} AND content @1@ $text
+            "LET $ft = (SELECT id, {scores} AS s FROM memory
+                 WHERE {memories} AND ({matches})
                  ORDER BY s DESC LIMIT {pool})"
         ));
         arms.push("$ft");
@@ -83,10 +147,13 @@ pub(crate) fn search(search: &Search) -> Script {
     }
     // Episodes are verbatim and append-only: they are never superseded, so
     // liveness and the memory-side filters have nothing to say about them.
-    if search.episodes && search.text.is_some() {
+    if search.episodes && !terms.is_empty() {
+        // The references restart at 1: they are scoped to the statement, and
+        // this is a different statement over a different table.
+        let (matches, scores) = fulltext("text", terms);
         builder.push(format!(
-            "LET $ftc = (SELECT id, search::score(1) AS s FROM episode_chunk
-                 WHERE space IN $spaces AND text @1@ $text
+            "LET $ftc = (SELECT id, {scores} AS s FROM episode_chunk
+                 WHERE space IN $spaces AND ({matches})
                  ORDER BY s DESC LIMIT {pool})"
         ));
         arms.push("$ftc");
@@ -266,4 +333,63 @@ fn memory_where(filters: &Filters, liveness: Liveness) -> String {
         clauses.push("tags CONTAINSANY $tags".to_owned());
     }
     clauses.join(" AND ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_question_becomes_one_term_per_word() {
+        assert_eq!(
+            terms("Which language does the user prefer?"),
+            ["which", "language", "does", "the", "user", "prefer"]
+        );
+    }
+
+    #[test]
+    fn a_term_never_holds_two_tokens() {
+        // The index's `class` tokenizer splits these itself and then ANDs the
+        // halves, which is the behaviour the whole disjunction exists to
+        // avoid — so they have to arrive already split.
+        assert_eq!(
+            terms("don't v2.1 hard-won"),
+            ["don", "t", "v2", "1", "hard", "won"]
+        );
+    }
+
+    #[test]
+    fn repeats_and_empties_are_dropped_and_the_count_is_capped() {
+        assert_eq!(terms("rust RUST Rust rust"), ["rust"]);
+        assert!(terms("   ").is_empty());
+        assert!(terms("?!  —  ...").is_empty());
+
+        let long: Vec<String> = (0..MAX_TERMS + 5).map(|n| format!("w{n}")).collect();
+        assert_eq!(terms(&long.join(" ")).len(), MAX_TERMS);
+    }
+
+    #[test]
+    fn a_fulltext_arm_ors_its_references_and_sums_their_scores() {
+        let (matches, scores) = fulltext("content", &["red".to_owned(), "blue".to_owned()]);
+        assert_eq!(matches, "content @1@ $t0 OR content @2@ $t1");
+        assert_eq!(scores, "search::score(1) + search::score(2)");
+    }
+
+    #[test]
+    fn the_arms_a_request_has_follow_from_its_terms() {
+        let mut request = Search::new(vec!["test".parse().expect("slug")]);
+        request.vector = Some(vec![0.0; 384]);
+
+        let vector_only = search(&request, &[]).text;
+        assert!(!vector_only.contains("$ft"), "{vector_only}");
+        assert!(vector_only.contains("$vs"), "{vector_only}");
+
+        let both = search(&request, &["red".to_owned()]).text;
+        assert!(both.contains("content @1@ $t0"), "{both}");
+        assert!(
+            both.contains("text @1@ $t0"),
+            "the chunk arm restarts its references — they are scoped to the \
+             statement, and that is a different statement: {both}"
+        );
+    }
 }

@@ -613,8 +613,10 @@ recall(q)
  1. filters-only / entity-exact?  → tier-1 direct lookup (indexed WHERE, no embed)
  2. embed query (query: prefix)
  3. ONE SurrealQL round-trip (per searched table set):
-      LET $ft = (SELECT id, search::score(1) AS s FROM memory
-                 WHERE space IN $spaces AND invalid_at IS NONE AND content @1@ $q
+      -- one match reference per query word, OR'd, scores summed (issue #39)
+      LET $ft = (SELECT id, search::score(1) + search::score(2) AS s FROM memory
+                 WHERE space IN $spaces AND invalid_at IS NONE
+                   AND (content @1@ $t0 OR content @2@ $t1)
                  ORDER BY s DESC LIMIT 64);
       LET $vs = (SELECT id, vector::distance::knn() AS d FROM memory
                  WHERE space IN $spaces AND invalid_at IS NONE
@@ -643,8 +645,19 @@ implies; the price is that the pool's weakest candidate scores zero on it. A
 pool where nothing was retrieved (the tier-1 path) normalises to 0 throughout;
 one where every candidate tied, to 1.
 
-Three engine details the sketch has to obey (verified on 3.2, issue #13):
+Four engine details the sketch has to obey (verified on 3.2, issues #13, #39):
 
+- **`@N@` ANDs the words inside one reference.** `content @1@ 'who formats
+  python'` matches only rows holding all three, so a question — which always
+  carries a word the answer does not — took the fulltext arm to empty on
+  nearly every real call. The fix is a disjunction of one reference per word,
+  `content @1@ $t0 OR content @2@ $t1 …`, scored by the sum: a reference that
+  did not match contributes 0, so the sum ranks by how much of the question a
+  row answered. Terms are lower-cased and split on non-alphanumerics (the
+  index's `class` tokenizer would split `don't` itself and then AND the
+  halves), deduplicated, and capped at 12 — a question is a handful of words,
+  and a pasted paragraph is not a question. No stop-word list: a row matching
+  only `the` scores near zero in a pool that exists to be rescored.
 - The KNN operator's `K` must be an **integer literal** — `<|$pool,80|>` is a
   parse error — so the pool is formatted into the query text and clamped there.
 - `ORDER BY` may only name an idiom the projection carries, which is why each
@@ -858,14 +871,16 @@ Each phase is releasable; later phases only add.
    claim that is live in the store, which is **issue #39**: `recall` with a
    query omitting a row that a filters-only `recall` returns. So the 0/6 above
    says less than it appears to, and #39 blocks re-measuring it.
-7. Open, found at #22: **`recall` with a query can silently omit a live
-   memory** that a filters-only `recall` returns, on a small store with an
-   episode in it — a query containing `formats` and `python` missing *"The user
-   formats Python with black."* Nothing errors; the answer is short. Suspects
-   are HNSW returning fewer neighbours than asked on a tiny graph, BM25's IDF
-   clamping to 0 when a term is in more than half the corpus (both already in
-   the ledger from #13), and `search::rrf`'s `limit`. **Issue #39**, with a
-   store that reproduces it kept on disk.
+7. Found at #22, diagnosed as **two faults** at #39. First, **`@N@` ANDs its
+   terms**, so the fulltext half of "hybrid BM25 + vector" returned nothing for
+   any question carrying a word the stored claim does not — which is every
+   question, and is the query style `recall`'s own description asks for. Fixed
+   at #39 (one match reference per word, OR'd, scores summed; §5.3). Second,
+   **`KnnScan` under-returns when a predicate is pushed into it** — `k: 64`, two
+   matching rows, one emitted, and any conjunct triggers it including `1 = 1`.
+   That one is probe-vector dependent and looks like an engine bug; **issue
+   #40**, with the mitigation to weigh written down there. The first masked the
+   second, which is why the symptom looked like one thing.
 8. Still open: whether `user` space writes need an explicit `space: "user"`
    (current answer: yes — cross-project writes should be deliberate).
 9. Settled at #16: **`recall` unions episodes by default**, with no

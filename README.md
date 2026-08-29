@@ -331,12 +331,15 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
 - **A session came up with no memory tools** — read `<data dir>/daemon.log`:
   the shared store failed to start, and the session refused rather than open a
   second copy of a single-writer store.
-- **A `recall` came back without something you know is stored** — on a small
-  store, a query-shaped `recall` can leave out a live memory that a
-  filters-only `recall` (drop `query`, keep `entities`/`tags`/`kinds`) returns.
-  Known bug, [#39](https://github.com/AlfoldiMate/agmem/issues/39); `inspect
-  stats` tells you whether the row is there at all, and dropping the query is
-  the workaround until it is fixed.
+- **A `recall` came back without something you know is stored** — much rarer
+  since [#39](https://github.com/AlfoldiMate/agmem/issues/39), which fixed a
+  fulltext arm that returned nothing whenever the question contained a word the
+  stored claim did not. What is left is
+  [#40](https://github.com/AlfoldiMate/agmem/issues/40): on a small store, a
+  question sharing *no* words with the claim leans on the vector arm alone, and
+  that arm can under-return. Ask again in words the claim would use, or drop
+  `query` and filter on `entities`/`tags`/`kinds`; `inspect stats` says whether
+  the row is there at all.
 - **First call is slow** — the model loads on start; `--doctor` once after
   install gets the download out of the way.
 - **No ONNX Runtime on the platform** — `--embedder none` runs BM25-only, and

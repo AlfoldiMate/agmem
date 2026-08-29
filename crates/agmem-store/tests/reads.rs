@@ -123,6 +123,48 @@ async fn live_id(db: &Db, prefix: &str) -> MemoryId {
 }
 
 #[tokio::test]
+async fn a_question_finds_a_claim_that_does_not_contain_every_word_of_it() {
+    let db = seeded().await;
+    let mut search = Search::new(vec![space()]);
+    // `@N@` ANDs the words inside one reference, so this whole query used to
+    // match nothing: no row contains "which", "language" or "does". A question
+    // always carries a word the answer does not, and `recall`'s description
+    // asks agents to ask in words — so under AND the fulltext arm was empty on
+    // nearly every real call (issue #39).
+    search.text = Some("which language does the user prefer?".to_owned());
+    search.vector = None;
+    search.episodes = false;
+
+    let found = contents(&repo::search_hybrid(&db, &search).await.expect("search"));
+    assert!(
+        found.contains(&"the user prefers Rust over Python".to_owned()),
+        "the claim shares 'the', 'user' and 'prefer' with the question: {found:?}"
+    );
+    assert_eq!(
+        found.first().map(String::as_str),
+        Some("the user prefers Rust over Python"),
+        "and matching three terms outranks matching one: {found:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_query_with_no_words_in_it_is_not_a_fulltext_arm() {
+    let db = seeded().await;
+    let mut search = Search::new(vec![space()]);
+    search.text = Some("?!  —  ...".to_owned());
+    search.vector = None;
+
+    assert!(
+        repo::search_hybrid(&db, &search)
+            .await
+            .expect("search")
+            .is_empty(),
+        "punctuation yields no terms, and a request with no arms matches \
+         nothing rather than everything"
+    );
+}
+
+#[tokio::test]
 async fn fusion_surfaces_a_keyword_only_and_a_vector_only_match_together() {
     let db = seeded().await;
     let mut search = Search::new(vec![space()]);

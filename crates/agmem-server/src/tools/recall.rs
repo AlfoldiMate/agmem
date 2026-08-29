@@ -251,6 +251,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
 
     // 1. A call with nothing to match on is not a search — it is the tier-1
     //    indexed lookup, which costs no embedding and no fusion (§5.3 step 1).
+    let mut hopped = Vec::new();
     let candidates = match query.filter(|text| !text.trim().is_empty()) {
         Some(text) => {
             let mut search = Search::new(spaces.clone());
@@ -266,7 +267,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             //     row a chain question needs rarely matches the question's
             //     words, and no agent makes the second, filtered call that
             //     would fetch it — so this answer carries it instead.
-            hop::run(service, &spaces, &search.filters, liveness, &mut candidates).await;
+            hopped = hop::run(service, &spaces, &search.filters, liveness, &mut candidates).await;
             candidates
         }
         None => {
@@ -289,16 +290,25 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     // 2. Rescore in Rust. Decay is read from the clock, so a candidate the
     //    engine ranked first can still lose to one that has been used since.
     let now = Timestamp::now();
-    let ranked: Vec<(StoreHit, Ranked)> = scoring::rank(candidates.into_iter().map(|candidate| {
-        let signals = match &candidate.hit {
-            StoreHit::Memory(memory) => Signals::for_memory(candidate.rrf, memory, now),
-            StoreHit::Chunk(_) => Signals::for_episode_chunk(candidate.rrf),
-        };
-        (candidate.hit, signals)
-    }))
-    .into_iter()
-    .take(k)
-    .collect();
+    let mut ranked: Vec<(StoreHit, Ranked)> =
+        scoring::rank(candidates.into_iter().map(|candidate| {
+            let signals = match &candidate.hit {
+                StoreHit::Memory(memory) => Signals::for_memory(candidate.rrf, memory, now),
+                StoreHit::Chunk(_) => Signals::for_episode_chunk(candidate.rrf),
+            };
+            (candidate.hit, signals)
+        }));
+
+    // 2b. `take(k)` cuts at exactly the depth the hop arm's weakness leaves
+    //     its rows at, and the row was fetched precisely to be seen — so a
+    //     full page that would carry no hop-voted row gives its last slot to
+    //     the best one below the cut (issue #43).
+    hop::reserve_tail(
+        &mut ranked,
+        k,
+        |(hit, _)| matches!(hit, StoreHit::Memory(memory) if hopped.contains(&memory.id)),
+    );
+    ranked.truncate(k);
     let considered = ranked.len();
 
     // 3. Being recalled is what keeps a memory alive; verbatim text has no

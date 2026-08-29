@@ -2703,3 +2703,42 @@ async fn a_hub_entity_never_seeds() {
     );
     agmem.shutdown().await;
 }
+
+#[tokio::test]
+async fn a_full_page_reserves_its_last_slot_for_the_hop() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    // Eleven rows match the query's words and only the first names entities,
+    // so the chain row enters through the hop alone and lands past a k of 10
+    // — issue #43's shape, where the page used to cut the very row the hop
+    // fetched for it.
+    let mut rows = vec![json!({
+        "content": "Atlas ingestion is owned by the harbour crew",
+        "entities": ["atlas", "harbour-crew"]
+    })];
+    rows.extend((1..=10).map(|n| json!({ "content": format!("Atlas backlog note number {n}") })));
+    rows.push(json!({
+        "content": "Nadia Osei leads that team",
+        "entities": ["harbour-crew", "nadia-osei"]
+    }));
+    agmem.remember(json!({ "memories": rows })).await;
+
+    let found = agmem
+        .recall(json!({ "query": "who owns atlas ingestion" }))
+        .await;
+    let contents = hit_contents(&found);
+    assert_eq!(
+        contents.len(),
+        10,
+        "the page still fills exactly k: {found}"
+    );
+    assert_eq!(
+        contents[0], "Atlas ingestion is owned by the harbour crew",
+        "the head of the page is untouched"
+    );
+    assert_eq!(
+        contents.last(),
+        Some(&"Nadia Osei leads that team"),
+        "the hop row holds the reserved last slot instead of being cut: {found}"
+    );
+    agmem.shutdown().await;
+}

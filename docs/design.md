@@ -699,7 +699,10 @@ recall(q)
       seeds = entities of the top 3 memory candidates, ranked by how many
               name each (cap 5; hubs — on ≥50% of a ≥8-candidate pool —
               dropped); one filters-only lookup: entities CONTAINSANY seeds,
-              LIMIT 8, same kinds/tags/liveness — no embed, no KNN;
+              LIMIT 32 scanned, same kinds/tags/liveness — no embed, no KNN;
+      of the scanned rows only continuations vote (at most 8): a row must
+              name an entity that is neither a seed nor a hub — one of only
+              seeds and hubs re-states the topic (issue #43);
       merged in Rust as one more RRF arm at half weight:
               rrf += 0.5/(60+rank) — fills the tail, never displaces a match;
       skipped when the caller passed `entities` (their own filter would be
@@ -708,7 +711,9 @@ recall(q)
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
       norm  = min–max over the pool: (rrf − min) / (max − min)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history)
- 5. take k; fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
+ 5. take k — the last slot reserved for the best hop-voted row when the cut
+    would otherwise drop every one (issue #43, hop::reserve_tail);
+    fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
  6. did the page fill exactly k? → COUNT the same filters; if it exceeds what
     came back, say so in `truncated`
  7. → hits with per-signal scores (agent can see *why* something surfaced)
@@ -744,7 +749,14 @@ zero times — while every hit already carries its `entities` in the answer. So
 after fusion, `recall` follows the entities its top three memory candidates
 agree on with one indexed lookup and folds the rows in as a deliberately weak
 arm: `0.5/(60+rank)` sits under a fifteenth-place primary placing, so a
-hop-only row extends the tail of the page and never its head. The hop is off
+hop-only row extends the tail of the page and never its head. Two findings
+from #43's probes shape the arm further: only *continuations* vote — rows
+naming an entity beyond the seeds and hubs, because on a saturated store the
+rows that merely re-state the topic crowd the chain's next link out of any
+small fetch — and a full page that would cut every hop-voted row gives its
+last slot to the strongest of them, displacing its own weakest hit and
+nothing above it, because the chain row lands just past a default `k` there
+and a page that cuts it re-creates the very miss the hop closes. The hop is off
 when the caller filters on entities themselves, and costs nothing when there
 is nothing to seed from. Only `recall` hops — `forget`'s dry-run and
 `context`'s budgeted sections share `search_hybrid`, where rows the query

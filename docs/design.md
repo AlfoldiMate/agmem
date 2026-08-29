@@ -863,14 +863,15 @@ Each phase is releasable; later phases only add.
    isolated runs, told that a seeded fact no longer holds, the agent called
    `remember` with a fresh memory and never `recall`ed for the id or set
    `supersedes` — leaving both claims live at once, which is the state the
-   chain exists to prevent. **Issue #38**: have `remember` return
-   contradiction candidates the way it already returns near-duplicates, so the
-   old id is handed over rather than looked up.
-   Measuring it again at #22 turned up a confound and a second bug. With the
-   `checkpoint` ritual the agent *does* look — and gets an empty answer for a
-   claim that is live in the store, which is **issue #39**: `recall` with a
-   query omitting a row that a filters-only `recall` returns. So the 0/6 above
-   says less than it appears to, and #39 blocks re-measuring it.
+   chain exists to prevent.
+   **Mostly resolved by #39.** Measuring it again at #22 showed the agent under
+   the `checkpoint` ritual *does* look — and was getting an empty answer for a
+   claim that was live in the store, because the fulltext arm ANDed the words
+   of the question (item 7). With that fixed, `ritual_correct` supersedes 3/3.
+   What is left is the path with no ritual, where the agent never looks:
+   **issue #38** — have `remember` return contradiction candidates the way it
+   already returns near-duplicates — is now a convenience for that path rather
+   than a correctness gap.
 7. Found at #22, diagnosed as **two faults** at #39. First, **`@N@` ANDs its
    terms**, so the fulltext half of "hybrid BM25 + vector" returned nothing for
    any question carrying a word the stored claim does not — which is every

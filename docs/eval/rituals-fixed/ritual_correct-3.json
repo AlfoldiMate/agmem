@@ -1,0 +1,52 @@
+{
+  "scenario": "ritual_correct",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.rEv3efxeJR",
+  "answer": "Checkpoint complete:\n\n- **Saved:** The user now uses `ruff format` for Python (black is uninstalled).\n- **Corrected:** Superseded a stale claim that said \"the user formats Python with black.\"\n- **Left out:** Nothing else in this session was durable — the rest was just me writing that same fact into the local file-based memory system, which is scratch/session-local relative to agmem.",
+  "cost_usd": 0.1585216,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Python formatting tool black ruff format",
+        "k": 10
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1654DR4VFS4HFYAH4R5A25N\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924998581964554,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999943278582163,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T07:00:51.587941Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python formatting and now uses ruff format exclusively; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity"
+            ],
+            "supersedes": "01M1654DR4VFS4HFYAH4R5A25N"
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "checkpoint-2026-08-29"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16559HD718WVRWQY9XG83R8\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16559H4RV8M3VEW9N8EAQ9J\\\",\\\"superseded\\\":[\\\"01M1654DR4VFS4HFYAH4R5A25N\\\"]}\""
+    }
+  ]
+}

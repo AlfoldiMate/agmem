@@ -1,0 +1,51 @@
+{
+  "scenario": "ritual_correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.9bK6RFGZd5",
+  "answer": "Checkpoint complete:\n\n- **Corrected**: the stale claim \"the user formats Python with black\" → now \"the user formats Python with ruff format; black is uninstalled and no longer used.\"\n- **Saved**: nothing new beyond that correction.\n- **Left out**: nothing else in this session was durable — it was a single-fact update with no other decisions, conventions, or lessons worth persisting.",
+  "cost_usd": 0.14469580000000004,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "formatting tool black ruff format"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M165282XRHGZ6R2X94XP6XBP\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249984930545417,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999939722181671,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T06:59:40.253136Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user formats Python with ruff format instead of black; black has been uninstalled and is no longer part of their toolchain.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity"
+            ],
+            "supersedes": "01M165282XRHGZ6R2X94XP6XBP"
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "tmp.UcujeD8Zjr"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16536E04C2JSQNEC1P9W8TT\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16536DQWG0P6XE7WPS61FGK\\\",\\\"superseded\\\":[\\\"01M165282XRHGZ6R2X94XP6XBP\\\"]}\""
+    }
+  ]
+}

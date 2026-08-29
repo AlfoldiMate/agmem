@@ -1,0 +1,166 @@
+[
+  {
+    "scenario": "ritual_correct",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": true,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.9bK6RFGZd5",
+    "answer": "Checkpoint complete:\n\n- **Corrected**: the stale claim \"the user formats Python with black\" → now \"the user formats Python with ruff format; black is uninstalled and no longer used.\"\n- **Saved**: nothing new beyond that correction.\n- **Left out**: nothing else in this session was durable — it was a single-fact update with no other decisions, conventions, or lessons worth persisting.",
+    "cost_usd": 0.14469580000000004,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "formatting tool black ruff format"
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M165282XRHGZ6R2X94XP6XBP\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249984930545417,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999939722181671,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T06:59:40.253136Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user formats Python with ruff format instead of black; black has been uninstalled and is no longer part of their toolchain.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity"
+              ],
+              "supersedes": "01M165282XRHGZ6R2X94XP6XBP"
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "tmp.UcujeD8Zjr"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M16536E04C2JSQNEC1P9W8TT\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16536DQWG0P6XE7WPS61FGK\\\",\\\"superseded\\\":[\\\"01M165282XRHGZ6R2X94XP6XBP\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 3,
+    "superseded": true,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.m6HbJWhmNW",
+    "answer": "Checkpoint complete:\n\n- **Corrected**: \"The user formats Python with black\" → replaced with \"the user's project has moved off black to ruff format; black is uninstalled\" (old claim closed, not deleted).\n- **Saved**: nothing new beyond that correction — the session had only this one durable fact.\n- **Left out**: nothing else — the conversation contained no other decisions, preferences, or lessons worth persisting.",
+    "cost_usd": 0.14314020000000002,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "project uses ruff format instead of black for Python formatting",
+          "k": 5
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1653AVAK36JA9KGMTBGP9BD\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249984745028024,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999938980112097,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T07:00:15.850348Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "black is uninstalled",
+          "k": 5
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1653AVAK36JA9KGMTBGP9BD\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999579914676,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999998319658706,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T07:00:15.850348Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user's project has moved off black to ruff format for Python code formatting; black is uninstalled.",
+              "kind": "fact",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "identity"
+              ],
+              "supersedes": "01M1653AVAK36JA9KGMTBGP9BD"
+            }
+          ],
+          "episode": {
+            "content": "User: \"I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.\"",
+            "session": "formatting-tool-checkpoint"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M16549HVWYYWRT71Q34G7GRE\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16549HHXPJSFYGGBHFCNVB6\\\",\\\"superseded\\\":[\\\"01M1653AVAK36JA9KGMTBGP9BD\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": true,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.rEv3efxeJR",
+    "answer": "Checkpoint complete:\n\n- **Saved:** The user now uses `ruff format` for Python (black is uninstalled).\n- **Corrected:** Superseded a stale claim that said \"the user formats Python with black.\"\n- **Left out:** Nothing else in this session was durable — the rest was just me writing that same fact into the local file-based memory system, which is scratch/session-local relative to agmem.",
+    "cost_usd": 0.1585216,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "Python formatting tool black ruff format",
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1654DR4VFS4HFYAH4R5A25N\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924998581964554,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999943278582163,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T07:00:51.587941Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has moved off black for Python formatting and now uses ruff format exclusively; black is uninstalled in their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity"
+              ],
+              "supersedes": "01M1654DR4VFS4HFYAH4R5A25N"
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "checkpoint-2026-08-29"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M16559HD718WVRWQY9XG83R8\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16559H4RV8M3VEW9N8EAQ9J\\\",\\\"superseded\\\":[\\\"01M1654DR4VFS4HFYAH4R5A25N\\\"]}\""
+      }
+    ]
+  }
+]

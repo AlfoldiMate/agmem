@@ -45,7 +45,14 @@ Every recorded call keeps what it was given *and* the first 700 characters of
 what it got back. Without that a `recall` that returned nothing and a `recall`
 whose answer the agent ignored look identical in the record, and those are
 opposite findings — a retrieval bug in one case and a reasoning failure in the
-other.
+other. That distinction is what turned up #39.
+
+> **Dated numbers.** Every batch below except `rituals-fixed` was measured
+> before #39, i.e. with agmem's fulltext arm returning nothing for any
+> question-shaped query. The conclusions hold — `orient` was being answered by
+> the vector arm, and the write-path finding is about whether a tool is called
+> at all rather than what it returns — but any *retrieval* number here is a
+> floor, not a measurement.
 
 ## Before
 
@@ -249,12 +256,42 @@ That last clause is the agent noticing, out loud, that its first turn had
 written to Claude Code's own memory instead. The ritual is recovering exactly
 what the description lost.
 
-### The supersedes column is not a result yet
+### The supersedes column, once the retrieval bug was gone
 
-`ritual_correct` writes 3/3 and supersedes 0/3, and the obvious reading — the
-ritual gets the write and still not the correction — is **wrong**, or at least
-unproven. Re-running it with tool *answers* recorded, not just tool calls,
-shows what the agents were actually working from:
+Re-run after #39, unchanged in every other respect:
+
+| | writes | supersedes |
+|---|---|---|
+| `ritual_correct`, before #39 | 3/3 | 0/3 |
+| `ritual_correct`, after #39 | 3/3 | **3/3** |
+
+Every run recalls the seeded claim, gets it back, and sends the correction with
+its id:
+
+```
+t1  recall   → hit: "The user formats Python with black."   (id 01M1652…)
+t1  remember → memories: [{ …, supersedes: "01M1652…" }]
+```
+
+> **Corrected**: the stale claim "the user formats Python with black" → now
+> "the user formats Python with ruff format; black is uninstalled and no longer
+> used." **Saved**: nothing new beyond that correction.
+
+So the correction path works, given a ritual that asks for it and a `recall`
+that answers. What follows for **#38** — surface contradiction candidates from
+`remember` itself — is that it is no longer a correctness gap. It remains worth
+having for the path with no ritual, where the agent never looks at all, which
+is what the 0/6 in the section below actually measured.
+
+The rest of this section is what that column looked like before #39, kept
+because the wrong reading of it is instructive.
+
+### Why the supersedes column read as 0/3
+
+The obvious reading of 3/3 writes and 0/3 supersedes — the ritual gets the
+write and still not the correction — was **wrong**. Re-running with tool
+*answers* recorded, not just tool calls, showed what the agents were actually
+working from:
 
 ```
 turn 1  recall  { query: "project uses black or ruff format for Python formatting", k: 10 }
@@ -263,15 +300,16 @@ turn 1  recall  { query: "project uses black or ruff format for Python formattin
 
 The seeded claim was live in the store the whole time — `inspect stats` counts
 it, and a filters-only `recall` returns it — but the query-shaped `recall` did
-not return it. Every agent then said "no prior claim existed", which was a
-correct conclusion from a wrong answer. That is **issue #39**, and until it is
-fixed this scenario measures agmem's retrieval rather than the ritual's
-instruction.
+not. Every agent then said "no prior claim existed", which was a correct
+conclusion from a wrong answer. That was **issue #39**: `@N@` ANDs the words in
+a match reference, so a question carrying one word the claim does not use
+emptied the fulltext arm.
 
-Worth stating plainly because the first read of this data was the flattering
-one: the agent looked, was told, and ignored it. The recorded answers say
-otherwise. Recording what a tool *returned* alongside what it was *given* was
-added for exactly this reason, one finding too late.
+Worth keeping because the first read of this data was the flattering one — the
+agent looked, was told, and ignored it — and it was wrong in the direction that
+blames the model rather than the store. Recording what a tool *returned*
+alongside what it was *given* was added for exactly this reason, one finding
+too late.
 
 ## What follows
 

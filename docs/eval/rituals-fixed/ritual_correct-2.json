@@ -1,0 +1,61 @@
+{
+  "scenario": "ritual_correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 3,
+  "superseded": true,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.m6HbJWhmNW",
+  "answer": "Checkpoint complete:\n\n- **Corrected**: \"The user formats Python with black\" → replaced with \"the user's project has moved off black to ruff format; black is uninstalled\" (old claim closed, not deleted).\n- **Saved**: nothing new beyond that correction — the session had only this one durable fact.\n- **Left out**: nothing else — the conversation contained no other decisions, preferences, or lessons worth persisting.",
+  "cost_usd": 0.14314020000000002,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "project uses ruff format instead of black for Python formatting",
+        "k": 5
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1653AVAK36JA9KGMTBGP9BD\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249984745028024,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999938980112097,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T07:00:15.850348Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "black is uninstalled",
+        "k": 5
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1653AVAK36JA9KGMTBGP9BD\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999579914676,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999998319658706,\\\"rrf\\\":0.01639344262295082,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T07:00:15.850348Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user's project has moved off black to ruff format for Python code formatting; black is uninstalled.",
+            "kind": "fact",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "identity"
+            ],
+            "supersedes": "01M1653AVAK36JA9KGMTBGP9BD"
+          }
+        ],
+        "episode": {
+          "content": "User: \"I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.\"",
+          "session": "formatting-tool-checkpoint"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16549HVWYYWRT71Q34G7GRE\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16549HHXPJSFYGGBHFCNVB6\\\",\\\"superseded\\\":[\\\"01M1653AVAK36JA9KGMTBGP9BD\\\"]}\""
+    }
+  ]
+}

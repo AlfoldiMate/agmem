@@ -1,0 +1,44 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.BvZzB3920T",
+  "answer": "Here's what I found under the `atlas` entity. Two separate memory systems exist for this session, but only one has anything on atlas:\n\n**File-based memory** (`~/.claude/projects/.../memory/`): empty — no `MEMORY.md` and no atlas-related files.\n\n**agmem store** (space: `eval`): 4 entries, all timestamped today (2026-08-29 13:21):\n\n| ID | Content | Issue |\n|---|---|---|\n| `01M16TXA9ZSCCE...` | \"Project atlas is deployed by running bin/ship.sh from the repository root.\" | Duplicate |\n| `01M16TXAA9EJT9...` | \"To ship atlas you run the bin/ship.sh script at the top of the repo.\" | Duplicate — same claim as above, reworded |\n| `01M16TXAAD2KV4...` | \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" | Superset — same core fact, plus the extra detail that `make deploy` was retired |\n| `01M16TXAARP9HR...` | \"The branch under review is spike/consolidate.\" | Tagged with entity `atlas` but content isn't about deployment — looks mistagged or just loosely associated, not a duplicate of the others |\n\n**Findings:**\n- Three near-identical \"how to deploy atlas\" facts should be one memory. The third version is the best of the three (it captures the `make deploy` → `bin/ship.sh` migration), so it's the natural one to keep; the other two are redundant and candidates for `forget`/`supersede`.\n- No entries have been formally superseded — they were all stored independently rather than one correcting another, so agmem has no record that they're saying the same thing.\n- The branch entry is questionable — either it belongs to a different entity than `atlas`, or it's missing context on why it's tagged that way.\n- I can't verify the `bin/ship.sh` claim against the actual repo — this working directory has no `bin/ship.sh`, `Makefile`, or any atlas project files, so I can't confirm whether it's still accurate or already stale.\n\nNothing has been changed. Let me know if you want me to consolidate the three deploy facts into one and drop or re-tag the branch entry.",
+  "cost_usd": 0.109679,
+  "agent_turns": 7,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXAA9EJT9337KWCZPBQZF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664818965383835,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275861535343,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:21:27.359344Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXA9ZSCCE310S35Y105T7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664818965168861,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275860675447,\\"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "include_invalidated": true,
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXAAD2KV4FNX6Z76J399D\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249999321014415,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999728405766,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:21:27.359403Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXA9ZSCCE310S35Y105T7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499993209212436,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999997283684975,\\\"rrf\\\""
+    }
+  ]
+}

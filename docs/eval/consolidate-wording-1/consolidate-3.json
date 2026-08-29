@@ -1,0 +1,41 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.UiCNGoO9LM",
+  "answer": "Here's what's stored under the `atlas` entity in the agmem store (this session had no local file-based memories yet, so everything lives there):\n\n**Duplicated (3 near-identical facts, all about the same thing):**\n1. \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n2. \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n3. \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nAll three were written at essentially the same timestamp and say the same thing — that deployment is `bin/ship.sh`. #3 is the most useful of the three since it also notes the `make deploy` target was retired (context #1 and #2 lack). These should be consolidated into one claim, keeping #3's detail.\n\n**Likely stale/out of place:**\n- \"The branch under review is spike/consolidate.\" — tagged to the `atlas` entity but reads like transient session state (a branch someone was reviewing), not a durable project fact. Its retention score has already decayed heavily (0.14 vs ~0.77 for the others), suggesting it's aged out of relevance. Worth dropping unless `spike/consolidate` is still an active, ongoing branch.\n\n**Not atlas-related but turned up in the broader search:**\n- \"The office coffee machine is descaled on the first Monday of the month.\" — unrelated, just matched loosely; not part of atlas cleanup.\n\nNothing has been changed. Let me know if you want me to consolidate the three duplicates into one (with a `supersedes` correction) and drop the stale branch note.",
+  "cost_usd": 0.07576240000000001,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "Atlas project",
+        "entities": [
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "Atlas",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TYKNEEJRTSD9GEG58H8C8\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819398996559,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277595986241,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:22:09.700685Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TYKN5055SK8FQ05510R3C\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.866481939801684,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277592067362,\\\""
+    }
+  ]
+}

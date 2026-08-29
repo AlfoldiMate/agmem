@@ -1,0 +1,44 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.RUWzIMeh6q",
+  "answer": "Here's what's stored under the `atlas` entity (all in the `eval` memory space — the local project's file-based memory has nothing on atlas at all):\n\n**Duplicated (3 near-identical facts, all about deployment):**\n1. \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n2. \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n3. \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nThese are the same claim restated three times. #3 is the most complete (it also notes the old `make deploy` target was removed), so it'd be the natural one to keep if these get consolidated.\n\n**Likely mistagged, not duplicated:**\n4. \"The branch under review is spike/consolidate.\" — tagged with entity `atlas` but has nothing to do with deployment or atlas specifically. This looks like a tagging error rather than an out-of-date fact.\n\n**Nothing formally out of date:** none of these have a `supersedes` chain or invalidated prior version — there's no older claim being contradicted here.\n\nOne flag worth your attention: all four entries were written within the same few seconds today (2026-08-29 13:20:50), in a space named `eval` rather than a normal project space. That pattern (identical timestamp, redundant phrasing, `eval` space) looks like synthetic/test data rather than organically accumulated memory — worth confirming that's expected before you treat it as real project history.\n\nI haven't changed anything. Let me know if you'd like me to consolidate the three duplicates, fix the mistagged one, or leave it as-is for the handover.",
+  "cost_usd": 0.0978686,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69R67YR6V990TWW450F\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819297846671,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277191386685,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:20:50.47918Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69FTN34Z5W9Y5Q0WVE9\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819296881283,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277187525133,\\\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "include_invalidated": true,
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69XJ3145Q3G41FEPHA7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249998592276583,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994369106331,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:20:50.479186Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69FTN34Z5W9Y5Q0WVE9\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249998592172271,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994368689086,\\\"rrf\\\""
+    }
+  ]
+}

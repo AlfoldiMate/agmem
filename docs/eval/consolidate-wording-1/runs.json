@@ -1,0 +1,131 @@
+[
+  {
+    "scenario": "consolidate",
+    "run": 1,
+    "pass": false,
+    "tools": [
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.RUWzIMeh6q",
+    "answer": "Here's what's stored under the `atlas` entity (all in the `eval` memory space — the local project's file-based memory has nothing on atlas at all):\n\n**Duplicated (3 near-identical facts, all about deployment):**\n1. \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n2. \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n3. \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nThese are the same claim restated three times. #3 is the most complete (it also notes the old `make deploy` target was removed), so it'd be the natural one to keep if these get consolidated.\n\n**Likely mistagged, not duplicated:**\n4. \"The branch under review is spike/consolidate.\" — tagged with entity `atlas` but has nothing to do with deployment or atlas specifically. This looks like a tagging error rather than an out-of-date fact.\n\n**Nothing formally out of date:** none of these have a `supersedes` chain or invalidated prior version — there's no older claim being contradicted here.\n\nOne flag worth your attention: all four entries were written within the same few seconds today (2026-08-29 13:20:50), in a space named `eval` rather than a normal project space. That pattern (identical timestamp, redundant phrasing, `eval` space) looks like synthetic/test data rather than organically accumulated memory — worth confirming that's expected before you treat it as real project history.\n\nI haven't changed anything. Let me know if you'd like me to consolidate the three duplicates, fix the mistagged one, or leave it as-is for the handover.",
+    "cost_usd": 0.0978686,
+    "agent_turns": 6,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas",
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69R67YR6V990TWW450F\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819297846671,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277191386685,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:20:50.47918Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69FTN34Z5W9Y5Q0WVE9\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819296881283,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277187525133,\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "include_invalidated": true,
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69XJ3145Q3G41FEPHA7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249998592276583,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994369106331,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:20:50.479186Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TW69FTN34Z5W9Y5Q0WVE9\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249998592172271,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994368689086,\\\"rrf\\\""
+      }
+    ]
+  },
+  {
+    "scenario": "consolidate",
+    "run": 2,
+    "pass": false,
+    "tools": [
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.BvZzB3920T",
+    "answer": "Here's what I found under the `atlas` entity. Two separate memory systems exist for this session, but only one has anything on atlas:\n\n**File-based memory** (`~/.claude/projects/.../memory/`): empty — no `MEMORY.md` and no atlas-related files.\n\n**agmem store** (space: `eval`): 4 entries, all timestamped today (2026-08-29 13:21):\n\n| ID | Content | Issue |\n|---|---|---|\n| `01M16TXA9ZSCCE...` | \"Project atlas is deployed by running bin/ship.sh from the repository root.\" | Duplicate |\n| `01M16TXAA9EJT9...` | \"To ship atlas you run the bin/ship.sh script at the top of the repo.\" | Duplicate — same claim as above, reworded |\n| `01M16TXAAD2KV4...` | \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" | Superset — same core fact, plus the extra detail that `make deploy` was retired |\n| `01M16TXAARP9HR...` | \"The branch under review is spike/consolidate.\" | Tagged with entity `atlas` but content isn't about deployment — looks mistagged or just loosely associated, not a duplicate of the others |\n\n**Findings:**\n- Three near-identical \"how to deploy atlas\" facts should be one memory. The third version is the best of the three (it captures the `make deploy` → `bin/ship.sh` migration), so it's the natural one to keep; the other two are redundant and candidates for `forget`/`supersede`.\n- No entries have been formally superseded — they were all stored independently rather than one correcting another, so agmem has no record that they're saying the same thing.\n- The branch entry is questionable — either it belongs to a different entity than `atlas`, or it's missing context on why it's tagged that way.\n- I can't verify the `bin/ship.sh` claim against the actual repo — this working directory has no `bin/ship.sh`, `Makefile`, or any atlas project files, so I can't confirm whether it's still accurate or already stale.\n\nNothing has been changed. Let me know if you want me to consolidate the three deploy facts into one and drop or re-tag the branch entry.",
+    "cost_usd": 0.109679,
+    "agent_turns": 7,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas",
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXAA9EJT9337KWCZPBQZF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664818965383835,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275861535343,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:21:27.359344Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXA9ZSCCE310S35Y105T7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664818965168861,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275860675447,\\"
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "include_invalidated": true,
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXAAD2KV4FNX6Z76J399D\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249999321014415,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999728405766,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:21:27.359403Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TXA9ZSCCE310S35Y105T7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499993209212436,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999997283684975,\\\"rrf\\\""
+      }
+    ]
+  },
+  {
+    "scenario": "consolidate",
+    "run": 3,
+    "pass": false,
+    "tools": [
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.UiCNGoO9LM",
+    "answer": "Here's what's stored under the `atlas` entity in the agmem store (this session had no local file-based memories yet, so everything lives there):\n\n**Duplicated (3 near-identical facts, all about the same thing):**\n1. \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n2. \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n3. \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nAll three were written at essentially the same timestamp and say the same thing — that deployment is `bin/ship.sh`. #3 is the most useful of the three since it also notes the `make deploy` target was retired (context #1 and #2 lack). These should be consolidated into one claim, keeping #3's detail.\n\n**Likely stale/out of place:**\n- \"The branch under review is spike/consolidate.\" — tagged to the `atlas` entity but reads like transient session state (a branch someone was reviewing), not a durable project fact. Its retention score has already decayed heavily (0.14 vs ~0.77 for the others), suggesting it's aged out of relevance. Worth dropping unless `spike/consolidate` is still an active, ongoing branch.\n\n**Not atlas-related but turned up in the broader search:**\n- \"The office coffee machine is descaled on the first Monday of the month.\" — unrelated, just matched loosely; not part of atlas cleanup.\n\nNothing has been changed. Let me know if you want me to consolidate the three duplicates into one (with a `supersedes` correction) and drop the stale branch note.",
+    "cost_usd": 0.07576240000000001,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "Atlas project",
+          "entities": [
+            "Atlas"
+          ],
+          "space": "all",
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "Atlas",
+          "space": "all",
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TYKNEEJRTSD9GEG58H8C8\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819398996559,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277595986241,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:22:09.700685Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16TYKN5055SK8FQ05510R3C\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.866481939801684,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277592067362,\\\""
+      }
+    ]
+  }
+]

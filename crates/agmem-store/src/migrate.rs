@@ -20,6 +20,7 @@ const BOOTSTRAP: &str = "DEFINE TABLE IF NOT EXISTS meta SCHEMAFULL;
 const MIGRATIONS: &[&str] = &[
     include_str!("migrations/v1_schema.surql"),
     include_str!("migrations/v2_derived_from.surql"),
+    include_str!("migrations/v3_supersedes_list.surql"),
 ];
 
 /// The schema version this binary produces.

@@ -894,7 +894,7 @@ async fn a_correction_closes_the_memory_it_supersedes() {
         .remember(json!({
             "memories": [{
                 "content": "The user now prefers Rust for everything",
-                "supersedes": old,
+                "supersedes": [old],
                 "valid_from": "2026-08-28T09:00:00Z"
             }]
         }))
@@ -941,6 +941,73 @@ async fn a_correction_closes_the_memory_it_supersedes() {
     agmem.shutdown().await;
 }
 
+/// Issue #42: a duplicate cluster is merged by one call, not by one
+/// supersession and N `forget`s. `supersedes` takes a list precisely so the
+/// rest of a cluster keeps its history — `forget` would take it away.
+#[tokio::test]
+async fn one_call_merges_a_whole_duplicate_cluster() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let seeded = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The user writes rust" },
+                { "content": "Rust is what the user reaches for" },
+                { "content": "For new work the user picks rust" }
+            ]
+        }))
+        .await;
+    let cluster: Vec<String> = ids(&seeded["created"])
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect();
+    assert_eq!(cluster.len(), 3, "same-batch entries never gate each other");
+
+    let merged = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The user writes rust for everything new",
+                "supersedes": cluster,
+                "valid_from": "2026-08-28T09:00:00Z"
+            }]
+        }))
+        .await;
+    let survivor = ids(&merged["created"])[0].to_owned();
+    let mut closed = ids(&merged["superseded"]);
+    closed.sort_unstable();
+    let mut expected: Vec<&str> = cluster.iter().map(String::as_str).collect();
+    expected.sort_unstable();
+    assert_eq!(closed, expected, "all three closed by one call: {merged}");
+
+    // Closed, not forgotten: each keeps its reason and points at the survivor.
+    for memory in agmem.memories().await {
+        if memory.id.as_str() == survivor {
+            continue;
+        }
+        assert_eq!(
+            (
+                memory.invalid_reason.map(|reason| reason.as_str()),
+                memory.superseded_by.as_ref().map(|id| id.as_str())
+            ),
+            (Some("superseded"), Some(survivor.as_str())),
+            "{} was merged away, not deleted",
+            memory.content
+        );
+    }
+
+    // And the survivor names every wording it replaced, so the merge is
+    // readable afterwards rather than only inferable from three closed rows.
+    let found = agmem.inspect(&survivor).await;
+    let mut names = ids(&found["found"]["memory"]["supersedes"]);
+    names.sort_unstable();
+    assert_eq!(names, expected, "{found}");
+    assert_eq!(
+        found["found"]["chain"].as_array().expect("chain").len(),
+        4,
+        "one walk reaches all three closed members and the survivor: {found}"
+    );
+    agmem.shutdown().await;
+}
+
 #[tokio::test]
 async fn a_request_that_cannot_be_stored_names_what_is_wrong() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
@@ -955,11 +1022,11 @@ async fn a_request_that_cannot_be_stored_names_what_is_wrong() {
             "memories[0].valid_from",
         ),
         (
-            json!({ "memories": [{ "content": "a claim", "supersedes": "nonsense" }] }),
-            "memories[0].supersedes",
+            json!({ "memories": [{ "content": "a claim", "supersedes": ["nonsense"] }] }),
+            "memories[0].supersedes[0]",
         ),
         (
-            json!({ "memories": [{ "content": "a claim", "supersedes": "01M145SMNET1XRYA713EWAQTD3" }] }),
+            json!({ "memories": [{ "content": "a claim", "supersedes": ["01M145SMNET1XRYA713EWAQTD3"] }] }),
             "does not exist in space",
         ),
         (
@@ -1180,7 +1247,7 @@ async fn as_of_returns_the_claim_that_was_live_then() {
         .remember(json!({
             "memories": [{
                 "content": "The user deploys from CI",
-                "supersedes": old,
+                "supersedes": [old],
                 "valid_from": "2026-06-01T00:00:00Z"
             }]
         }))
@@ -1512,7 +1579,7 @@ async fn inspect_walks_a_chain_of_two_corrections_oldest_first() {
     ] {
         let mut memory = json!({ "content": content, "valid_from": valid_from });
         if let Some(previous) = links.last() {
-            memory["supersedes"] = json!(previous);
+            memory["supersedes"] = json!([previous]);
         }
         let diff = agmem.remember(json!({ "memories": [memory] })).await;
         links.push(ids(&diff["created"])[0].to_owned());
@@ -1637,7 +1704,7 @@ async fn inspect_reports_a_subject_and_what_each_space_holds() {
             "memories": [{
                 "content": "The user deploys from CI",
                 "entities": ["user"],
-                "supersedes": ids(&first["created"])[0],
+                "supersedes": [ids(&first["created"])[0]],
                 "valid_from": "2026-06-01T00:00:00Z"
             }]
         }))
@@ -1867,7 +1934,7 @@ async fn a_purge_takes_the_whole_correction_chain_and_leaves_no_row() {
         .remember(json!({
             "memories": [{
                 "content": "the office is on the fourth floor",
-                "supersedes": format!("memory:{old}")
+                "supersedes": [format!("memory:{old}")]
             }]
         }))
         .await;
@@ -2457,7 +2524,7 @@ async fn an_insight_blocked_by_an_uncited_claim_is_told_how_to_cite_it() {
         .reflect(json!({
             "insight": "rust is what this project reaches for, whatever the task",
             "derived_from": [evidence.clone()],
-            "supersedes": uncited.clone()
+            "supersedes": [uncited.clone()]
         }))
         .await;
     assert_eq!(cited["created"], json!(true), "{cited}");
@@ -2466,7 +2533,7 @@ async fn an_insight_blocked_by_an_uncited_claim_is_told_how_to_cite_it() {
         json!([format!("memory:{evidence}")]),
         "{cited}"
     );
-    assert_eq!(cited["superseded"], json!(uncited), "{cited}");
+    assert_eq!(cited["superseded"], json!([uncited]), "{cited}");
     assert_eq!(
         cited["note"],
         Value::Null,

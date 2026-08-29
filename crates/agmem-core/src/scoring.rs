@@ -284,7 +284,7 @@ mod tests {
             valid_from: days_ago(100),
             invalid_at: None,
             invalid_reason: None,
-            supersedes: None,
+            supersedes: Vec::new(),
             superseded_by: None,
             source: crate::model::Source::Agent,
             derived_from: vec![],

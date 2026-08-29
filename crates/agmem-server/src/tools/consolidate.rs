@@ -40,8 +40,8 @@ use crate::tools::store_error;
 
 /// The largest cluster reported as one.
 ///
-/// A cluster is a single follow-up call — one `remember(supersedes: …)` naming
-/// the rest — and past a handful that call stops being reviewable. A space
+/// A cluster is a single follow-up call — one `remember(supersedes: [ … ])`
+/// naming the rest — and past a handful that call stops being reviewable. A space
 /// with a twenty-way duplicate has a bigger problem than this tool solves in
 /// one pass, and it will still be there on the next one.
 const MAX_CLUSTER_MEMBERS: usize = 8;
@@ -76,8 +76,11 @@ pub struct ConsolidateResult {
     pub scanned: Vec<SpaceScan>,
 
     /// Groups of live claims saying the same thing. Merge one by sending
-    /// `remember` with the surviving wording and `supersedes` set to the id of
-    /// what it replaces.
+    /// `remember` with the surviving wording and `supersedes` set to the ids
+    /// of every other member — one call, one live claim, and each closed
+    /// member still readable and pointing at what replaced it. Do not reach
+    /// for `forget` here: that deletes the correction history a merge exists
+    /// to keep.
     pub near_duplicates: Vec<Cluster>,
 
     /// Pairs of live claims about one subject that may disagree. Nothing here
@@ -502,7 +505,7 @@ mod tests {
             valid_from: Timestamp::UNIX_EPOCH,
             invalid_at: None,
             invalid_reason: None,
-            supersedes: None,
+            supersedes: Vec::new(),
             superseded_by: None,
             source: Source::Agent,
             derived_from: Vec::new(),

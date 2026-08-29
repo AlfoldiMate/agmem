@@ -70,10 +70,16 @@ pub struct MemoryInput {
     #[serde(default)]
     pub decay_class: Option<DecayClass>,
 
-    /// The id of a live memory this claim corrects. The old one is closed and
-    /// stays readable and dated; only the correction is live afterwards.
+    /// The ids of the live memories this claim replaces. Each one is closed
+    /// and stays readable and dated; only this claim is live afterwards.
+    ///
+    /// One id is a correction. Several is a merge — the wording worth keeping,
+    /// closing every duplicate of it in the same call, which is what
+    /// `consolidate`'s `near_duplicates` clusters are for. Use this rather
+    /// than `forget` for anything that was once true: a closed claim keeps its
+    /// history, a forgotten one does not.
     #[serde(default)]
-    pub supersedes: Option<String>,
+    pub supersedes: Vec<String>,
 
     /// When the claim started being true, RFC3339. Defaults to now — set it
     /// when recording something that became true earlier.
@@ -109,8 +115,8 @@ pub struct RememberResult {
     /// usually worded much like the claim it corrects, so it lands here too —
     /// and then nothing has changed, the older and now-wrong claim is what is
     /// still live, and saying "already noted" would be false. If `content`
-    /// says something other than what you sent, re-send yours with
-    /// `supersedes` set to the id here.
+    /// says something other than what you sent, re-send yours with the id
+    /// here in `supersedes`.
     pub duplicates: Vec<Duplicate>,
 
     /// Live claims about the same subject as something you just stored, which
@@ -120,9 +126,10 @@ pub struct RememberResult {
     /// blocked. They are here because a correction and the claim it corrects
     /// are near neighbours, and this is the only moment the id of the older
     /// one is in front of you. If one of these is now wrong, re-send the new
-    /// claim with `supersedes` set to its id: that closes the old one instead
-    /// of leaving both live and contradicting each other. If it is merely
-    /// related, ignore it.
+    /// claim with its id in `supersedes`: that closes the old one instead of
+    /// leaving both live and contradicting each other. If several of them are
+    /// the same claim in different words, send every id — one call closes them
+    /// all. If it is merely related, ignore it.
     pub related: Vec<Related>,
 
     /// Ids of the memories closed by a `supersedes` in this call.
@@ -135,7 +142,7 @@ pub struct RememberResult {
 /// A live claim near one that was just stored.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Related {
-    /// The id of the older memory — what `supersedes` would take.
+    /// The id of the older memory — what to put in `supersedes`.
     pub id: String,
 
     /// Which entry of the `memories` you sent this is a neighbour of,
@@ -164,7 +171,7 @@ pub struct Duplicate {
     ///
     /// Compare it against what you sent: if it says something different, this
     /// is a claim you are correcting rather than one you are repeating, and it
-    /// is still live until you re-send yours with `supersedes` set to `id`.
+    /// is still live until you re-send yours with `id` in `supersedes`.
     /// In BM25-only mode this is your own text, which matched exactly once
     /// case and whitespace were folded.
     pub content: String,
@@ -222,7 +229,7 @@ pub async fn run(
     let gated: Vec<usize> = new_memories
         .iter()
         .enumerate()
-        .filter(|(_, memory)| memory.supersedes.is_none() && memory.embedding.is_some())
+        .filter(|(_, memory)| memory.supersedes.is_empty() && memory.embedding.is_some())
         .map(|(index, _)| index)
         .collect();
     let probes: Vec<Vec<f32>> = gated
@@ -355,11 +362,15 @@ impl MemoryInput {
         memory.entities.clone_from(&self.entities);
         memory.tags.clone_from(&self.tags);
         memory.decay_class = self.decay_class;
-        memory.supersedes = self
-            .supersedes
-            .as_deref()
-            .map(|id| memory_id(id, &format!("memories[{index}].supersedes")))
-            .transpose()?;
+        // A repeated id is one closure, not two: the field is the set of claims
+        // this one replaces, and `UPDATE` over a list would otherwise report
+        // more rows touched than there are rows.
+        for (position, raw) in self.supersedes.iter().enumerate() {
+            let id = memory_id(raw, &format!("memories[{index}].supersedes[{position}]"))?;
+            if !memory.supersedes.contains(&id) {
+                memory.supersedes.push(id);
+            }
+        }
         memory.valid_from = self
             .valid_from
             .as_deref()
@@ -458,7 +469,7 @@ mod tests {
             entities: Vec::new(),
             tags: Vec::new(),
             decay_class: None,
-            supersedes: None,
+            supersedes: Vec::new(),
             valid_from: None,
         };
         let error = input.validated(1).expect_err("blank content is refused");

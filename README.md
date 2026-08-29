@@ -273,11 +273,17 @@ compared against every other, which is `consolidate`.
 ```json
 { "memories": [
   { "content": "The user prefers Go over Python for command-line tools",
-    "supersedes": "01M14XWWAXJG…" }
+    "supersedes": ["01M14XWWAXJG…"] }
 ] }
 ```
 
 The old claim stays readable and dated; only the new one is live.
+
+`supersedes` is a list, so one claim can close several — which is how a
+duplicate cluster is merged. Send the wording worth keeping with every other
+member's id, and the whole group closes in one call, each member still readable
+and pointing at what replaced it. `forget` would remove them instead, taking the
+correction history with them.
 
 **`context`** — the session-start block. Four fixed sections in a fixed order,
 capped at `budget_chars`, dropping whole entries rather than cutting one in
@@ -364,7 +370,7 @@ included), or `stats` for per-space counts.
 
 **`consolidate`** — what needs tidying up, and nothing done about it. Three
 lists: `near_duplicates` (groups of live claims saying the same thing, each
-group one `remember(supersedes:)` call away from merged), `contradictions`
+group one `remember(supersedes: [ … ])` call away from merged), `contradictions`
 (pairs naming one subject, offered so you can decide which is true — the same
 pair may also appear under `near_duplicates`, because a cosine carries the
 subject and not the polarity) and `stale_contexts` (notes filed `fast` that

@@ -93,7 +93,7 @@ pub(crate) struct MemoryRow {
     pub(crate) embedding: Option<Vec<f32>>,
     pub(crate) decay_class: String,
     pub(crate) valid_from: Datetime,
-    pub(crate) supersedes: Option<RecordId>,
+    pub(crate) supersedes: Vec<RecordId>,
     pub(crate) derived_from: Vec<RecordId>,
 }
 
@@ -180,7 +180,7 @@ pub(crate) struct MemoryReadRow {
     pub(crate) valid_from: Datetime,
     pub(crate) invalid_at: Option<Datetime>,
     pub(crate) invalid_reason: Option<String>,
-    pub(crate) supersedes: Option<String>,
+    pub(crate) supersedes: Vec<String>,
     pub(crate) superseded_by: Option<String>,
     pub(crate) source_kind: String,
     pub(crate) source_ref: Option<String>,
@@ -245,7 +245,11 @@ impl MemoryReadRow {
                 .invalid_reason
                 .map(|reason| reason.parse::<InvalidReason>())
                 .transpose()?,
-            supersedes: self.supersedes.map(MemoryId::new).transpose()?,
+            supersedes: self
+                .supersedes
+                .into_iter()
+                .map(MemoryId::new)
+                .collect::<Result<_, _>>()?,
             superseded_by: self.superseded_by.map(MemoryId::new).transpose()?,
             source: to_source(&self.source_kind, self.source_ref)?,
             derived_from: self

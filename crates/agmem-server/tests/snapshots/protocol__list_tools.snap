@@ -5,7 +5,7 @@ expression: "&tools.tools"
 [
   {
     "name": "consolidate",
-    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nThree lists come back, and every claim in each carries its full text rather than only its id, so you can judge it here instead of looking it up:\n\n- `near_duplicates` — groups of live claims saying the same thing. Merge a group by calling `remember` with the one wording worth keeping and `supersedes` set to the id it replaces. Read `min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means the group chained together through a middle claim and may not be one claim at all.\n- `contradictions` — pairs about the same subject that are close without being the same. Nothing here has judged that they disagree; read both and decide. When one of them is wrong, send the right one with `supersedes` set to the wrong one's id.\n- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point their class would have expired them. If one turned out to be durable, store it again with a slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
+    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nThree lists come back, and every claim in each carries its full text rather than only its id, so you can judge it here instead of looking it up:\n\n- `near_duplicates` — groups of live claims saying the same thing. Merge a group with one `remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other member. `supersedes` takes a list, so a group of any size closes in that single call — reaching for `forget` instead deletes the history the merge exists to keep. Read `min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means the group chained together through a middle claim and may not be one claim at all.\n- `contradictions` — pairs about the same subject that are close without being the same. Nothing here has judged that they disagree; read both and decide. When one of them is wrong, send the right one with the wrong one's id in `supersedes`.\n- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point their class would have expired them. If one turned out to be durable, store it again with a slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -222,9 +222,12 @@ expression: "&tools.tools"
               ]
             },
             "supersedes": {
-              "description": "The claim this one corrected.",
+              "description": "The claims this one corrected — several when it merged a duplicate\ncluster into one wording. Absent, not empty, when it corrected nothing\n(see the `derived_from` note above on why this is `Option`).",
+              "items": {
+                "type": "string"
+              },
               "type": [
-                "string",
+                "array",
                 "null"
               ]
             },
@@ -318,7 +321,7 @@ expression: "&tools.tools"
           "type": "array"
         },
         "near_duplicates": {
-          "description": "Groups of live claims saying the same thing. Merge one by sending\n`remember` with the surviving wording and `supersedes` set to the id of\nwhat it replaces.",
+          "description": "Groups of live claims saying the same thing. Merge one by sending\n`remember` with the surviving wording and `supersedes` set to the ids\nof every other member — one call, one live claim, and each closed\nmember still readable and pointing at what replaced it. Do not reach\nfor `forget` here: that deletes the correction history a merge exists\nto keep.",
           "items": {
             "$ref": "#/$defs/Cluster"
           },
@@ -938,9 +941,12 @@ expression: "&tools.tools"
               ]
             },
             "supersedes": {
-              "description": "The claim this one corrected.",
+              "description": "The claims this one corrected — several when it merged a duplicate\ncluster into one wording. Absent, not empty, when it corrected nothing\n(see the `derived_from` note above on why this is `Option`).",
+              "items": {
+                "type": "string"
+              },
               "type": [
-                "string",
+                "array",
                 "null"
               ]
             },
@@ -1446,12 +1452,12 @@ expression: "&tools.tools"
           ]
         },
         "supersedes": {
-          "default": null,
-          "description": "The id of a live claim this insight replaces. The old one is closed and\nstays readable and dated; only the correction is live afterwards.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "default": [],
+          "description": "The ids of the live claims this insight replaces. Each one is closed\nand stays readable and dated; only the insight is live afterwards.\n\nSeveral at once is a merge: one cited conclusion standing in for every\nuncited wording of it, closed in the same call rather than forgotten.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "tags": {
           "default": [],
@@ -1478,7 +1484,7 @@ expression: "&tools.tools"
               "type": "string"
             },
             "id": {
-              "description": "The id of the older claim — what `supersedes` would take.",
+              "description": "The id of the older claim — what to put in `supersedes`.",
               "type": "string"
             },
             "similarity": {
@@ -1502,7 +1508,7 @@ expression: "&tools.tools"
           "type": "string"
         },
         "created": {
-          "description": "Whether the row was written now.\n\n`false` means an equivalent insight was already stored and nothing\nchanged. Read `content`: if it says something other than what you sent,\nyours is a correction rather than a repetition, and it is still unsaid\nuntil you send it again with `supersedes` set to `id`.",
+          "description": "Whether the row was written now.\n\n`false` means an equivalent insight was already stored and nothing\nchanged. Read `content`: if it says something other than what you sent,\nyours is a correction rather than a repetition, and it is still unsaid\nuntil you send it again with `id` in `supersedes`.",
           "type": "boolean"
         },
         "derived_from": {
@@ -1524,18 +1530,18 @@ expression: "&tools.tools"
           ]
         },
         "related": {
-          "description": "Live claims near the insight, which it may be correcting.\n\nThese were **not** blocked and are not duplicates — they are here\nbecause a correction and the claim it corrects are near neighbours, and\nthis is the only moment the older one's id is in front of you. If one\nof them is what your insight replaces, send the insight again with\n`supersedes` set to its id. If it is merely related, ignore it.",
+          "description": "Live claims near the insight, which it may be correcting.\n\nThese were **not** blocked and are not duplicates — they are here\nbecause a correction and the claim it corrects are near neighbours, and\nthis is the only moment the older one's id is in front of you. If one\nof them is what your insight replaces, send the insight again with its\nid in `supersedes` — several ids if several of them are the same claim\nworded differently. If it is merely related, ignore it.",
           "items": {
             "$ref": "#/$defs/Related"
           },
           "type": "array"
         },
         "superseded": {
-          "description": "The id of the claim closed by a `supersedes` in this call.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "description": "The ids of the claims closed by a `supersedes` in this call.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -1543,7 +1549,8 @@ expression: "&tools.tools"
         "created",
         "content",
         "derived_from",
-        "related"
+        "related",
+        "superseded"
       ],
       "type": "object"
     },
@@ -1671,12 +1678,12 @@ expression: "&tools.tools"
               "description": "What the claim is; defaults to `fact`."
             },
             "supersedes": {
-              "default": null,
-              "description": "The id of a live memory this claim corrects. The old one is closed and\nstays readable and dated; only the correction is live afterwards.",
-              "type": [
-                "string",
-                "null"
-              ]
+              "default": [],
+              "description": "The ids of the live memories this claim replaces. Each one is closed\nand stays readable and dated; only this claim is live afterwards.\n\nOne id is a correction. Several is a merge — the wording worth keeping,\nclosing every duplicate of it in the same call, which is what\n`consolidate`'s `near_duplicates` clusters are for. Use this rather\nthan `forget` for anything that was once true: a closed claim keeps its\nhistory, a forgotten one does not.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             },
             "tags": {
               "default": [],
@@ -1741,7 +1748,7 @@ expression: "&tools.tools"
           "description": "A claim that was already in the store.",
           "properties": {
             "content": {
-              "description": "What the stored memory actually says.\n\nCompare it against what you sent: if it says something different, this\nis a claim you are correcting rather than one you are repeating, and it\nis still live until you re-send yours with `supersedes` set to `id`.\nIn BM25-only mode this is your own text, which matched exactly once\ncase and whitespace were folded.",
+              "description": "What the stored memory actually says.\n\nCompare it against what you sent: if it says something different, this\nis a claim you are correcting rather than one you are repeating, and it\nis still live until you re-send yours with `id` in `supersedes`.\nIn BM25-only mode this is your own text, which matched exactly once\ncase and whitespace were folded.",
               "type": "string"
             },
             "id": {
@@ -1776,7 +1783,7 @@ expression: "&tools.tools"
               "type": "string"
             },
             "id": {
-              "description": "The id of the older memory — what `supersedes` would take.",
+              "description": "The id of the older memory — what to put in `supersedes`.",
               "type": "string"
             },
             "of": {
@@ -1810,7 +1817,7 @@ expression: "&tools.tools"
           "type": "array"
         },
         "duplicates": {
-          "description": "The claims judged already stored. Nothing was written for these.\n\n**Read `content` before treating one as a no-op.** A correction is\nusually worded much like the claim it corrects, so it lands here too —\nand then nothing has changed, the older and now-wrong claim is what is\nstill live, and saying \"already noted\" would be false. If `content`\nsays something other than what you sent, re-send yours with\n`supersedes` set to the id here.",
+          "description": "The claims judged already stored. Nothing was written for these.\n\n**Read `content` before treating one as a no-op.** A correction is\nusually worded much like the claim it corrects, so it lands here too —\nand then nothing has changed, the older and now-wrong claim is what is\nstill live, and saying \"already noted\" would be false. If `content`\nsays something other than what you sent, re-send yours with the id\nhere in `supersedes`.",
           "items": {
             "$ref": "#/$defs/Duplicate"
           },
@@ -1824,7 +1831,7 @@ expression: "&tools.tools"
           ]
         },
         "related": {
-          "description": "Live claims about the same subject as something you just stored, which\nthe new claim may contradict.\n\nThese were **written** — they are not duplicates and nothing was\nblocked. They are here because a correction and the claim it corrects\nare near neighbours, and this is the only moment the id of the older\none is in front of you. If one of these is now wrong, re-send the new\nclaim with `supersedes` set to its id: that closes the old one instead\nof leaving both live and contradicting each other. If it is merely\nrelated, ignore it.",
+          "description": "Live claims about the same subject as something you just stored, which\nthe new claim may contradict.\n\nThese were **written** — they are not duplicates and nothing was\nblocked. They are here because a correction and the claim it corrects\nare near neighbours, and this is the only moment the id of the older\none is in front of you. If one of these is now wrong, re-send the new\nclaim with its id in `supersedes`: that closes the old one instead of\nleaving both live and contradicting each other. If several of them are\nthe same claim in different words, send every id — one call closes them\nall. If it is merely related, ignore it.",
           "items": {
             "$ref": "#/$defs/Related"
           },

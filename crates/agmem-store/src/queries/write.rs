@@ -21,8 +21,8 @@ pub(crate) struct MemoryShape<'a> {
     /// Whether provenance is the episode this same transaction writes — whose
     /// ULID exists only as a SurrealQL variable, so it cannot be bound.
     pub(crate) source_is_batch_episode: bool,
-    /// The memory this one closes, if any.
-    pub(crate) supersedes: Option<&'a MemoryId>,
+    /// The memories this one closes; empty for a plain write.
+    pub(crate) supersedes: &'a [MemoryId],
 }
 
 /// The whole write of one `remember` call: an optional episode with its
@@ -58,17 +58,30 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
         } else {
             format!("$src{index}")
         };
-        let supersede = match shape.supersedes {
-            // A ULID is Crockford base32, so it cannot break out of the
-            // literal; the id is baked in to name the offender in the error.
-            Some(old) => format!(
+        // One `UPDATE` closes every target at once, so a merge — one surviving
+        // wording replacing a whole duplicate cluster — is the same single
+        // statement a one-for-one correction is. The count is what checks it:
+        // `UPDATE` over a record list is a silent no-op for an id that names
+        // nothing, so fewer rows back than ids sent means one of them is gone.
+        // A ULID is Crockford base32 and cannot break out of the literal, so
+        // the ids are baked in to name the offenders in the error.
+        let supersede = if shape.supersedes.is_empty() {
+            String::new()
+        } else {
+            let count = shape.supersedes.len();
+            let named = shape
+                .supersedes
+                .iter()
+                .map(|old| format!("memory:{old}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
                 "LET $sup{index} = (UPDATE $old{index} SET superseded_by = $new{index}.id,
                      invalid_at = $new{index}.valid_from, invalid_reason = 'superseded');
-                 IF array::len($sup{index}) = 0 {{
-                     THROW 'supersedes target memory:{old} does not exist'
+                 IF array::len($sup{index}) != {count} {{
+                     THROW 'supersedes targets {named} — one of them does not exist'
                  }};"
-            ),
-            None => String::new(),
+            )
         };
         builder.push(format!(
             "LET $dup{index} = (SELECT VALUE id FROM memory

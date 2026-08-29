@@ -192,7 +192,7 @@ DEFINE FIELD valid_from    ON memory TYPE datetime DEFAULT time::now();
 DEFINE FIELD invalid_at    ON memory TYPE option<datetime>;    -- none = live
 DEFINE FIELD invalid_reason ON memory TYPE option<string>
     ASSERT $value IN ["superseded", "forgotten", "expired"];    -- skipped when NONE
-DEFINE FIELD supersedes    ON memory TYPE option<record<memory>>;
+DEFINE FIELD supersedes    ON memory TYPE array<record<memory>> DEFAULT [];  -- v3: a list, so one claim can merge a cluster
 DEFINE FIELD superseded_by ON memory TYPE option<record<memory>>;
 DEFINE FIELD source        ON memory TYPE object;   -- { kind: "episode"|"agent"|"external", ref: option }
 -- schema v2: what a `reflect` insight was drawn from; empty for every other write
@@ -294,7 +294,7 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
     "entities": ["Person/alice", "project-x"],      // optional
     "tags": ["identity"],                            // optional
     "decay_class": "pinned|slow|normal|fast",        // optional, defaults by kind
-    "supersedes": "memory:01J…",                     // optional — caller-driven correction
+    "supersedes": ["memory:01J…"],                   // optional — the claims this one replaces
     "valid_from": "RFC3339"                          // optional (when it became true)
   }],
   "episode": {                                       // optional verbatim ground truth
@@ -382,7 +382,7 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
   "derived_from": ["01J…", "memory:01J…", "episode:01J…"],  // required, non-empty
   "kind": "fact | lesson | instruction (default lesson)",
   "entities": ["cargo"], "tags": ["identity"],              // optional
-  "supersedes": "memory:01J…"                                // optional
+  "supersedes": ["memory:01J…"]                              // optional
 }
 // → { id, created, content,
 //     derived_from: ["memory:<id>" | "episode:<id>"],  // empty when created is false
@@ -409,8 +409,12 @@ Behavioral rules baked into the tools:
   silently inserting or silently skipping — the agent decides whether that
   means NOOP or `supersedes`. This is the Mem0 ADD/UPDATE/NOOP loop with the
   decision moved to the caller, which is the only place an LLM exists.
-- `supersedes` sets the old record's `superseded_by`, `invalid_at = new.valid_from`,
-  `invalid_reason = "superseded"` in the **same transaction** as the insert.
+- `supersedes` is a **list**, and sets each named record's `superseded_by`,
+  `invalid_at = new.valid_from`, `invalid_reason = "superseded"` in the **same
+  transaction** as the insert. One id is a correction; several is a merge —
+  a duplicate cluster replaced by the one wording worth keeping, in one call.
+  Without that, closing the rest of a cluster means `forget`, which takes the
+  correction history with it (issue #42).
 - `forget` by query without `dry_run: true` first is rejected — destructive
   ops confirm scope by construction, not by convention.
 - Every write records `source` (episode link when the episode is provided in
@@ -664,7 +668,7 @@ remember(params)
  5. one transaction:
       episode? → insert episode + chunks (chunk.rs) + chunk embeddings
       inserts  → CREATE memory:ulid() CONTENT {...}, source.ref → episode
-      supersedes? → UPDATE old SET superseded_by, invalid_at, invalid_reason
+      supersedes? → UPDATE [old…] SET superseded_by, invalid_at, invalid_reason
  6. → { created, duplicates, related, superseded, episode } (structured diff)
 ```
 
@@ -869,7 +873,7 @@ rather than details:
   question each answers — "could one of these be deleted" against "which of
   these is true" — and the shared entity, which a cluster does not require.
 - **A cluster is a transitive closure, and reports its weakest pair.** One
-  group is one `remember(supersedes: …)` call; pairwise candidates would make
+  group is one `remember(supersedes: [ … ])` call; pairwise candidates would make
   the agent reconcile N overlapping merges for one three-way duplicate. The
   cost is chaining — A close to B close to C, with A and C unrelated — so
   `min_similarity` is measured over *every* pair in the group, not over the
@@ -1056,3 +1060,20 @@ Each phase is releasable; later phases only add.
     `supersedes`, and 0.9999998 and 1.0 answer that question identically. The
     schema now says the reading is a cosine and that identical text lands just
     short of 1.0, which is what the README already said.
+11. Found at #25 and measured at the `consolidate_write` eval: **a singular
+    `supersedes` made a merge unachievable**, so `consolidate`'s own
+    `near_duplicates` prescribed a call that only worked for a pair. One id per
+    memory means a three-way cluster closes one member by supersession, and the
+    second `remember` carrying the same merged wording is blocked by the
+    near-dup gate before `insert_batch` ever sees its `supersedes` — so the rest
+    can only be closed with `forget`, which is what agents did: 11 of 13
+    closures in `docs/eval/consolidate-write/` were forgotten, one supersession
+    per run, and a genuine correction was recorded as a deletion. **Closed at
+    #42 by making the field a list** (schema v3), rather than by rewording:
+    three wording batches on `consolidate` had already measured 0/3, and the
+    lever in this project has twice been the surface rather than the
+    description. `superseded_by` stays singular — a merge is many claims closed
+    by one survivor — so only the backwards history walk widens, from a chain
+    into a tree. Rejected: letting a near-dup-blocked memory apply its
+    `supersedes` anyway, which would make "already stored" and "closed the old
+    one" the same call.

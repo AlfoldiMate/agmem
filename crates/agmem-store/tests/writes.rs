@@ -271,7 +271,7 @@ async fn supersession_closes_the_old_row_and_keeps_it_readable() {
 
     let boundary: jiff::Timestamp = "2026-08-28T09:00:00Z".parse().expect("timestamp");
     let mut correction = NewMemory::new(Kind::Fact, "the user prefers Rust");
-    correction.supersedes = Some(old.clone());
+    correction.supersedes = vec![old.clone()];
     correction.valid_from = Some(boundary);
     let outcome = repo::insert_batch(&db, batch(vec![correction]))
         .await
@@ -302,11 +302,108 @@ async fn supersession_closes_the_old_row_and_keeps_it_readable() {
     assert_eq!(
         column::<String>(
             &db,
-            "SELECT VALUE record::id(supersedes) FROM memory WHERE supersedes IS NOT NONE"
+            "SELECT VALUE array::join(array::map(supersedes, |$l| record::id($l)), ',')
+             FROM memory WHERE array::len(supersedes) > 0"
         )
         .await,
         [old.to_string()],
         "and the successor points back"
+    );
+}
+
+#[tokio::test]
+async fn one_claim_closes_a_whole_duplicate_cluster() {
+    let db = store().await;
+    let cluster = repo::insert_batch(
+        &db,
+        batch(vec![
+            NewMemory::new(Kind::Fact, "deploys go out on Friday"),
+            NewMemory::new(Kind::Fact, "the team deploys on Fridays"),
+            NewMemory::new(Kind::Fact, "Friday is deploy day"),
+        ]),
+    )
+    .await
+    .expect("the cluster")
+    .memories
+    .into_iter()
+    .map(Written::into_id)
+    .collect::<Vec<_>>();
+
+    let mut merged = NewMemory::new(Kind::Fact, "the team deploys every Friday");
+    merged.supersedes = cluster.clone();
+    let outcome = repo::insert_batch(&db, batch(vec![merged]))
+        .await
+        .expect("the merge");
+    let survivor = outcome.memories[0].id().clone();
+
+    assert_eq!(outcome.superseded, cluster, "all three were closed");
+    assert_eq!(
+        column::<String>(
+            &db,
+            "SELECT VALUE content FROM memory WHERE invalid_at IS NONE"
+        )
+        .await,
+        ["the team deploys every Friday"],
+        "one wording survives the merge"
+    );
+    assert_eq!(
+        column::<String>(
+            &db,
+            "SELECT VALUE record::id(superseded_by) FROM memory
+             WHERE invalid_reason = 'superseded' ORDER BY content"
+        )
+        .await,
+        vec![survivor.to_string(); 3],
+        "every closed member points at the one survivor — none of them was forgotten"
+    );
+
+    // The whole point of a merge over three `forget` calls: the history is
+    // still walkable, in both directions, from any member.
+    let chain = repo::history_chain(&db, &space(), &cluster[0])
+        .await
+        .expect("the chain");
+    assert_eq!(
+        chain.len(),
+        2,
+        "one closed member and the claim that replaced it"
+    );
+    assert_eq!(chain[1].id, survivor);
+    assert_eq!(chain[1].supersedes, cluster, "the survivor names all three");
+}
+
+#[tokio::test]
+async fn a_merge_is_refused_whole_when_one_member_does_not_exist() {
+    let db = store().await;
+    let live = repo::insert_batch(
+        &db,
+        batch(vec![NewMemory::new(Kind::Fact, "deploys go out on Friday")]),
+    )
+    .await
+    .expect("the live row")
+    .memories
+    .remove(0)
+    .into_id();
+
+    let mut merged = NewMemory::new(Kind::Fact, "the team deploys every Friday");
+    merged.supersedes = vec![
+        live.clone(),
+        MemoryId::new("01M145SMNET1XRYA713EWAQTD3").expect("a ULID"),
+    ];
+    let error = repo::insert_batch(&db, batch(vec![merged]))
+        .await
+        .expect_err("one member is not in this space");
+    assert!(
+        matches!(error, StoreError::UnknownMemory { .. }),
+        "{error:?} names the missing id"
+    );
+    assert_eq!(
+        column::<String>(
+            &db,
+            "SELECT VALUE content FROM memory WHERE invalid_at IS NONE"
+        )
+        .await,
+        ["deploys go out on Friday"],
+        "and nothing was closed or written"
     );
 }
 
@@ -406,7 +503,7 @@ async fn a_supersedes_target_outside_this_space_is_rejected_before_anything_is_w
         MemoryId::new("01M145SMNET1XRYA713EWAQTD3").expect("valid ulid"),
     ] {
         let mut correction = NewMemory::new(Kind::Fact, "a claim in this space");
-        correction.supersedes = Some(target.clone());
+        correction.supersedes = vec![target.clone()];
         let error = repo::insert_batch(&db, batch(vec![correction]))
             .await
             .expect_err("an unreachable target must be refused");

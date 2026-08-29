@@ -87,7 +87,9 @@ pub(crate) const MAX_POOL: usize = 1_000;
 /// How far a history walk follows `supersedes`/`superseded_by`.
 ///
 /// Chains are a handful of links in practice; the bound is what stops a cycle
-/// introduced by a hand-edited store from walking forever.
+/// introduced by a hand-edited store from walking forever. It bounds *depth*,
+/// not width: `supersedes` is a list, so the backwards half is a tree whenever
+/// a claim was written to merge several.
 const MAX_CHAIN: usize = 64;
 
 /// Every `memory` column a read projects, minus `embedding` (see
@@ -95,7 +97,7 @@ const MAX_CHAIN: usize = 64;
 const MEMORY_FIELDS: &str = "record::id(id) AS id, space, kind, content, content_hash,
      entities, tags, decay_class, <float> strength AS strength, last_accessed,
      access_count, valid_from, invalid_at, invalid_reason,
-     IF supersedes IS NONE { NONE } ELSE { record::id(supersedes) } AS supersedes,
+     array::map(supersedes ?? [], |$link| record::id($link)) AS supersedes,
      IF superseded_by IS NONE { NONE } ELSE { record::id(superseded_by) } AS superseded_by,
      source.kind AS source_kind,
      IF type::is_record(source.ref) { record::id(source.ref) } ELSE { source.ref }
@@ -260,7 +262,10 @@ pub(crate) fn count_matching(lookup: &Lookup) -> String {
 ///
 /// `{..N+collect}` follows a record link repeatedly and gathers what it
 /// passed through, so both halves of the chain are one walk each rather than
-/// one round-trip per link.
+/// one round-trip per link. It follows a list the same way it follows a single
+/// link, which is what makes a merge — one claim closing several — walk back to
+/// every wording it replaced, breadth first. Reversing that puts the furthest
+/// ancestors first, so "oldest first" survives a chain that is really a tree.
 pub(crate) fn history_chain() -> Script {
     let mut builder = Builder::plain();
     builder.push(format!(

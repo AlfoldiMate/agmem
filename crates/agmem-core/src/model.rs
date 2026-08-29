@@ -482,8 +482,10 @@ pub struct MemoryRecord {
     pub invalid_at: Option<Timestamp>,
     /// Why it stopped being live.
     pub invalid_reason: Option<InvalidReason>,
-    /// The memory this one replaced.
-    pub supersedes: Option<MemoryId>,
+    /// The memories this one replaced. Usually one; several when a claim was
+    /// written to merge a cluster of duplicates into a single surviving
+    /// wording. Every one of them points back here through `superseded_by`.
+    pub supersedes: Vec<MemoryId>,
     /// The memory that replaced this one.
     pub superseded_by: Option<MemoryId>,
     /// Provenance.
@@ -696,7 +698,7 @@ mod tests {
             valid_from: Timestamp::UNIX_EPOCH,
             invalid_at: None,
             invalid_reason: None,
-            supersedes: None,
+            supersedes: Vec::new(),
             superseded_by: None,
             source: Source::Episode {
                 episode: EpisodeId::new("01M145SMNET1XRYA713EWAQTD3").unwrap(),

@@ -179,9 +179,11 @@ pub struct MemoryView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub invalid_reason: Option<String>,
 
-    /// The claim this one corrected.
+    /// The claims this one corrected — several when it merged a duplicate
+    /// cluster into one wording. Absent, not empty, when it corrected nothing
+    /// (see the `derived_from` note above on why this is `Option`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub supersedes: Option<String>,
+    pub supersedes: Option<Vec<String>>,
 
     /// The claim that corrected this one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -603,7 +605,8 @@ impl From<MemoryRecord> for MemoryView {
             invalid_reason: memory
                 .invalid_reason
                 .map(|reason| reason.as_str().to_owned()),
-            supersedes: memory.supersedes.map(Into::into),
+            supersedes: (!memory.supersedes.is_empty())
+                .then(|| memory.supersedes.iter().map(ToString::to_string).collect()),
             superseded_by: memory.superseded_by.map(Into::into),
             created_at: memory.created_at.to_string(),
         }

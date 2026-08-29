@@ -229,7 +229,7 @@ async fn a_closed_memory_is_invisible_until_the_window_asks_for_it() {
     let db = seeded().await;
     let old = live_id(&db, "the user prefers Rust").await;
     let mut correction = NewMemory::new(Kind::Fact, "the user now prefers Rust over Go");
-    correction.supersedes = Some(old.clone());
+    correction.supersedes = vec![old.clone()];
     correction.valid_from = Some(stamp(CORRECTED_AT));
     repo::insert_batch(
         &db,
@@ -411,7 +411,7 @@ async fn a_count_answers_for_the_whole_selection_a_limit_only_pages() {
 
     let old = live_id(&db, "the user prefers Rust").await;
     let mut correction = NewMemory::new(Kind::Fact, "the user now prefers Rust over Go");
-    correction.supersedes = Some(old);
+    correction.supersedes = vec![old];
     correction.valid_from = Some(stamp(CORRECTED_AT));
     repo::insert_batch(
         &db,
@@ -441,7 +441,7 @@ async fn a_history_walk_returns_the_whole_chain_from_any_link() {
     let db = seeded().await;
     let first = live_id(&db, "the user prefers Rust").await;
     let mut second = NewMemory::new(Kind::Fact, "the user prefers Rust over Go");
-    second.supersedes = Some(first.clone());
+    second.supersedes = vec![first.clone()];
     second.valid_from = Some(stamp(CORRECTED_AT));
     let second = repo::insert_batch(
         &db,
@@ -457,7 +457,7 @@ async fn a_history_walk_returns_the_whole_chain_from_any_link() {
     .remove(0)
     .into_id();
     let mut third = NewMemory::new(Kind::Fact, "the user prefers Rust over everything");
-    third.supersedes = Some(second.clone());
+    third.supersedes = vec![second.clone()];
     let third = repo::insert_batch(
         &db,
         Batch {
@@ -560,7 +560,7 @@ async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
     // otherwise re-stating a claim that was already corrected would come back
     // as a duplicate of the version that is no longer true.
     let mut correction = NewMemory::new(Kind::Fact, "the user prefers Rust over Go");
-    correction.supersedes = Some(profile.clone());
+    correction.supersedes = vec![profile.clone()];
     correction.embedding = Some(axis(3));
     repo::insert_batch(
         &db,

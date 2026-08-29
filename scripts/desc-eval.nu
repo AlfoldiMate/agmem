@@ -675,8 +675,9 @@ def run-one [
             $calls
             | where tool == "remember"
             | each {|call|
-                $call.input.memories? | default [] | each {|memory| $memory.supersedes?}
+                $call.input.memories? | default [] | each {|memory| $memory | supersedes-ids}
             }
+            | flatten
             | flatten
         )
         ++ ($calls | where tool == "forget" | each {|call| $call.input.ids? | default []} | flatten)
@@ -718,7 +719,7 @@ def run-one [
             | any {|call|
                 $call.input.memories?
                 | default []
-                | any {|memory| "supersedes" in ($memory | columns)}
+                | any {|memory| ($memory | supersedes-ids | is-not-empty)}
             }
         )
         # Whether an insight was actually *stored* with its evidence, rather
@@ -824,6 +825,17 @@ def run-one [
 # session that worked as one that had no server.
 def init-events [] {
     $in | where type == "system" and ($it.subtype? | default "") == "init"
+}
+
+# The ids one `remember`/`reflect` entry asked to close, always as a list.
+#
+# `supersedes` became a list at #42 so that a merge closes a whole cluster in
+# one call. Runs recorded before that carry a bare string, and those batches
+# still have to summarise — so both shapes are read here rather than at each of
+# the two call sites.
+def supersedes-ids [] {
+    let asked = ($in.supersedes? | default [])
+    if (($asked | describe | str starts-with "list")) { $asked } else { [$asked] }
 }
 
 # The agmem tool calls in a session's event stream, in the order they happened.

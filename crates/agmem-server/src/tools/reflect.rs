@@ -55,10 +55,13 @@ pub struct ReflectParams {
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// The id of a live claim this insight replaces. The old one is closed and
-    /// stays readable and dated; only the correction is live afterwards.
+    /// The ids of the live claims this insight replaces. Each one is closed
+    /// and stays readable and dated; only the insight is live afterwards.
+    ///
+    /// Several at once is a merge: one cited conclusion standing in for every
+    /// uncited wording of it, closed in the same call rather than forgotten.
     #[serde(default)]
-    pub supersedes: Option<String>,
+    pub supersedes: Vec<String>,
 }
 
 /// What the call stored.
@@ -73,7 +76,7 @@ pub struct ReflectResult {
     /// `false` means an equivalent insight was already stored and nothing
     /// changed. Read `content`: if it says something other than what you sent,
     /// yours is a correction rather than a repetition, and it is still unsaid
-    /// until you send it again with `supersedes` set to `id`.
+    /// until you send it again with `id` in `supersedes`.
     pub created: bool,
 
     /// What is stored under `id` — your wording when it was written, the
@@ -92,13 +95,13 @@ pub struct ReflectResult {
     /// These were **not** blocked and are not duplicates — they are here
     /// because a correction and the claim it corrects are near neighbours, and
     /// this is the only moment the older one's id is in front of you. If one
-    /// of them is what your insight replaces, send the insight again with
-    /// `supersedes` set to its id. If it is merely related, ignore it.
+    /// of them is what your insight replaces, send the insight again with its
+    /// id in `supersedes` — several ids if several of them are the same claim
+    /// worded differently. If it is merely related, ignore it.
     pub related: Vec<Related>,
 
-    /// The id of the claim closed by a `supersedes` in this call.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub superseded: Option<String>,
+    /// The ids of the claims closed by a `supersedes` in this call.
+    pub superseded: Vec<String>,
 
     /// What to do about a write that did not happen, when there is something
     /// worth doing.
@@ -115,7 +118,7 @@ pub struct ReflectResult {
 /// A live claim near the insight that was just stored.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Related {
-    /// The id of the older claim — what `supersedes` would take.
+    /// The id of the older claim — what to put in `supersedes`.
     pub id: String,
 
     /// What it says, so the two can be judged without a second lookup.
@@ -160,10 +163,14 @@ pub async fn run(
     memory.entities = entities;
     memory.tags = tags;
     memory.derived_from = cited.clone();
-    memory.supersedes = supersedes
-        .as_deref()
-        .map(|id| memory_id(id, "supersedes"))
-        .transpose()?;
+    // A repeated id is one closure, not two — the field is the set of claims
+    // this insight replaces, the same way `derived_from` is a set of citations.
+    for (position, raw) in supersedes.iter().enumerate() {
+        let id = memory_id(raw, &format!("supersedes[{position}]"))?;
+        if !memory.supersedes.contains(&id) {
+            memory.supersedes.push(id);
+        }
+    }
 
     // 2. One vector for the one claim, unless the embedder has none to give.
     if service.embedder().dim() > 0 {
@@ -180,7 +187,7 @@ pub async fn run(
     //    call carrying `supersedes` skips it — the judgement is already made,
     //    and a correction reads much like what it corrects.
     let mut related = Vec::new();
-    if let (None, Some(probe)) = (&memory.supersedes, &memory.embedding) {
+    if let (true, Some(probe)) = (memory.supersedes.is_empty(), &memory.embedding) {
         let neighbours = repo::nearest_live(service.db(), &space, std::slice::from_ref(probe))
             .await
             .map_err(|error| store_error(&error))?;
@@ -193,7 +200,7 @@ pub async fn run(
                     content: neighbour.content,
                     derived_from: Vec::new(),
                     related: Vec::new(),
-                    superseded: None,
+                    superseded: Vec::new(),
                     note,
                 });
             }
@@ -245,7 +252,7 @@ pub async fn run(
             Vec::new()
         },
         related: if created { related } else { Vec::new() },
-        superseded: outcome.superseded.first().map(ToString::to_string),
+        superseded: outcome.superseded.iter().map(ToString::to_string).collect(),
         note,
     })
 }
@@ -272,10 +279,10 @@ async fn uncited(service: &AgmemService, space: &SpaceName, id: &MemoryId) -> Op
     }
     Some(format!(
         "Nothing was written: memory:{id} already says this, and it carries no \
-         evidence of its own. Send this insight again with `supersedes` set to \
-         that id to store the same conclusion with its citations attached — a \
-         stored claim is never rewritten, so superseding it is the only way to \
-         give it provenance."
+         evidence of its own. Send this insight again with that id in \
+         `supersedes` to store the same conclusion with its citations attached \
+         — a stored claim is never rewritten, so superseding it is the only way \
+         to give it provenance."
     ))
 }
 

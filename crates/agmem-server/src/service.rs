@@ -333,14 +333,15 @@ accumulated a lot. It is a maintenance verb, not a search one — to find a part
 `recall`.\n\n\
 Three lists come back, and every claim in each carries its full text rather than only its id, so \
 you can judge it here instead of looking it up:\n\n\
-- `near_duplicates` — groups of live claims saying the same thing. Merge a group by calling \
-`remember` with the one wording worth keeping and `supersedes` set to the id it replaces. Read \
-`min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest \
-link, so a low number means the group chained together through a middle claim and may not be one \
-claim at all.\n\
+- `near_duplicates` — groups of live claims saying the same thing. Merge a group with one \
+`remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other \
+member. `supersedes` takes a list, so a group of any size closes in that single call — reaching \
+for `forget` instead deletes the history the merge exists to keep. Read `min_similarity` before \
+you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means \
+the group chained together through a middle claim and may not be one claim at all.\n\
 - `contradictions` — pairs about the same subject that are close without being the same. Nothing \
 here has judged that they disagree; read both and decide. When one of them is wrong, send the \
-right one with `supersedes` set to the wrong one's id.\n\
+right one with the wrong one's id in `supersedes`.\n\
 - `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point \
 their class would have expired them. If one turned out to be durable, store it again with a \
 slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n\n\

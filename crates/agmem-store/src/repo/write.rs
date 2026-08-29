@@ -39,8 +39,13 @@ pub struct NewMemory {
     pub decay_class: Option<DecayClass>,
     /// When the claim started being true; defaults to write time.
     pub valid_from: Option<Timestamp>,
-    /// The live memory this one closes, if any.
-    pub supersedes: Option<MemoryId>,
+    /// The live memories this one closes; empty for a plain write.
+    ///
+    /// More than one is a *merge*: several wordings of the same claim replaced
+    /// by the one worth keeping, each closed with its own `superseded_by`
+    /// pointing here. Without that, closing the rest of a cluster would mean
+    /// `forget`, which takes the history with it.
+    pub supersedes: Vec<MemoryId>,
     /// Provenance; `None` means the batch's episode, or `agent` without one.
     pub source: Option<Source>,
     /// The memories and episodes this claim was reflected out of.
@@ -63,7 +68,7 @@ impl NewMemory {
             embedding: None,
             decay_class: None,
             valid_from: None,
-            supersedes: None,
+            supersedes: Vec::new(),
             source: None,
             derived_from: Vec::new(),
         }
@@ -185,7 +190,7 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
 
     let targets: Vec<&MemoryId> = memories
         .iter()
-        .filter_map(|memory| memory.supersedes.as_ref())
+        .flat_map(|memory| memory.supersedes.iter())
         .collect();
     ensure_memories_exist(db, &space, &targets).await?;
 
@@ -193,7 +198,7 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
         .iter()
         .map(|memory| MemoryShape {
             source_is_batch_episode: memory.source.is_none() && episode.is_some(),
-            supersedes: memory.supersedes.as_ref(),
+            supersedes: &memory.supersedes,
         })
         .collect();
     let script = queries::insert_batch(&shapes, episode.is_some());
@@ -245,7 +250,7 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
                         .unwrap_or_else(|| memory.kind.default_decay_class()),
                 ),
                 valid_from: types::to_datetime(memory.valid_from.unwrap_or_else(now)),
-                supersedes: memory.supersedes.as_ref().map(types::memory_ref),
+                supersedes: memory.supersedes.iter().map(types::memory_ref).collect(),
                 derived_from: memory
                     .derived_from
                     .iter()
@@ -257,8 +262,9 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
             let source = memory.source.clone().unwrap_or(Source::Agent);
             query = query.bind((format!("src{index}"), SourceRow::new(&source)));
         }
-        if let Some(old) = &memory.supersedes {
-            query = query.bind((format!("old{index}"), types::memory_ref(old)));
+        if !memory.supersedes.is_empty() {
+            let old: Vec<RecordId> = memory.supersedes.iter().map(types::memory_ref).collect();
+            query = query.bind((format!("old{index}"), old));
         }
     }
 
@@ -281,7 +287,7 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
         .iter()
         .zip(&outcomes)
         .filter(|(_, outcome)| outcome.is_created())
-        .filter_map(|(memory, _)| memory.supersedes.clone())
+        .flat_map(|(memory, _)| memory.supersedes.iter().cloned())
         .collect();
     Ok(BatchOutcome {
         episode: row

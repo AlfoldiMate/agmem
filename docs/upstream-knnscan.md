@@ -7,6 +7,40 @@ mitigation agmem ships is in `crates/agmem-store/src/queries/read.rs`
 Nothing below is inferred: every number was measured on this machine, and the
 one thing the EXPLAIN does *not* show is called out as such.
 
+## Status — 2026-08-29: re-verified, and filed as a comment on #7423
+
+**Filed**: https://github.com/surrealdb/surrealdb/issues/7423#issuecomment-5463333261
+
+The live upstream issue is **surrealdb/surrealdb#7423** (open, 2026-07-17):
+same symptom, embedded surrealkv, 3.2.x. It holds delete/overwrite churn —
+element/doc id recycling plus compaction — to be the precondition, and reports
+**0 strong drops** for the write-only, close-reopen, filtered-query-first
+protocol. Our case is that protocol, and it drops — which is why this went
+there as a comment rather than as a new issue.
+
+Re-measured today against a **copy** of the repro store
+(`~/.local/share/agmem-repro/recall-omits-live-row/`), through the `surreal`
+CLI 3.2.3 — a different process from the one that wrote it — with the three
+real BGE query vectors committed in
+`crates/agmem-server/tests/fixtures/knn_underreturn.json`. All three read the
+same, and the store holds **2 memories, 0 invalidated, 1 episode, 1 chunk**:
+nothing in it was ever deleted, superseded or overwritten.
+
+| arm | rows (all 3 queries) |
+|---|---|
+| `space IN $spaces AND invalid_at IS NONE AND` + KNN | 1 |
+| `1 = 1 AND` + KNN | 1 |
+| `invalid_at IS NONE AND` + KNN | 1 |
+| KNN alone | **2** |
+| filtered again, same connection | **2** |
+| subquery mitigation | **2** |
+
+**The rebuilt-store path still does not reproduce it**, and that is the sharpest
+clue in here rather than a caveat: `knn_probe.rs`'s
+`a_cold_filtered_arm_finds_both_rows` writes those same two rows with those same
+vectors into a fresh store and passes **6 runs out of 6**. Whatever the fault
+needs, it is in what the engine left on disk, not in the rows.
+
 ---
 
 ## Title
@@ -34,25 +68,33 @@ The state is **per connection**, and only an *unfiltered* KNN clears it:
 - unfiltered → complete
 - filtered again, same connection → now complete, and stays that way
 
-It reproduces on a datastore **opened from disk by a process that did not write
-it**. A store seeded and queried on the same connection does not show it, which
-is presumably why it is easy to miss: the index built in-process is already in
-whatever state the unfiltered scan otherwise produces.
+It reproduces on a datastore read by a **connection that did not write it**. A
+store seeded and queried on the same connection does not show it, which is
+presumably why it is easy to miss: the index built on that connection is
+already in whatever state the unfiltered scan otherwise produces.
 
 ## Reproduction
 
 Schema (the relevant part):
 
 ```surql
-DEFINE FIELD embedding ON memory TYPE option<array<float, 384>>;
-DEFINE INDEX mem_vec ON memory FIELDS embedding
-    HNSW DIMENSION 384 DIST COSINE TYPE F32;
+DEFINE FIELD embedding ON memory TYPE option<array<float>>;
+DEFINE INDEX mem_vec ON memory FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 ```
 
-1. In **process A**: create the store, insert two rows into `space = 'eval'`,
-   each with a 384-float embedding. Close the process.
-2. In **process B**, opening the same data directory, run these in order on one
-   connection, with `$vector` a 384-float probe:
+(That is agmem's shipped definition, verbatim from
+`crates/agmem-store/src/migrations/v1_schema.surql` — an earlier draft of this
+file quoted a `array<float, 384>` / `TYPE F32` variant that has never been in
+the tree. Corrected 2026-08-29 before filing.)
+
+The committed probe is `crates/agmem-server/tests/knn_probe.rs`
+(`a_cold_filtered_arm_finds_both_rows`, `--ignored`); it fails while the fault
+is present, and its failure list is the measurement.
+
+1. Write two rows into `space = 'probe'`, each with a 384-float embedding, on a
+   connection that is **closed** afterwards. No deletes, no overwrites.
+2. On a **fresh** connection to the same datastore, run these in order, with
+   `$vector` a 384-float probe:
 
 ```surql
 LET $spaces = ['eval'];

@@ -595,15 +595,18 @@ remember(params)
     conflict aborts the whole transaction, so a duplicate must never reach it
  3. embed all new contents + episode chunks in one batch
                                                    (spawn_blocking, passage: prefix)
- 4. near-dup gate: HNSW top-1 among live memories in space
-    cosine ≥ 0.95                                  → report {id, similarity}; skip insert
+ 4. near-dup gate: HNSW top-4 among live memories in space — one pass, two answers
+    cosine ≥ 0.95        → duplicates: {id, of, content, similarity}; skip insert
+    0.75 ≤ cosine < 0.95 → related:    {id, of, content, similarity}; insert anyway
+    both carry `content`, because the agent's decision is between a no-op and a
+    correction and an id alone cannot be read (issue #38)
     skipped when the memory carries `supersedes` — the agent has already made
     the ADD/UPDATE call, and a correction usually *is* close to what it corrects
  5. one transaction:
       episode? → insert episode + chunks (chunk.rs) + chunk embeddings
       inserts  → CREATE memory:ulid() CONTENT {...}, source.ref → episode
       supersedes? → UPDATE old SET superseded_by, invalid_at, invalid_reason
- 6. → { created, duplicates, superseded, episode } (structured diff, Spectron-style)
+ 6. → { created, duplicates, related, superseded, episode } (structured diff)
 ```
 
 ### 5.3 Read path (`recall`)
@@ -886,10 +889,18 @@ Each phase is releasable; later phases only add.
    the `checkpoint` ritual *does* look — and was getting an empty answer for a
    claim that was live in the store, because the fulltext arm ANDed the words
    of the question (item 7). With that fixed, `ritual_correct` supersedes 3/3.
-   What is left is the path with no ritual, where the agent never looks:
-   **issue #38** — have `remember` return contradiction candidates the way it
-   already returns near-duplicates — is now a convenience for that path rather
-   than a correctness gap.
+   What was left was the path with no ritual, where the agent never looks.
+   **Closed at #38**, and the closing measurement corrected the issue's own
+   premise. Re-measured once retrieval worked, `correct` was still 0/3 at
+   **1.00 tool calls a run** — the agent never called `recall`, so retrieval
+   had never been what failed it. Handing back a `related` band of 0.75–0.95
+   neighbours took it to 1/3. What took it to **3/3** was giving `duplicates`
+   the same `content` the band carries: in 5 of 6 runs the correction scored
+   ≥0.95 against the claim it corrected, so it was *blocked as a duplicate*,
+   and the agent — shown an id, a number, and no text — answered "already
+   noted" while the wrong claim stayed live. A correction is usually a near
+   duplicate of what it corrects; the gate was not too loose, its report was
+   unreadable. Numbers in `docs/eval/{knn-fixed,related,related-dups}/`.
 7. Found at #22, diagnosed as **two faults** at #39. First, **`@N@` ANDs its
    terms**, so the fulltext half of "hybrid BM25 + vector" returned nothing for
    any question carrying a word the stored claim does not — which is every

@@ -103,16 +103,52 @@ pub struct RememberResult {
     /// positions reported in `duplicates`.
     pub created: Vec<String>,
 
-    /// The claims that were already stored. Nothing was written for these:
-    /// accept that as a no-op, or re-send the claim with `supersedes` set to
-    /// the id here if it is genuinely a correction.
+    /// The claims judged already stored. Nothing was written for these.
+    ///
+    /// **Read `content` before treating one as a no-op.** A correction is
+    /// usually worded much like the claim it corrects, so it lands here too —
+    /// and then nothing has changed, the older and now-wrong claim is what is
+    /// still live, and saying "already noted" would be false. If `content`
+    /// says something other than what you sent, re-send yours with
+    /// `supersedes` set to the id here.
     pub duplicates: Vec<Duplicate>,
+
+    /// Live claims about the same subject as something you just stored, which
+    /// the new claim may contradict.
+    ///
+    /// These were **written** — they are not duplicates and nothing was
+    /// blocked. They are here because a correction and the claim it corrects
+    /// are near neighbours, and this is the only moment the id of the older
+    /// one is in front of you. If one of these is now wrong, re-send the new
+    /// claim with `supersedes` set to its id: that closes the old one instead
+    /// of leaving both live and contradicting each other. If it is merely
+    /// related, ignore it.
+    pub related: Vec<Related>,
 
     /// Ids of the memories closed by a `supersedes` in this call.
     pub superseded: Vec<String>,
 
     /// Id of the episode, whether it was written now or already stored.
     pub episode: Option<String>,
+}
+
+/// A live claim near one that was just stored.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Related {
+    /// The id of the older memory — what `supersedes` would take.
+    pub id: String,
+
+    /// Which entry of the `memories` you sent this is a neighbour of,
+    /// zero-based.
+    pub of: usize,
+
+    /// What the older memory says, so the contradiction can be judged without
+    /// a second lookup.
+    pub content: String,
+
+    /// Cosine similarity between the two, below the duplicate threshold and
+    /// above the floor for being worth mentioning at all.
+    pub similarity: f64,
 }
 
 /// A claim that was already in the store.
@@ -123,6 +159,15 @@ pub struct Duplicate {
 
     /// Which entry of the `memories` you sent this refers to, zero-based.
     pub of: usize,
+
+    /// What the stored memory actually says.
+    ///
+    /// Compare it against what you sent: if it says something different, this
+    /// is a claim you are correcting rather than one you are repeating, and it
+    /// is still live until you re-send yours with `supersedes` set to `id`.
+    /// In BM25-only mode this is your own text, which matched exactly once
+    /// case and whitespace were folded.
+    pub content: String,
 
     /// How close the two are, as cosine similarity.
     ///
@@ -188,23 +233,43 @@ pub async fn run(
         .await
         .map_err(|error| store_error(&error))?;
 
+    //    The same pass answers a second question (issue #38): the neighbours
+    //    below the duplicate threshold but above the floor are claims the new
+    //    one may be correcting, and this is the only moment their ids are in
+    //    front of an agent that never called `recall`.
     let mut duplicates: Vec<Duplicate> = Vec::new();
+    let mut related: Vec<Related> = Vec::new();
     let mut blocked = vec![false; new_memories.len()];
-    for (index, neighbour) in gated.into_iter().zip(neighbours) {
-        if let Some(neighbour) = neighbour
-            && dedup::is_near_duplicate(neighbour.similarity)
-        {
-            blocked[index] = true;
-            duplicates.push(Duplicate {
-                id: neighbour.id.to_string(),
-                of: index,
-                similarity: neighbour.similarity,
-            });
+    for (index, neighbours) in gated.into_iter().zip(neighbours) {
+        for neighbour in neighbours {
+            if dedup::is_near_duplicate(neighbour.similarity) {
+                blocked[index] = true;
+                duplicates.push(Duplicate {
+                    id: neighbour.id.to_string(),
+                    of: index,
+                    content: neighbour.content,
+                    similarity: neighbour.similarity,
+                });
+            } else if dedup::is_correction_candidate(neighbour.similarity) {
+                related.push(Related {
+                    id: neighbour.id.to_string(),
+                    of: index,
+                    content: neighbour.content,
+                    similarity: neighbour.similarity,
+                });
+            }
         }
     }
 
     // 4. One transaction for what survived. All of it duplicate and no episode
     //    means there is nothing to write at all.
+    // The batch is consumed below, and a *hash* duplicate has no neighbour row
+    // to quote the stored text from — but it matched the hash, so what was
+    // sent is that text once case and whitespace are folded.
+    let sent: Vec<String> = new_memories
+        .iter()
+        .map(|memory| memory.content.clone())
+        .collect();
     let kept: Vec<usize> = (0..new_memories.len())
         .filter(|index| !blocked[*index])
         .collect();
@@ -216,9 +281,12 @@ pub async fn run(
         .collect();
     if batch.is_empty() && new_episode.is_none() {
         duplicates.sort_by_key(|duplicate| duplicate.of);
+        // Every memory was blocked, so nothing was written and nothing can be
+        // correcting anything.
         return Ok(RememberResult {
             created: Vec::new(),
             duplicates,
+            related: Vec::new(),
             superseded: Vec::new(),
             episode: None,
         });
@@ -251,15 +319,27 @@ pub async fn run(
             Written::Duplicate(id) => duplicates.push(Duplicate {
                 id: id.to_string(),
                 of,
+                content: sent.get(of).cloned().unwrap_or_default(),
                 similarity: 1.0,
             }),
         }
     }
     duplicates.sort_by_key(|duplicate| duplicate.of);
 
+    // Nothing was written for a duplicate — by the vector gate above or by the
+    // content hash just now — so it has nothing to contradict anything with,
+    // and what it would have corrected is the duplicate entry's business.
+    related.retain(|candidate| {
+        !duplicates
+            .iter()
+            .any(|duplicate| duplicate.of == candidate.of)
+    });
+    related.sort_by_key(|candidate| candidate.of);
+
     Ok(RememberResult {
         created,
         duplicates,
+        related,
         superseded: outcome.superseded.iter().map(ToString::to_string).collect(),
         episode: outcome.episode.map(|written| written.into_id().to_string()),
     })

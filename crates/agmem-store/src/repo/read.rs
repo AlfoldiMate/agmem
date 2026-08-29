@@ -155,6 +155,10 @@ pub struct Candidate {
 pub struct Neighbour {
     /// The memory already in the store.
     pub id: MemoryId,
+    /// What that memory says — the gate's caller hands this to an agent
+    /// deciding whether the new claim corrects it, and an id is not something
+    /// to decide on.
+    pub content: String,
     /// Cosine similarity: 1.0 for an identical vector, 0.0 for an orthogonal
     /// one. Converted from the engine's distance by [`dedup`], so the gate and
     /// its threshold speak the same units.
@@ -279,14 +283,19 @@ pub async fn direct_lookup(db: &Db, lookup: &Lookup) -> Result<Vec<MemoryRecord>
     rows.into_iter().map(MemoryReadRow::into_record).collect()
 }
 
-/// The nearest live memory in `space` to each of `vectors`, in input order.
+/// The nearest live memories in `space` to each of `vectors`, closest first,
+/// in input order.
 ///
 /// The near-dup gate of the write path (design §5.2 step 4): a memory whose
 /// nearest live neighbour is close enough is the same claim in different
-/// words, and `remember` reports it instead of storing it again. Deciding
-/// *how* close is [`dedup::is_near_duplicate`]'s; this only measures.
+/// words, and `remember` reports it instead of storing it again. The
+/// neighbours behind it are the correction band (issue #38) — same subject,
+/// different statement — reported so the agent has the id of what it may be
+/// contradicting. Deciding *how* close either is belongs to
+/// [`dedup::is_near_duplicate`] and [`dedup::is_correction_candidate`]; this
+/// only measures.
 ///
-/// `None` in a slot means the space holds no vector to compare against yet.
+/// An empty slot means the space holds no vector to compare against yet.
 /// Every vector must be the width the schema's HNSW indexes were defined at —
 /// the engine rejects any other at query time — so callers running without an
 /// embedder pass nothing here rather than passing empty vectors.
@@ -298,7 +307,7 @@ pub async fn nearest_live(
     db: &Db,
     space: &SpaceName,
     vectors: &[Vec<f32>],
-) -> Result<Vec<Option<Neighbour>>, StoreError> {
+) -> Result<Vec<Vec<Neighbour>>, StoreError> {
     if vectors.is_empty() {
         return Ok(Vec::new());
     }
@@ -311,21 +320,24 @@ pub async fn nearest_live(
     }
 
     let mut resp = checked(query.await?)?;
-    let rows: Vec<Option<NeighbourRow>> = resp.take(script.result_index)?;
-    if rows.len() != vectors.len() {
+    let probes: Vec<Vec<NeighbourRow>> = resp.take(script.result_index)?;
+    if probes.len() != vectors.len() {
         return Err(StoreError::UnexpectedResponse(
             "the gate probed a different number of vectors than it was given",
         ));
     }
-    rows.into_iter()
-        .map(|row| {
-            row.map(|row| {
-                Ok(Neighbour {
-                    id: MemoryId::new(row.id)?,
-                    similarity: dedup::similarity_from_distance(row.distance),
+    probes
+        .into_iter()
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| {
+                    Ok(Neighbour {
+                        id: MemoryId::new(row.id)?,
+                        content: row.content,
+                        similarity: dedup::similarity_from_distance(row.distance),
+                    })
                 })
-            })
-            .transpose()
+                .collect()
         })
         .collect()
 }

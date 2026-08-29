@@ -439,27 +439,42 @@ async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
         .expect("probe");
 
     assert_eq!(probes.len(), 2, "one answer per probe, in input order");
-    let exact = probes[0].as_ref().expect("the space holds vectors");
+    let exact = probes[0].first().expect("the space holds vectors");
     assert_eq!(exact.id, profile);
+    assert_eq!(
+        exact.content, "the user prefers Rust over Python",
+        "the gate reports what the neighbour says, not only that it exists"
+    );
     assert!(
         (exact.similarity - 1.0).abs() < 1e-6,
         "a vector identical to a stored one is a similarity of 1: {}",
         exact.similarity
     );
     assert!(dedup::is_near_duplicate(exact.similarity));
-    let orthogonal = probes[1].as_ref().expect("the space holds vectors");
+    assert!(
+        probes[0]
+            .windows(2)
+            .all(|pair| pair[0].similarity >= pair[1].similarity),
+        "neighbours come back closest first"
+    );
+    let orthogonal = probes[1].first().expect("the space holds vectors");
     assert!(
         !dedup::is_near_duplicate(orthogonal.similarity),
         "every fixture axis is orthogonal to every other: {}",
         orthogonal.similarity
     );
+    assert!(
+        !dedup::is_correction_candidate(orthogonal.similarity),
+        "an orthogonal axis is not a correction candidate either: {}",
+        orthogonal.similarity
+    );
 
     let elsewhere = "other".parse().expect("valid slug");
-    assert_eq!(
+    assert!(
         repo::nearest_live(&db, &elsewhere, &[axis(5)])
             .await
-            .expect("probe"),
-        vec![None],
+            .expect("probe")[0]
+            .is_empty(),
         "a space holding no vectors has no neighbour to offer"
     );
     assert!(
@@ -490,9 +505,8 @@ async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
     let after = repo::nearest_live(&db, &space(), &[axis(5)])
         .await
         .expect("probe");
-    assert_ne!(
-        after[0].as_ref().expect("neighbour").id,
-        profile,
+    assert!(
+        after[0].iter().all(|neighbour| neighbour.id != profile),
         "the gate compares against what is still true, not what once was"
     );
 }

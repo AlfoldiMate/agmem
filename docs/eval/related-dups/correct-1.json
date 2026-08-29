@@ -1,0 +1,59 @@
+{
+  "scenario": "correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.jzvlHU261d",
+  "answer": "Noted and saved — I found an old memory saying you use black, which I've now superseded with the correct fact: you've switched to ruff format and black is uninstalled.",
+  "cost_usd": 0.0511742,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M16JC3Z5KEPNGBWW9Y72MSTR\\\",\\\"of\\\":0,\\\"similarity\\\":0.9566595736127156}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling"
+            ],
+            "supersedes": "01M16JC3Z5KEPNGBWW9Y72MSTR"
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16JCE1590TEC8GNDKPG2CDT\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M16JC3Z5KEPNGBWW9Y72MSTR\\\"]}\""
+    }
+  ]
+}

@@ -960,7 +960,7 @@ expression: "&tools.tools"
   },
   {
     "name": "remember",
-    "description": "Store what this session learned — the distilled claims, and optionally the verbatim text they came from — so the next session starts with it instead of working it out again.\n\nCall it as soon as something durable is said, unprompted and without waiting for the end of the session: a preference or a standing instruction (\"always use X here\"), a decision and the reason behind it, a convention, a constraint, a lesson from something that failed. Nothing you say persists — an answer that ends \"noted\" or \"I'll remember that\" without a call to this tool is a promise the next session cannot keep.\n\nDistil before you call: one atomic, self-contained claim per entry, in the third person, understandable with no conversation around it — \"the user prefers Rust over Python for CLI tools\", not \"he said he likes it better\". Do not store what the code or the ticket already records, or what only matters to this turn.\n\nNothing here is ever rewritten. When something already stored turns out to be wrong, `recall` the claim it replaces and send the correction with `supersedes` set to that id, rather than storing a contradiction: the old claim stays readable and dated, and only one of them is live.\n\nReturns a diff rather than an acknowledgement — what was created, what was already stored (with how close a match, so you can decide between a no-op and a correction), what was closed, and the episode's id.",
+    "description": "Store what this session learned — the distilled claims, and optionally the verbatim text they came from — so the next session starts with it instead of working it out again.\n\nCall it as soon as something durable is said, unprompted and without waiting for the end of the session: a preference or a standing instruction (\"always use X here\"), a decision and the reason behind it, a convention, a constraint, a lesson from something that failed. Nothing you say persists — an answer that ends \"noted\" or \"I'll remember that\" without a call to this tool is a promise the next session cannot keep.\n\nDistil before you call: one atomic, self-contained claim per entry, in the third person, understandable with no conversation around it — \"the user prefers Rust over Python for CLI tools\", not \"he said he likes it better\". Do not store what the code or the ticket already records, or what only matters to this turn.\n\nNothing here is ever rewritten. When something already stored turns out to be wrong, send the correction with `supersedes` set to the id of the claim it replaces, rather than storing a contradiction: the old claim stays readable and dated, and only one of them is live. You do not have to go looking for that id first — see `related` below.\n\nReturns a diff rather than an acknowledgement — what was created, what was already stored, what was closed, and the episode's id. Two of those carry the id and the text of a claim already in the store: `duplicates`, which were **not** written, and `related`, which sit alongside what was. Read the `content` of both before you answer. A correction reads much like the claim it corrects, so it lands in one of those lists rather than in `created` — and if you report it as remembered without checking, the claim that is still live is the old and wrong one. Neither list is a verdict: nothing here judges that two claims disagree, which is why they are handed back rather than acted on. When one of them says something your claim contradicts, send your claim again with `supersedes` set to its id.",
     "inputSchema": {
       "$defs": {
         "DecayClass": {
@@ -1146,6 +1146,10 @@ expression: "&tools.tools"
         "Duplicate": {
           "description": "A claim that was already in the store.",
           "properties": {
+            "content": {
+              "description": "What the stored memory actually says.\n\nCompare it against what you sent: if it says something different, this\nis a claim you are correcting rather than one you are repeating, and it\nis still live until you re-send yours with `supersedes` set to `id`.\nIn BM25-only mode this is your own text, which matched exactly once\ncase and whitespace were folded.",
+              "type": "string"
+            },
             "id": {
               "description": "The id of the memory that already holds this claim.",
               "type": "string"
@@ -1165,6 +1169,38 @@ expression: "&tools.tools"
           "required": [
             "id",
             "of",
+            "content",
+            "similarity"
+          ],
+          "type": "object"
+        },
+        "Related": {
+          "description": "A live claim near one that was just stored.",
+          "properties": {
+            "content": {
+              "description": "What the older memory says, so the contradiction can be judged without\na second lookup.",
+              "type": "string"
+            },
+            "id": {
+              "description": "The id of the older memory — what `supersedes` would take.",
+              "type": "string"
+            },
+            "of": {
+              "description": "Which entry of the `memories` you sent this is a neighbour of,\nzero-based.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "similarity": {
+              "description": "Cosine similarity between the two, below the duplicate threshold and\nabove the floor for being worth mentioning at all.",
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "of",
+            "content",
             "similarity"
           ],
           "type": "object"
@@ -1180,7 +1216,7 @@ expression: "&tools.tools"
           "type": "array"
         },
         "duplicates": {
-          "description": "The claims that were already stored. Nothing was written for these:\naccept that as a no-op, or re-send the claim with `supersedes` set to\nthe id here if it is genuinely a correction.",
+          "description": "The claims judged already stored. Nothing was written for these.\n\n**Read `content` before treating one as a no-op.** A correction is\nusually worded much like the claim it corrects, so it lands here too —\nand then nothing has changed, the older and now-wrong claim is what is\nstill live, and saying \"already noted\" would be false. If `content`\nsays something other than what you sent, re-send yours with\n`supersedes` set to the id here.",
           "items": {
             "$ref": "#/$defs/Duplicate"
           },
@@ -1193,6 +1229,13 @@ expression: "&tools.tools"
             "null"
           ]
         },
+        "related": {
+          "description": "Live claims about the same subject as something you just stored, which\nthe new claim may contradict.\n\nThese were **written** — they are not duplicates and nothing was\nblocked. They are here because a correction and the claim it corrects\nare near neighbours, and this is the only moment the id of the older\none is in front of you. If one of these is now wrong, re-send the new\nclaim with `supersedes` set to its id: that closes the old one instead\nof leaving both live and contradicting each other. If it is merely\nrelated, ignore it.",
+          "items": {
+            "$ref": "#/$defs/Related"
+          },
+          "type": "array"
+        },
         "superseded": {
           "description": "Ids of the memories closed by a `supersedes` in this call.",
           "items": {
@@ -1204,6 +1247,7 @@ expression: "&tools.tools"
       "required": [
         "created",
         "duplicates",
+        "related",
         "superseded"
       ],
       "type": "object"

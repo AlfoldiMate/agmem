@@ -199,17 +199,35 @@ Those chunks compete in `recall` and come back as `kind: "episode"`;
 `inspect` shows the text behind any claim that names one.
 
 Send the same claim again and nothing is written — the claim already stored is
-reported instead, with how close a match it was and which entry of your batch
-it refers to:
+reported instead, with **what it says**, how close a match it was, and which
+entry of your batch it refers to:
 
 ```json
 { "created": [],
-  "duplicates": [ { "id": "01M14XWWAXJG…", "of": 0, "similarity": 0.9999998 },
-                  { "id": "01M14XWWAXJG…", "of": 1, "similarity": 0.982940 } ] }
+  "duplicates": [ { "id": "01M14XWWAXJG…", "of": 0, "similarity": 0.9999998,
+                    "content": "The user prefers Rust over Python for CLI tools" } ] }
 ```
 
 Identical text lands a rounding error short of 1.0; a reworded version of the
 same claim lands wherever the near-duplicate gate caught it.
+
+`content` is there because **a correction reads much like the claim it
+corrects**, so it arrives here rather than in `created` — measured at 5 of 6
+runs. Without the text, an agent sees an id and `0.957` and answers "already
+noted", while the claim that is still live is the old and wrong one. With it,
+the same scenario supersedes 3 times out of 3. A write that *was* stored gets
+the same courtesy under `related`: live claims about the same subject, close
+enough to be worth reading, far enough apart not to be duplicates.
+
+```json
+{ "created": ["01M14XWWB6PG…"],
+  "related": [ { "id": "01M14XWWAXJG…", "of": 0, "similarity": 0.84,
+                 "content": "The user formats Python with black." } ] }
+```
+
+Neither list is a verdict — agmem never decides that two claims disagree. It
+hands back the id and the text; the agent re-sends with `supersedes` if it is a
+correction, and ignores it if it is not.
 
 **`recall`** — ask in words. Both halves of retrieval use the question: BM25
 matches the wording, vectors match the meaning, and the two are fused, then

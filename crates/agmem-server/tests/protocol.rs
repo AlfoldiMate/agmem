@@ -661,6 +661,12 @@ async fn a_restatement_comes_back_as_the_id_that_already_holds_it() {
         "with how close a match it was: {}",
         duplicates[0]["similarity"]
     );
+    assert_eq!(
+        duplicates[0]["content"].as_str(),
+        Some("The user prefers Rust"),
+        "and what the stored claim says — a correction lands here too, and \
+         without its text there is no telling the two apart (issue #38)"
+    );
     assert_eq!(ids(&again["created"]).len(), 1, "{again}");
     assert_eq!(
         agmem.contents().await,
@@ -697,6 +703,75 @@ async fn without_an_embedder_the_exact_gate_still_holds() {
         agmem.contents().await,
         ["The user prefers Rust"],
         "BM25-only mode still writes, and still refuses to write twice"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_write_comes_back_with_the_live_claims_it_may_contradict() {
+    // Issue #38. Measured at #23 and again once retrieval worked: the agent
+    // makes exactly one tool call, never `recall`, so it never holds the id of
+    // the claim it is contradicting and both stay live. The write's own answer
+    // is the only place that id can arrive.
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let first = agmem
+        .remember(json!({ "memories": [{ "content": "Rust and Python are the languages here" }] }))
+        .await;
+    let old = ids(&first["created"])[0].to_owned();
+    assert!(
+        first["related"].as_array().expect("array").is_empty(),
+        "an empty store has nothing to contradict: {first}"
+    );
+
+    // Two vocabulary axes against three: cosine 0.82, under the 0.95 that
+    // would block it as a restatement and over the floor for being mentioned.
+    let second = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "Rust and Python and kitchen tooling were all replaced" },
+                { "content": "The tap drips at night" }
+            ]
+        }))
+        .await;
+
+    assert_eq!(ids(&second["created"]).len(), 2, "{second}");
+    assert!(
+        second["duplicates"].as_array().expect("array").is_empty(),
+        "a candidate is not a duplicate — it was written: {second}"
+    );
+    let related = second["related"].as_array().expect("array");
+    assert_eq!(related.len(), 1, "{second}");
+    assert_eq!(
+        related[0]["id"].as_str(),
+        Some(old.as_str()),
+        "the candidate is the id `supersedes` would take"
+    );
+    assert_eq!(
+        related[0]["of"].as_u64(),
+        Some(0),
+        "and which entry of the request it is a neighbour of"
+    );
+    assert_eq!(
+        related[0]["content"].as_str(),
+        Some("Rust and Python are the languages here"),
+        "with what it says, so the contradiction can be judged without a lookup"
+    );
+    let similarity = related[0]["similarity"].as_f64().expect("similarity");
+    assert!(
+        (0.75..0.95).contains(&similarity),
+        "a candidate sits in the correction band, not at either end: {similarity}"
+    );
+
+    // Nothing was decided: both claims are live, which is the whole point of
+    // handing the id back rather than acting on it.
+    assert_eq!(
+        agmem.contents().await,
+        [
+            "Rust and Python and kitchen tooling were all replaced",
+            "Rust and Python are the languages here",
+            "The tap drips at night",
+        ],
+        "the server never supersedes on a similarity"
     );
     agmem.shutdown().await;
 }

@@ -169,13 +169,19 @@ Distil before you call: one atomic, self-contained claim per entry, in the third
 understandable with no conversation around it — \"the user prefers Rust over Python for CLI \
 tools\", not \"he said he likes it better\". Do not store what the code or the ticket already \
 records, or what only matters to this turn.\n\n\
-Nothing here is ever rewritten. When something already stored turns out to be wrong, `recall` \
-the claim it replaces and send the correction with `supersedes` set to that id, rather than \
-storing a contradiction: the old claim stays readable and dated, and only one of them is \
-live.\n\n\
-Returns a diff rather than an acknowledgement — what was created, what was already stored (with \
-how close a match, so you can decide between a no-op and a correction), what was closed, and the \
-episode's id.",
+Nothing here is ever rewritten. When something already stored turns out to be wrong, send the \
+correction with `supersedes` set to the id of the claim it replaces, rather than storing a \
+contradiction: the old claim stays readable and dated, and only one of them is live. You do not \
+have to go looking for that id first — see `related` below.\n\n\
+Returns a diff rather than an acknowledgement — what was created, what was already stored, what \
+was closed, and the episode's id. Two of those carry the id and the text of a claim already in \
+the store: `duplicates`, which were **not** written, and `related`, which sit alongside what was. \
+Read the `content` of both before you answer. A correction reads much like the claim it corrects, \
+so it lands in one of those lists rather than in `created` — and if you report it as remembered \
+without checking, the claim that is still live is the old and wrong one. Neither list is a \
+verdict: nothing here judges that two claims disagree, which is why they are handed back rather \
+than acted on. When one of them says something your claim contradicts, send your claim again with \
+`supersedes` set to its id.",
         annotations(destructive_hint = false, idempotent_hint = true)
     )]
     async fn remember(

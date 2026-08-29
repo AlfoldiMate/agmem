@@ -359,6 +359,44 @@ moment agmem is in the conversation at all is the `remember` call itself. So
 the id has to come back *from that call*, the way a near-duplicate's already
 does: the agent cannot look up what it does not know to look for.
 
+## Closing it: the report was unreadable, not the gate too tight (#38)
+
+Three batches, `--isolated --only correct`, 3 runs each, same words each time.
+
+| binary | `supersedes` | tool calls per run |
+|---|---|---|
+| retrieval fixed, nothing else (`knn-fixed`) | 0/3 | 1.00 |
+| `+ related`, the 0.75–0.95 band (`related`) | 1/3 | 1.33 |
+| `+ content` on `duplicates` (`related-dups`) | **3/3** | 2.00 |
+
+The band was the fix the issue asked for, and it is not what did the work. It
+fired **once in six runs**. In the other five the correction scored **≥0.95**
+against the claim it corrected — 0.9566, 0.9579, 0.9591, 0.9563 — so the
+near-duplicate gate blocked the write and reported a `duplicate`, and `related`
+was empty by construction.
+
+What the agent then did is the finding:
+
+> Already noted — this preference was stored previously (ruff format, black
+> uninstalled). No action needed.
+
+It was not noted. The store still said *The user formats Python with black.*
+The agent had been handed an id and a similarity of 0.959 and reasonably read
+that as "you already know this" — because a `duplicate` carried no text, there
+was no way to see that the thing it duplicated said the opposite.
+
+Adding `content` to `duplicates` took the identical scenario to 3/3, every run
+through the *duplicate* path, every one superseding on the second call:
+
+> Noted and saved — I found an old memory saying you use black, which I've now
+> superseded with the correct fact.
+
+**A correction is usually a near-duplicate of what it corrects.** That is the
+thing worth carrying forward: the 0.95 threshold is not too tight, and the band
+below it is a genuine but secondary case. What was wrong was answering a
+blocked write with a number instead of a claim — and a number is not something
+an agent can check itself against.
+
 ## Overriding a description
 
 `AGMEM_TOOL_DESC_<TOOL>` replaces one outright, per server, no rebuild —

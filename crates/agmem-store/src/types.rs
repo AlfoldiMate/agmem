@@ -294,10 +294,15 @@ pub(crate) struct EpisodeDetailRow {
     pub(crate) derived: Vec<MemoryReadRow>,
 }
 
-/// The nearest live memory to one probe vector: which row, and how far.
+/// A live memory near one probe vector: which row, what it says, and how far.
+///
+/// `content` rides along because the gate's answer is read by an agent
+/// deciding whether the new claim corrects this one, and an id alone is not
+/// something to decide on.
 #[derive(SurrealValue)]
 pub(crate) struct NeighbourRow {
     pub(crate) id: String,
+    pub(crate) content: String,
     pub(crate) distance: f64,
 }
 

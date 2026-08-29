@@ -41,10 +41,31 @@ pub fn similarity_from_distance(distance: f64) -> f64 {
     1.0 - distance
 }
 
+/// Cosine similarity below which two memories are simply about different
+/// things, and a neighbour is not worth mentioning.
+///
+/// The band between this and [`NEAR_DUP_THRESHOLD`] is where a *correction*
+/// lives: close enough to be about the same subject, far enough apart to be
+/// saying something else about it — which is exactly the shape of "we moved
+/// off black" against "the user formats Python with black". Nothing is decided
+/// on that basis; a neighbour in the band is handed back for the agent to
+/// judge, the way a near-duplicate already is (issue #38).
+pub const CORRECTION_FLOOR: f64 = 0.75;
+
 /// Whether a candidate's nearest live neighbour is close enough to call it a
 /// restatement rather than a new memory.
 pub fn is_near_duplicate(similarity: f64) -> bool {
     similarity >= NEAR_DUP_THRESHOLD
+}
+
+/// Whether a neighbour is a claim the new one might be correcting: same
+/// subject, different statement.
+///
+/// Deliberately exclusive of [`NEAR_DUP_THRESHOLD`] — a near-duplicate is
+/// already reported, and reporting it twice under two names would suggest
+/// there were two neighbours.
+pub fn is_correction_candidate(similarity: f64) -> bool {
+    (CORRECTION_FLOOR..NEAR_DUP_THRESHOLD).contains(&similarity)
 }
 
 #[cfg(test)]

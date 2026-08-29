@@ -46,6 +46,13 @@ const EF_SEARCH: usize = 80;
 /// replaces (~72 ms against ~112 ms).
 const OVER_FETCH: usize = 4;
 
+/// How many live neighbours the gate reports per probe.
+///
+/// One decides the near-duplicate question; the rest are the correction band
+/// (issue #38), and a handful is what an agent can act on — a longer list is a
+/// search result, which is what `recall` is for.
+const NEIGHBOURS: usize = 4;
+
 /// How many candidates the near-dup gate draws before narrowing to its space.
 ///
 /// Its `K` is 1 — the single nearest live neighbour — but for the reason in
@@ -294,28 +301,31 @@ pub(crate) fn chunk_episode() -> Script {
     )
 }
 
-/// One KNN probe per candidate vector: the nearest live memory in `$space`.
+/// One KNN probe per candidate vector: the nearest live memories in `$space`.
 ///
 /// This is the near-dup gate (design §5.2 step 4), which asks the same
 /// question once per memory a `remember` batch carries — so the probes travel
 /// as one request rather than one round-trip each. The scan draws
 /// [`NEAR_DUP_PROBE`] candidates bare and the space and liveness narrow its
-/// result to one, rather than riding along inside it (issue #40); every `K` is
-/// a literal, which the operator requires.
+/// result, rather than riding along inside it (issue #40); every `K` is a
+/// literal, which the operator requires.
 ///
-/// `(SELECT … LIMIT 1)[0]` is `NONE` when the space holds no vectors at all,
-/// which is what an empty store answers with; the distance is cast because a
-/// vector identical to a stored one gives an integral 0 that `f64` refuses.
+/// It returns [`NEIGHBOURS`] rows rather than one because the same pass
+/// answers two questions (issue #38): the nearest row decides the near-dup
+/// gate, and the rest of the band is handed back as claims the new one might
+/// be correcting. An empty list is what a space holding no vectors answers
+/// with; the distance is cast because a vector identical to a stored one gives
+/// an integral 0 that `f64` refuses.
 pub(crate) fn nearest_live(count: usize) -> Script {
     let mut builder = Builder::plain();
     for index in 0..count {
         builder.push(format!(
-            "LET $n{index} = (SELECT id, distance FROM
-                 (SELECT record::id(id) AS id, space, invalid_at,
+            "LET $n{index} = (SELECT id, content, distance FROM
+                 (SELECT record::id(id) AS id, content, space, invalid_at,
                       <float> vector::distance::knn() AS distance FROM memory
                   WHERE embedding <|{NEAR_DUP_PROBE},{EF_SEARCH}|> $vec{index})
                  WHERE space = $space AND invalid_at IS NONE
-                 ORDER BY distance LIMIT 1)[0]"
+                 ORDER BY distance LIMIT {NEIGHBOURS})"
         ));
     }
     let probes: Vec<String> = (0..count).map(|index| format!("$n{index}")).collect();

@@ -1,6 +1,6 @@
 [package]
 name = "agmem-embed"
-description = "agmem embedding backends: fastembed/ONNX, and a no-op for BM25-only mode."
+description = "agmem embedding backends: fastembed/ONNX, model2vec static, and a no-op for BM25-only mode."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,9 +12,13 @@ default = ["onnx"]
 # The fastembed/ONNX backend. Off in BM25-only builds, which then need no
 # ONNX Runtime binaries at all.
 onnx = ["dep:fastembed"]
+# The model2vec static backend: pure Rust, no ONNX, instant cold start
+# (design risk #1 contingency).
+static = ["dep:model2vec-rs"]
 
 [dependencies]
 fastembed = { workspace = true, optional = true }
+model2vec-rs = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

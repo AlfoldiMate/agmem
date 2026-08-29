@@ -33,6 +33,13 @@ fastembed = { version = "=6.0.2", default-features = false, features = [
     "ort-download-binaries-native-tls",
     "hf-hub-native-tls",
 ] }
+# The pure-Rust contingency (design risk #1): potion-base-8M static
+# embeddings, no ONNX. default-features off swaps tokenizers'' onig (a C
+# library) for fancy-regex, keeping the no-C-deps point of the backend.
+model2vec-rs = { version = "0.2.1", default-features = false, features = [
+    "hf-hub",
+    "fancy-regex",
+] }
 
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }

@@ -58,6 +58,11 @@ pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
 /// neither recorded nor checked, so BM25-only mode opens any store and only
 /// the rows it writes lack vectors.
 ///
+/// A first run whose width differs from the baked [`EMBEDDING_DIM`] redefines
+/// the HNSW indexes to its own width before recording the pair: a store with
+/// no pair has never held a vector (every run that could write one records
+/// its pair here first), so the indexes are empty and the switch is free.
+///
 /// # Errors
 /// [`StoreError::EmbedderMismatch`] when the store was embedded with another
 /// model or width.
@@ -65,7 +70,7 @@ pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), 
     if dim == 0 {
         return Ok(());
     }
-    let dim = i64::try_from(dim).unwrap_or(i64::MAX);
+    let width = i64::try_from(dim).unwrap_or(i64::MAX);
 
     let mut resp = db
         .query(
@@ -86,20 +91,27 @@ pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), 
         .next();
 
     match (stored_model, stored_dim) {
-        (Some(model), Some(width)) if model != model_id || width != dim => {
+        (Some(model), Some(stored)) if model != model_id || stored != width => {
             Err(StoreError::EmbedderMismatch {
                 stored_model: model,
-                stored_dim: width,
+                stored_dim: stored,
                 configured_model: model_id.to_owned(),
-                configured_dim: dim,
+                configured_dim: width,
             })
         }
         (Some(_), Some(_)) => Ok(()),
         _ => {
+            // No pair recorded means no run could have written a vector yet,
+            // so the HNSW indexes still stand empty at the width the schema
+            // baked in — adopt this backend's width now, while it costs
+            // nothing. From here on, only `--reindex` may move it.
+            if dim != EMBEDDING_DIM {
+                crate::repo::reindex::reset_vectors(db, dim).await?;
+            }
             tracing::info!(model = model_id, dim, "recording store embedder");
             db.query("UPSERT meta:main SET embedder_model = $model, embedder_dim = $dim")
                 .bind(("model", model_id.to_owned()))
-                .bind(("dim", dim))
+                .bind(("dim", width))
                 .await?
                 .check()?;
             Ok(())

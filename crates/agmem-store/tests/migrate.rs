@@ -141,3 +141,38 @@ async fn a_correction_written_before_v3_reads_as_a_one_element_list() {
     assert_eq!(chain.len(), 2, "both links, in one walk");
     assert!(chain[0].supersedes.is_empty(), "the oldest closed nothing");
 }
+
+/// A fresh store adopts its first backend's width (issue #29): recording a
+/// 256-wide embedder redefines the HNSW indexes the v1 schema bakes at 384,
+/// so the first write lands instead of failing with "Incorrect vector
+/// dimension". Only the first recording adopts — the pair then guards.
+#[tokio::test]
+async fn a_fresh_store_adopts_the_first_embedders_width() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    migrate::ensure(&conn).await.expect("ensure");
+
+    migrate::ensure_embedder(&conn, "potion-base-8M", 256)
+        .await
+        .expect("first run records the pair and adopts its width");
+
+    let mut components = vec!["1".to_owned()];
+    components.resize(256, "0".to_owned());
+    conn.query(format!(
+        "CREATE memory:ulid() SET space = 'test', kind = 'fact', content_hash = 'w-1',
+             content = 'stored at the adopted width', source = {{ kind: 'agent' }},
+             embedding = [{}]",
+        components.join(",")
+    ))
+    .await
+    .expect("write")
+    .check()
+    .expect("a 256-wide vector lands in the redefined index");
+
+    migrate::ensure_embedder(&conn, "potion-base-8M", 256)
+        .await
+        .expect("the same pair is still fine");
+    let err = migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384)
+        .await
+        .expect_err("the baked width is now the wrong one");
+    assert!(err.to_string().contains("potion-base-8M"), "{err}");
+}

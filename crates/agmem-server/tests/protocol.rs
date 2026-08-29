@@ -79,6 +79,13 @@ impl Harness {
             .await
             .expect("connect mem://");
         migrate::ensure(&db).await.expect("migrate");
+        // Startup records the embedder pair right after migrating (main.rs),
+        // and a first backend whose width differs from the schema's baked
+        // 384 adopts the indexes there — the static-model roundtrip needs
+        // that, so the harness mirrors it.
+        migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim())
+            .await
+            .expect("record the embedder");
         // Startup registers the configured space before it serves anything
         // (design §5.1 step 8, `main.rs`). The registry is a listing, so
         // nothing fails without it — `recall`'s `space: "all"` just quietly
@@ -2741,4 +2748,36 @@ async fn a_full_page_reserves_its_last_slot_for_the_hop() {
         "the hop row holds the reserved last slot instead of being cut: {found}"
     );
     agmem.shutdown().await;
+}
+
+/// Issue #29's acceptance, minus the doctor half: a remember → recall
+/// roundtrip through the real static model on a fresh store, exercising the
+/// 256-wide vector space end to end (every other test runs at a stub's
+/// width). Ignored: the first run downloads ~30 MB. Run with
+/// `cargo test -p agmem-server --features static --test protocol -- --ignored`.
+#[cfg(feature = "static")]
+#[tokio::test]
+#[ignore = "downloads the static model on first run"]
+async fn recall_roundtrips_through_the_static_embedder() {
+    let embedder =
+        Arc::new(agmem_embed::static_m2v::StaticBackend::new(None).expect("load the static model"));
+    let agmem = Harness::start(embedder).await;
+
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The user prefers Rust over Python for CLI tools" },
+                { "content": "The kitchen tap drips at night" }
+            ]
+        }))
+        .await;
+
+    let found = agmem
+        .recall(json!({ "query": "which language does this person like writing command line programs in" }))
+        .await;
+    assert_eq!(
+        hit_contents(&found).first(),
+        Some(&"The user prefers Rust over Python for CLI tools"),
+        "the language memory should rank first: {found}"
+    );
 }

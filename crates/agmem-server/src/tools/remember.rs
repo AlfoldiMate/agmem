@@ -124,9 +124,13 @@ pub struct Duplicate {
     /// Which entry of the `memories` you sent this refers to, zero-based.
     pub of: usize,
 
-    /// How close the two are: 1.0 when the text is identical once case and
-    /// whitespace are folded, otherwise the cosine similarity that tripped the
-    /// near-duplicate gate.
+    /// How close the two are, as cosine similarity.
+    ///
+    /// Text identical to what is stored reads a rounding error *short* of 1.0
+    /// — 0.9999998 is typical — because verbatim input trips the vector gate
+    /// as its own nearest neighbour before the content hash is ever consulted.
+    /// Exactly 1.0 means the hash matched with no embedding to compare it
+    /// against, which is BM25-only mode.
     pub similarity: f64,
 }
 
@@ -232,8 +236,10 @@ pub async fn run(
     .map_err(|error| store_error(&error))?;
 
     // 5. The diff. The store reports exact duplicates the same way the gate
-    //    reports near ones, so both arrive as one list; an exact match is a
-    //    similarity of 1 by construction.
+    //    reports near ones, so both arrive as one list. This branch only runs
+    //    when there was no embedding to gate on — with one, verbatim text is
+    //    already a near-duplicate of itself and never reaches the transaction
+    //    (issue #41) — so its `1.0` is the hash's, not a cosine's.
     let mut created = Vec::new();
     for (position, written) in outcome.memories.into_iter().enumerate() {
         let of = kept

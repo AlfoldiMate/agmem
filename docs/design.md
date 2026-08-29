@@ -920,6 +920,10 @@ Each phase is releasable; later phases only add.
     always caught by the gate first, at the f32 self-similarity of its own
     embedding (0.9999998). The `similarity: 1.0` branch is only reached when
     there is no embedding to gate on — `--embedder none` — so the same input
-    reports different numbers under the two backends. §3.1's wording and the
-    tool schema both still claim 1.0; the README no longer does. **Issue #41**
-    carries the choice: hash-check first, or document the cosine.
+    reports different numbers under the two backends. **Closed at #41 by
+    documenting the cosine**, not by hash-checking first. Reordering would buy
+    a rounder number for a store round-trip on every write, and the number is
+    not what the field is for: an agent reads it to decide NOOP against
+    `supersedes`, and 0.9999998 and 1.0 answer that question identically. The
+    schema now says the reading is a cosine and that identical text lands just
+    short of 1.0, which is what the README already said.

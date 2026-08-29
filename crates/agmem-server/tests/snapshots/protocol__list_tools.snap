@@ -1157,7 +1157,7 @@ expression: "&tools.tools"
               "type": "integer"
             },
             "similarity": {
-              "description": "How close the two are: 1.0 when the text is identical once case and\nwhitespace are folded, otherwise the cosine similarity that tripped the\nnear-duplicate gate.",
+              "description": "How close the two are, as cosine similarity.\n\nText identical to what is stored reads a rounding error *short* of 1.0\n— 0.9999998 is typical — because verbatim input trips the vector gate\nas its own nearest neighbour before the content hash is ever consulted.\nExactly 1.0 means the hash matched with no embedding to compare it\nagainst, which is BM25-only mode.",
               "format": "double",
               "type": "number"
             }

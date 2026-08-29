@@ -1,0 +1,96 @@
+[
+  {
+    "scenario": "consolidate",
+    "run": 1,
+    "pass": false,
+    "tools": [
+      "recall"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.IxIlAGnaVs",
+    "answer": "I pulled everything tagged `atlas` from memory (50 entries, all in the `eval` space — no local file-based memory exists for this project). Here's what stands out before you hand off:\n\n**Contradiction (needs a decision, not just cleanup)**\n- \"Merging to main deploys atlas to staging automatically.\" **vs.** \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\" These directly conflict on whether staging deploys are automatic. Whoever inherits this needs to know which is actually true.\n\n**Duplicates (same fact restated, safe to consolidate)**\n- Deploy command, said three ways: \"deployed by running bin/ship.sh from the repository root,\" \"to ship atlas you run the bin/ship.sh script at the top of the repo,\" and \"deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" Only the third adds new info (make deploy removed); the other two are pure repeats.\n- Test runner, said twice: \"test suite is run with cargo nextest run, not cargo test\" and \"tests are run through cargo nextest run; plain cargo test is not used\" — identical claim, different wording.\n\n**Overlapping (not duplicate, but worth merging)**\n- \"atlas stores its data in Postgres 16\" and \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0\" — not contradictory, just two partial facts about Postgres version support that belong together.\n\n**Likely stale / session-scoped, not durable project facts**\n- \"The flaky test being chased this week is pagination_ordering in atlas-api\" — \"this week\" language, time-bound, probably resolved or moved on by now.\n- \"The branch under review is spike/consolidate\" — reads like leftover state from a specific past session rather than an evergreen fact about the project; its own retention score is already the lowest of the batch, suggesting the system has flagged it as decaying.\n\nNothing else in the batch (API auth, CI pipeline order, release process, crate layout, etc.) looks duplicated or contradictory — just a lot of granular one-fact-per-entry notes that could be consolidated by topic (deploy, CI, DB, API) if you want a tidier handover doc, but that's a style call, not a correctness issue.\n\nWant me to fix the contradiction and merge the duplicates now, or just leave this as a report for the handover?",
+    "cost_usd": 0.13720639999999998,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas",
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VEYEFCV87FS3QK01SEN2G\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T13:31:05.012487Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16VEYE5MPF33GHRPR0YQF8J\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819121699999,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+      }
+    ]
+  },
+  {
+    "scenario": "consolidate",
+    "run": 2,
+    "pass": false,
+    "tools": [
+      "recall"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.cfcqC4LuGj",
+    "answer": "I searched memory (space: `all`) for everything tagged with the `atlas` entity — 47 hits. Nothing has been changed. Here's what I found:\n\n## Duplicates (same claim stated multiple ways)\n\n**Deploy command** — three separate memories say the same thing:\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" *(adds one extra fact — that `make deploy` used to exist)*\n\n**Test runner** — two memories, same claim:\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n## Contradiction (one of these is out of date)\n\n- \"**Merging to main deploys atlas to staging automatically.**\"\n- \"**Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.**\"\n\nThese can't both be true. Since the manual-deploy memory is more specific (names the exact command) and reads like a correction, I'd guess the \"automatic\" one is the stale one — but that's a guess; worth confirming with whoever owns the deploy process before deciding which to drop.\n\n## Likely-stale / session-scoped (shouldn't have been kept as durable facts)\n\n- \"The flaky test being chased this week is **pagination_ordering** in atlas-api.\" — relative time reference (\"this week\"), almost certainly stale by now.\n- \"The branch under review is **spike/consolidate**.\" — this reads like leftover state from a single session, not a lasting project fact.\n\n(Both already carry much lower importance/retention scores than the rest, so the memory system itself is flagging them as weak.)\n\n## Minor tension worth reconciling (not a hard contradiction)\n\n- \"atlas stores its data in **Postgres 16**\" vs. \"atlas supports **Postgres 15 and 16**; support for 14 was dropped in v2.0.\" Not contradictory, but the first implies 16-only — worth merging into one accurate statement.\n\nEverything else (CI pipeline steps, crate layout, auth, rate limiting, release process, branch naming, etc.) looked internally consistent with no duplicates.\n\nWant me to fix these — drop the duplicates, resolve the staging-deploy contradiction (once you confirm which is current), and remove the two session-scoped memories?",
+    "cost_usd": 0.1393554,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas",
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "k": 50,
+          "include_invalidated": true
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VGFYCY3AWZJDJX5B9Y9W8\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T13:31:55.698812Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16VGFY219J0PCYQ5MQQ8J5D\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819288932418,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+      }
+    ]
+  },
+  {
+    "scenario": "consolidate",
+    "run": 3,
+    "pass": false,
+    "tools": [
+      "recall"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.MnJWfAiAIr",
+    "answer": "I checked agmem for everything tagged with the `atlas` entity — 45 memories came back. Here's what stands out, nothing has been changed:\n\n## Duplicates (same fact stored 2-3x, different wording)\n\n**Deploy command (3 copies)**\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nThe third one carries extra info (the old `make deploy` target being retired), so it's likely the most recent/complete version — the other two are probably safe to fold into it.\n\n**Test runner (2 copies)**\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\nIdentical claim, no new information in either — straightforward dupe.\n\n## Contradiction (likely one is stale)\n\n- \"Merging to main deploys atlas to staging automatically.\"\n- \"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\"\n\nThese directly conflict — staging deploy is either automatic on merge or a manual `--staging` run, not both. Since neither was stored with `supersedes`, agmem has no way to know which one is current. You'll need to tell me which is true now so I can retire the other.\n\n## Likely stale / low-confidence\n\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — written with a relative \"this week,\" no anchor date, and it's the lowest-retention fact in the set. Probably dead weight by now.\n- \"The branch under review is spike/consolidate.\" — reads like leftover session context rather than a durable fact; lowest relevance/importance score of everything returned. Likely shouldn't have been persisted at all.\n\n## Related but not actually duplicate (fine as-is)\nPostgres version (\"stores data in Postgres 16\" vs \"supports 15 and 16, dropped 14 in v2.0\") — these complement each other rather than conflict, so I'd leave both.\n\nWant me to fix the deploy contradiction (once you tell me which is correct), merge the two duplicate clusters, and drop the two stale ones?",
+    "cost_usd": 0.1288036,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas",
+          "entities": [
+            "atlas"
+          ],
+          "space": "all",
+          "k": 50
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VJ1FYQKR98Y6D4Y09S7GB\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T13:32:46.436089Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16VJ1FM398ZP7964RPYWWQE\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819562322535,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+      }
+    ]
+  }
+]

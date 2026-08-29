@@ -1,0 +1,31 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.6TQXZ7umHj",
+  "answer": "Pulled everything tagged `atlas` from memory (49 hits, all stored in the `eval` space). Here's what stands out — nothing has been changed yet.\n\n**Contradiction (needs a decision, not just cleanup)**\n- *\"Merging to main deploys atlas to staging automatically.\"* (`01M16VHPBN0K...`)\n- *\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"* (`01M16VHPF2T8...`)\n\nThese directly conflict on how staging deploys actually happen. One of them is wrong — worth checking the current `ci.yml` / `bin/ship.sh` before handover so whoever inherits this project doesn't get bad instructions.\n\n**Duplicates (same fact, restated)**\n- Deploy-via-script, three copies of the same claim:\n  - *\"Project atlas is deployed by running bin/ship.sh from the repository root.\"* (`01M16VHPAR0K...`)\n  - *\"To ship atlas you run the bin/ship.sh script at the top of the repo.\"* (`01M16VHPE0XB...`)\n  - *\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"* (`01M16VHPHQZZ...`) — this one is the most complete (notes the old `make deploy` target was retired), so it's the best candidate to keep if the other two get merged/dropped.\n\n- Test runner, two copies of the same claim:\n  - *\"The atlas test suite is run with cargo nextest run, not cargo test.\"* (`01M16VHPBZTN...`)\n  - *\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"* (`01M16VHPG5ZH...`)\n\n**Likely stale / session-scoped, not durable project facts**\n- *\"The flaky test being chased this week is pagination_ordering in atlas-api.\"* — \"this week\" framing means it's already aging out; worth confirming it's still being chased or dropping it.\n- *\"The branch under review is spike/consolidate.\"* — reads like leftover session context rather than a lasting fact about the project; low importance/retention score in the results too.\n\n**Related but not actually duplicate (worth noting, not fixing)**\n- *\"atlas stores its data in Postgres 16...\"* vs *\"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\"* — not contradictory, but the second subsumes the first with more detail (and a version history note). Fine to leave, but the first adds nothing the second doesn't cover.\n\nLet me know if you want me to resolve the staging-deploy contradiction (I'd need to check the actual CI/deploy config to know which claim is current), merge the duplicate pairs, or prune the two stale-looking entries.",
+  "cost_usd": 0.137803,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M16VHPAR0K12ZJN9NMXFZXY5\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819410283209,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277641132837,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T13:32:35.031345Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VHPBG2GVZMBZBPYGG7V18\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8478632815724851,\\\"signals\\\":{\\\"importance\\\":1,\\\"retenti"
+    }
+  ]
+}

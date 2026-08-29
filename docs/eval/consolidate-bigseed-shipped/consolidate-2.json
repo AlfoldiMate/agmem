@@ -1,0 +1,31 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.fFlmdbiuwU",
+  "answer": "I searched agmem (space: `all`) for everything tagged with the entity **atlas** — 46 hits, all inserted in a single batch on 2026-08-29. No changes made. Here's what stands out:\n\n## 🔴 Contradiction (needs a decision before handoff)\n- **\"Merging to main deploys atlas to staging automatically.\"** (fact)\n- **\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"** (fact)\n\nThese directly conflict. One of these is wrong — worth confirming with whoever owns the deploy process before the handoff doc goes out, since this is exactly the kind of thing a new owner would trip over.\n\n## 🟡 Duplicates (same fact, restated 2-3x with different wording)\n**Deploy command** (3 near-identical entries):\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" *(this one has the most information — mentions the retired `make deploy` target — so it's the best candidate to keep)*\n\n**Test runner** (2 near-identical entries):\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n## 🟠 Overlapping / possibly imprecise\n- \"atlas stores its data in Postgres 16...\" vs. \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" The first implies only 16 is used; the second is the more complete, version-aware statement. Not a hard contradiction, but the first is stale/incomplete next to the second.\n\n## ⚪ Likely stale / ephemeral (time-bound, low retention scores already)\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — \"this week\" relative to an unknown date, low importance/retention score (0.25/0.14).\n- \"The branch under review is spike/consolidate.\" — very low relevance score (0.07), reads like leftover session state rather than a durable project fact.\n\nBoth of these look like they were captured mid-task and never cleaned up — good candidates to drop entirely during handoff rather than carry forward.\n\nEverything else (CI pipeline steps, crate layout, auth via `ATLAS_TOKEN`, branch naming, PR/merge policy, logging format, docs tooling, etc.) reads as consistent and non-duplicated.\n\nWant me to resolve the contradiction (once you confirm the correct answer), merge the duplicate pairs via `supersedes`, and drop the two stale entries?",
+  "cost_usd": 0.1280228,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VG8C2CVDYPF68BS054JKT\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T13:31:47.945116Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16VG8BR0D44EJ3X7Y1CGGE8\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819388033775,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+    }
+  ]
+}

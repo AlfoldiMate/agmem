@@ -116,40 +116,72 @@ const SCENARIOS = [
     {
         name: "consolidate"
         asks: "when a user asks for the thing this tool does, is the tool found?"
-        # Three ways of saying one thing, written in one call: the gate never
-        # compares two entries of the same batch, so all three land live —
-        # exactly the state `near_duplicates` exists to report and the write
-        # path cannot prevent. The coffee note is there to be left alone.
+        # A store big enough that reading it is not the same as auditing it.
+        # The five-memory version of this seed measured nothing: an agent asked
+        # `recall` for everything about atlas with `k: 50`, got the whole store
+        # back in four lines, and did the clustering itself — twice, with two
+        # different descriptions of `consolidate` in front of it. Forty-odd live
+        # claims with the duplicates scattered through them is the condition the
+        # tool exists for: a ranked top-k still returns them, but it does not
+        # say which of them are the same claim.
+        #
+        # Planted, and nowhere near each other in the list: a three-way
+        # duplicate about the deploy command, a two-way one about the test
+        # runner, and a pair that genuinely disagrees about staging deploys.
+        # The gate never compares two entries of the same batch, so all of them
+        # land live — exactly the state the write path cannot prevent. The
+        # non-atlas notes are there to be left alone.
         seed: [
-            {
-                content: "Project atlas is deployed by running bin/ship.sh from the repository root."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["deploy"]
-            }
-            {
-                content: "To ship atlas you run the bin/ship.sh script at the top of the repo."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["deploy"]
-            }
-            {
-                content: "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["deploy"]
-            }
-            {
-                content: "The office coffee machine is descaled on the first Monday of the month."
-                kind: "fact"
-                entities: ["office"]
-            }
-            {
-                content: "The branch under review is spike/consolidate."
-                kind: "fact"
-                entities: ["atlas"]
-                decay_class: "fast"
-            }
+            {content: "Project atlas is deployed by running bin/ship.sh from the repository root." kind: "fact" entities: ["atlas" "deploy"] tags: ["deploy"]}
+            {content: "atlas targets Rust 1.98 and the toolchain is pinned in rust-toolchain.toml." kind: "fact" entities: ["atlas"] tags: ["build"]}
+            {content: "The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli." kind: "fact" entities: ["atlas"]}
+            {content: "atlas stores its data in Postgres 16 and the schema lives under migrations/." kind: "fact" entities: ["atlas" "db"]}
+            {content: "Database migrations in atlas run with sqlx migrate run, never by hand." kind: "instruction" entities: ["atlas" "db"]}
+            {content: "Merging to main deploys atlas to staging automatically." kind: "fact" entities: ["atlas" "deploy"] tags: ["deploy"]}
+            {content: "Library crates in atlas use thiserror for their error types and the CLI uses anyhow." kind: "fact" entities: ["atlas"]}
+            {content: "The atlas test suite is run with cargo nextest run, not cargo test." kind: "fact" entities: ["atlas" "ci"] tags: ["testing"]}
+            {content: "CI for atlas runs on GitHub Actions from .github/workflows/ci.yml." kind: "fact" entities: ["atlas" "ci"]}
+            {content: "The atlas CI pipeline runs fmt, clippy, test and a no-default-features build, in that order." kind: "fact" entities: ["atlas" "ci"]}
+            {content: "clippy runs with -D warnings in atlas CI, so a single warning fails the build." kind: "fact" entities: ["atlas" "ci"]}
+            {content: "atlas pins its dependencies exactly; caret ranges are not used in Cargo.toml." kind: "fact" entities: ["atlas"] tags: ["build"]}
+            {content: "The atlas HTTP API is served by axum on port 8080 by default." kind: "fact" entities: ["atlas" "api"]}
+            {content: "atlas authenticates API requests with a bearer token read from ATLAS_TOKEN." kind: "fact" entities: ["atlas" "api"]}
+            {content: "Rate limiting in atlas is per-token at 100 requests a minute, enforced in the api crate." kind: "fact" entities: ["atlas" "api"]}
+            {content: "atlas logs to stderr in logfmt; stdout is reserved for command output." kind: "fact" entities: ["atlas"]}
+            {content: "A deploy of atlas that skips bin/ship.sh leaves the search index stale, which cost the team an afternoon of downtime." kind: "lesson" entities: ["atlas" "deploy"] tags: ["deploy"]}
+            {content: "The office coffee machine is descaled on the first Monday of the month." kind: "fact" entities: ["office"]}
+            {content: "The atlas release process tags vX.Y.Z and lets CI build the artefacts." kind: "fact" entities: ["atlas" "release"]}
+            {content: "atlas follows semver strictly, so a breaking change to atlas-core is a major bump." kind: "fact" entities: ["atlas" "release"]}
+            {content: "To ship atlas you run the bin/ship.sh script at the top of the repo." kind: "fact" entities: ["atlas" "deploy"] tags: ["deploy"]}
+            {content: "Feature flags in atlas are additive only, so cargo check --all-features has to pass." kind: "fact" entities: ["atlas" "build"]}
+            {content: "The atlas docs are built with mdbook and published from the docs/ directory." kind: "fact" entities: ["atlas" "docs"]}
+            {content: "Benchmarks in atlas use criterion and live in benches/." kind: "fact" entities: ["atlas"]}
+            {content: "atlas keeps integration tests in tests/ and unit tests beside the code they cover." kind: "fact" entities: ["atlas" "testing"]}
+            {content: "Every atlas pull request needs at least one approval before it can merge." kind: "fact" entities: ["atlas" "process"]}
+            {content: "Squash merge is the only merge strategy enabled on the atlas repository." kind: "fact" entities: ["atlas" "process"]}
+            {content: "Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand." kind: "fact" entities: ["atlas" "deploy"] tags: ["deploy"]}
+            {content: "Branch names in atlas follow type/short-description, such as fix/token-expiry." kind: "fact" entities: ["atlas" "process"]}
+            {content: "The atlas issue tracker is GitHub Issues; Jira is not used for this project." kind: "fact" entities: ["atlas" "process"]}
+            {content: "atlas runs a nightly job at 02:00 UTC to refresh its search index." kind: "fact" entities: ["atlas"]}
+            {content: "The atlas search index is rebuilt from Postgres, so it can always be discarded and regenerated." kind: "fact" entities: ["atlas" "db"]}
+            {content: "Secrets for atlas are read from the environment and never from a file in the repository." kind: "instruction" entities: ["atlas"]}
+            {content: "Running two atlas processes against one data directory corrupts it, which is why the lock file exists." kind: "lesson" entities: ["atlas"]}
+            {content: "Tests in atlas are run through cargo nextest run; plain cargo test is not used." kind: "fact" entities: ["atlas" "ci"] tags: ["testing"]}
+            {content: "atlas caches build artefacts in CI with Swatinem/rust-cache." kind: "fact" entities: ["atlas" "ci"]}
+            {content: "The slowest step in atlas CI is the release build, at about eight minutes." kind: "fact" entities: ["atlas" "ci"]}
+            {content: "The team stand-up is at 09:30 on Mondays, Wednesdays and Fridays." kind: "fact" entities: ["team"]}
+            {content: "Always run cargo fmt --all before pushing to atlas, because CI checks formatting first." kind: "instruction" entities: ["atlas" "ci"]}
+            {content: "Never commit directly to atlas main; open a pull request even for a one-line change." kind: "instruction" entities: ["atlas" "process"]}
+            {content: "atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0." kind: "fact" entities: ["atlas" "db"]}
+            {content: "The atlas CLI reads its configuration from ~/.config/atlas/config.toml." kind: "fact" entities: ["atlas" "cli"]}
+            {content: "atlas exposes /healthz for liveness and /readyz for readiness." kind: "fact" entities: ["atlas" "api"]}
+            {content: "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone." kind: "fact" entities: ["atlas" "deploy"] tags: ["deploy"]}
+            {content: "The atlas staging environment runs on a single node with no replicas." kind: "fact" entities: ["atlas" "deploy"]}
+            {content: "Load testing for atlas uses k6, with the scripts kept in load/." kind: "fact" entities: ["atlas" "testing"]}
+            {content: "CHANGELOG.md in atlas is updated by hand at release time." kind: "fact" entities: ["atlas" "release"]}
+            {content: "Invoices from the contractor are due on the fifteenth of the month." kind: "fact" entities: ["finance"]}
+            {content: "The branch under review is spike/consolidate." kind: "fact" entities: ["atlas"] decay_class: "fast"}
+            {content: "The flaky test being chased this week is pagination_ordering in atlas-api." kind: "fact" entities: ["atlas" "testing"] decay_class: "fast"}
         ]
         # Working context that recall kept alive past its class: 40 days idle
         # against a 20-day horizon, strength 3 so the startup sweep has not

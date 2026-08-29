@@ -1,0 +1,31 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.MnJWfAiAIr",
+  "answer": "I checked agmem for everything tagged with the `atlas` entity — 45 memories came back. Here's what stands out, nothing has been changed:\n\n## Duplicates (same fact stored 2-3x, different wording)\n\n**Deploy command (3 copies)**\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nThe third one carries extra info (the old `make deploy` target being retired), so it's likely the most recent/complete version — the other two are probably safe to fold into it.\n\n**Test runner (2 copies)**\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\nIdentical claim, no new information in either — straightforward dupe.\n\n## Contradiction (likely one is stale)\n\n- \"Merging to main deploys atlas to staging automatically.\"\n- \"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\"\n\nThese directly conflict — staging deploy is either automatic on merge or a manual `--staging` run, not both. Since neither was stored with `supersedes`, agmem has no way to know which one is current. You'll need to tell me which is true now so I can retire the other.\n\n## Likely stale / low-confidence\n\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — written with a relative \"this week,\" no anchor date, and it's the lowest-retention fact in the set. Probably dead weight by now.\n- \"The branch under review is spike/consolidate.\" — reads like leftover session context rather than a durable fact; lowest relevance/importance score of everything returned. Likely shouldn't have been persisted at all.\n\n## Related but not actually duplicate (fine as-is)\nPostgres version (\"stores data in Postgres 16\" vs \"supports 15 and 16, dropped 14 in v2.0\") — these complement each other rather than conflict, so I'd leave both.\n\nWant me to fix the deploy contradiction (once you tell me which is correct), merge the two duplicate clusters, and drop the two stale ones?",
+  "cost_usd": 0.1288036,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VJ1FYQKR98Y6D4Y09S7GB\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T13:32:46.436089Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16VJ1FM398ZP7964RPYWWQE\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819562322535,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+    }
+  ]
+}

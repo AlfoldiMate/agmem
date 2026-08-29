@@ -1,0 +1,32 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.cfcqC4LuGj",
+  "answer": "I searched memory (space: `all`) for everything tagged with the `atlas` entity — 47 hits. Nothing has been changed. Here's what I found:\n\n## Duplicates (same claim stated multiple ways)\n\n**Deploy command** — three separate memories say the same thing:\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" *(adds one extra fact — that `make deploy` used to exist)*\n\n**Test runner** — two memories, same claim:\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n## Contradiction (one of these is out of date)\n\n- \"**Merging to main deploys atlas to staging automatically.**\"\n- \"**Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.**\"\n\nThese can't both be true. Since the manual-deploy memory is more specific (names the exact command) and reads like a correction, I'd guess the \"automatic\" one is the stale one — but that's a guess; worth confirming with whoever owns the deploy process before deciding which to drop.\n\n## Likely-stale / session-scoped (shouldn't have been kept as durable facts)\n\n- \"The flaky test being chased this week is **pagination_ordering** in atlas-api.\" — relative time reference (\"this week\"), almost certainly stale by now.\n- \"The branch under review is **spike/consolidate**.\" — this reads like leftover state from a single session, not a lasting project fact.\n\n(Both already carry much lower importance/retention scores than the rest, so the memory system itself is flagging them as weak.)\n\n## Minor tension worth reconciling (not a hard contradiction)\n\n- \"atlas stores its data in **Postgres 16**\" vs. \"atlas supports **Postgres 15 and 16**; support for 14 was dropped in v2.0.\" Not contradictory, but the first implies 16-only — worth merging into one accurate statement.\n\nEverything else (CI pipeline steps, crate layout, auth, rate limiting, release process, branch naming, etc.) looked internally consistent with no duplicates.\n\nWant me to fix these — drop the duplicates, resolve the staging-deploy contradiction (once you confirm which is current), and remove the two session-scoped memories?",
+  "cost_usd": 0.1393554,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50,
+        "include_invalidated": true
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16VGFYCY3AWZJDJX5B9Y9W8\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T13:31:55.698812Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16VGFY219J0PCYQ5MQQ8J5D\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819288932418,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+    }
+  ]
+}

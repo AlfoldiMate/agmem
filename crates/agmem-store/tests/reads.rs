@@ -621,7 +621,10 @@ async fn the_all_pairs_scan_pairs_every_live_row_with_its_own_vector() {
         Batch {
             space: space(),
             episode: None,
-            memories: vec![NewMemory::new(Kind::Fact, "the parking barrier needs a fob")],
+            memories: vec![NewMemory::new(
+                Kind::Fact,
+                "the parking barrier needs a fob",
+            )],
         },
     )
     .await
@@ -755,8 +758,12 @@ async fn stale_contexts_are_the_rows_reinforcement_carried_past_the_prune() {
     .into_iter()
     .map(Written::into_id)
     .collect();
-    let (carried, untouched, current, durable) =
-        (ids[0].clone(), ids[1].clone(), ids[2].clone(), ids[3].clone());
+    let (carried, untouched, current, durable) = (
+        ids[0].clone(),
+        ids[1].clone(),
+        ids[2].clone(),
+        ids[3].clone(),
+    );
 
     // Recalled thirty times, so `strength` bought it roughly 620 days against
     // a class whose unreinforced horizon is twenty — the sweep will not reach
@@ -782,7 +789,10 @@ async fn stale_contexts_are_the_rows_reinforcement_carried_past_the_prune() {
     // The sweep agrees it cannot reach it: that is what makes it a candidate
     // rather than something already handled.
     assert!(
-        !repo::prune_expired(&db).await.expect("prune").contains(&carried),
+        !repo::prune_expired(&db)
+            .await
+            .expect("prune")
+            .contains(&carried),
         "the row consolidation reports is exactly the one the prune leaves"
     );
 

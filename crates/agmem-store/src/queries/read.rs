@@ -600,7 +600,10 @@ mod tests {
             !selector.contains("strength"),
             "the unscaled horizon is the point of this query: {selector}"
         );
-        assert!(selector.contains("access_count >= $min_count"), "{selector}");
+        assert!(
+            selector.contains("access_count >= $min_count"),
+            "{selector}"
+        );
         assert!(selector.contains("decay_class = $class"), "{selector}");
     }
 }

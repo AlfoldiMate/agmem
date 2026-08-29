@@ -7,11 +7,13 @@
 
 use std::process::Command;
 
-#[test]
-fn in_process_startup_and_logging_write_nothing_to_stdout() {
+/// Start agmem on a fresh data dir, let stdin close, and hand back its stderr
+/// — having already checked the promise this file exists for.
+fn started(args: &[&str]) -> String {
     let dir = tempfile::tempdir().expect("tempdir");
     let out = Command::new(env!("CARGO_BIN_EXE_agmem"))
-        .args(["--no-daemon", "--data"])
+        .args(args)
+        .arg("--data")
         .arg(dir.path())
         .env("AGMEM_LOG", "trace")
         .output()
@@ -27,7 +29,18 @@ fn in_process_startup_and_logging_write_nothing_to_stdout() {
         "stdout must stay empty, got: {}",
         String::from_utf8_lossy(&out.stdout)
     );
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+#[test]
+fn in_process_startup_and_logging_write_nothing_to_stdout() {
+    // `--embedder none`, because CI poisons `FASTEMBED_CACHE_DIR` on purpose
+    // (design §7, issue #2): a test that loads the real model where the cache
+    // does not exist is a test that *downloads* one, and it fails instead —
+    // which is what kept this suite red from #11 onwards. The loader itself is
+    // covered by the ignored twin below.
+    let stderr = started(&["--no-daemon", "--embedder", "none"]);
+
     assert!(
         stderr.contains("agmem starting"),
         "expected the startup log line on stderr"
@@ -36,6 +49,25 @@ fn in_process_startup_and_logging_write_nothing_to_stdout() {
         stderr.contains("stdin closed before a session began"),
         "a client that never initializes is a session that never started, not \
          a failure — and the clean exit above must be that path, not luck: {stderr}"
+    );
+}
+
+/// The same promise with the real model behind it.
+///
+/// The embedder is the likeliest thing in the process to write to stdout —
+/// it is somebody else's C++ — and `--embedder none` is exactly the path that
+/// does not exercise it. Ignored rather than deleted: it needs the model on
+/// disk, so it belongs to a developer with a warm cache, not to CI.
+///
+/// `cargo test -p agmem-server --test stdout_silence -- --ignored`
+#[test]
+#[ignore = "loads the real embedding model"]
+fn the_real_embedder_writes_nothing_to_stdout_either() {
+    let stderr = started(&["--no-daemon"]);
+
+    assert!(
+        stderr.contains("agmem starting"),
+        "expected the startup log line on stderr: {stderr}"
     );
 }
 

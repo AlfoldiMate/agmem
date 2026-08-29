@@ -434,9 +434,11 @@ pub async fn live_vectors(
     row.memories
         .into_iter()
         .map(|memory| {
-            let embedding = vectors.remove(&memory.id).ok_or(
-                StoreError::UnexpectedResponse("a selected memory came back without its vector"),
-            )?;
+            let embedding = vectors
+                .remove(&memory.id)
+                .ok_or(StoreError::UnexpectedResponse(
+                    "a selected memory came back without its vector",
+                ))?;
             Ok(Embedded {
                 memory: memory.into_record()?,
                 embedding,

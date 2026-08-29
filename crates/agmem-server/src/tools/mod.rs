@@ -59,7 +59,14 @@ use std::sync::Arc;
 ///
 /// `list_tools` does **not** report this order — rmcp's `ToolRouter::list_all`
 /// sorts by name.
-pub const NAMES: [&str; 6] = ["remember", "recall", "context", "forget", "inspect", "consolidate"];
+pub const NAMES: [&str; 6] = [
+    "remember",
+    "recall",
+    "context",
+    "forget",
+    "inspect",
+    "consolidate",
+];
 
 use agmem_core::{Source, SpaceName};
 use agmem_store::{StoreError, repo};

@@ -31,6 +31,7 @@ use rmcp::{
 
 use crate::config::Config;
 use crate::prompts::{self, Focus};
+use crate::tools::consolidate::{self, ConsolidateParams, ConsolidateResult};
 use crate::tools::context::{self, ContextParams};
 use crate::tools::forget::{self, ForgetParams, ForgetResult, Pending};
 use crate::tools::inspect::{self, InspectParams, InspectResult};
@@ -316,6 +317,47 @@ which is what lets you tell a belief that changed from a belief that was always 
         Parameters(params): Parameters<InspectParams>,
     ) -> Result<Json<InspectResult>, ErrorData> {
         inspect::run(self, params).await.map(Json)
+    }
+
+    /// The maintenance verb (design §5.5). It surfaces candidates and stops
+    /// there — the merge is a judgement, and the only LLM in this system is
+    /// the one reading the answer.
+    #[tool(
+        name = "consolidate",
+        description = "Find what stored memory needs tidying up, and get back everything needed to \
+do it. This decides nothing and changes nothing.\n\n\
+Call it when memory has started to feel noisy: recall keeps returning the same claim in different \
+words, two stored claims look like they disagree, or you are picking up a project that has \
+accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use \
+`recall`.\n\n\
+Three lists come back, and every claim in each carries its full text rather than only its id, so \
+you can judge it here instead of looking it up:\n\n\
+- `near_duplicates` — groups of live claims saying the same thing. Merge a group by calling \
+`remember` with the one wording worth keeping and `supersedes` set to the id it replaces. Read \
+`min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest \
+link, so a low number means the group chained together through a middle claim and may not be one \
+claim at all.\n\
+- `contradictions` — pairs about the same subject that are close without being the same. Nothing \
+here has judged that they disagree; read both and decide. When one of them is wrong, send the \
+right one with `supersedes` set to the wrong one's id.\n\
+- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point \
+their class would have expired them. If one turned out to be durable, store it again with a \
+slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n\n\
+Every list can be empty, and usually some are — an empty answer means there is nothing worth your \
+attention, not that the call failed. `scanned` says what was actually compared.\n\n\
+This looks in the current space only, unlike every other read here: a tidy-up should not reach \
+the shared user space unless you name it with `space`.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn consolidate(
+        &self,
+        Parameters(params): Parameters<ConsolidateParams>,
+    ) -> Result<Json<ConsolidateResult>, ErrorData> {
+        consolidate::run(self, params).await.map(Json)
     }
 }
 

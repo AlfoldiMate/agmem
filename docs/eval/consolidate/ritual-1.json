@@ -1,0 +1,50 @@
+{
+  "scenario": "ritual",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.d2umLrlXyr",
+  "answer": "Confirmed already stored — nothing new to add. This session's only durable content was the thiserror/anyhow convention, which I saved earlier in this conversation.\n\n- **Saved**: library crates use `thiserror`, binaries use `anyhow` (already stored, id `01M16MW3BHB76MM4RKBY0TC2P1`)\n- **Corrected**: nothing\n- **Left out**: nothing else — the rest of the session was just the tool lookup/storage mechanics, not durable content itself",
+  "cost_usd": 0.0822306,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this Rust codebase, library crates must use thiserror for their error types, and binaries must use anyhow; using anyhow in a library crate or thiserror in a binary is a mistake that has caused problems twice before.",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16MW3BHB76MM4RKBY0TC2P1\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "error handling convention thiserror anyhow library binary",
+        "tags": [
+          "rust",
+          "error-handling",
+          "convention"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this Rust codebase, library crates must use thiserror for their error types, and binaries must use anyhow; using anyhow in a library crate or thiserror in a binary is a mistake that has caused problems twice before.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M16MW3BHB76MM4RKBY0TC2P1\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-08-29T11:35:56.017067Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

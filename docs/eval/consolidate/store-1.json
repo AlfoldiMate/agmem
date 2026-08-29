@@ -1,0 +1,51 @@
+{
+  "scenario": "store",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.QR62jlqtxw",
+  "answer": "Got it — noted for future sessions: library crates use `thiserror`, binaries use `anyhow`, never mixed.",
+  "cost_usd": 0.0495344,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this project, library crates must use thiserror for their error types, and binaries must use anyhow for theirs — never the reverse (e.g. a library using anyhow or a binary using thiserror).",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ],
+            "entities": [
+              "project"
+            ]
+          },
+          {
+            "content": "The convention of libraries using thiserror and binaries using anyhow (not vice versa) exists because violating it has caused problems twice before.",
+            "kind": "lesson",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ],
+            "entities": [
+              "project"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16MV9JKRJPXDB53WBJW3FMT\\\",\\\"01M16MV9JXT2B3H8EF676D7X1J\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    }
+  ]
+}

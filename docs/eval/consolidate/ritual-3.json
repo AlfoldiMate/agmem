@@ -1,0 +1,48 @@
+{
+  "scenario": "ritual",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.Nt2sJnyuQI",
+  "answer": "Already stored — no duplicates or corrections needed. This session had only one durable item, and it's already in memory from earlier in this conversation.\n\n**Checkpoint summary:**\n- **Saved:** already stored earlier this session — no new writes needed: \"Library crates must use thiserror for errors, binaries must use anyhow, never the reverse\" (id `01M16MX8FAF43883VT14ECKYJX`).\n- **Corrected:** none.\n- **Left out:** nothing else in this session was durable — it was a single instruction plus its confirmation.",
+  "cost_usd": 0.08373359999999999,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow; never the reverse.",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice."
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16MX8FAF43883VT14ECKYJX\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16MX8F1QP529QHFZ8RWBKF7\\\",\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "error handling convention thiserror anyhow library binary crates"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow; never the reverse.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M16MX8FAF43883VT14ECKYJX\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"episode:01M16MX8F1QP529QHFZ8RWBKF7\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-08-29T11:36:34.016975Z\\\"},{\\\"content\\\":\\\"User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bit"
+    }
+  ]
+}

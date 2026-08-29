@@ -1,0 +1,73 @@
+{
+  "scenario": "ritual_correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 3,
+  "superseded": true,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.AappjBbL78",
+  "answer": "This session's only durable fact is already stored correctly — no further action needed.\n\n**Saved:** nothing new this checkpoint (already recorded earlier in the session: the user moved off black to ruff format for Python, black is uninstalled).\n**Corrected:** nothing new (the correction — superseding the old \"user formats with black\" claim — was already done earlier in the session).\n**Left out:** nothing else in this conversation was durable; it consisted solely of that one preference update.",
+  "cost_usd": 0.08840440000000001,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling",
+              "python"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M16MYA99KS1MS3T8CX03VTN3\\\",\\\"of\\\":0,\\\"similarity\\\":0.9566595736127156}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling",
+              "python"
+            ],
+            "supersedes": "01M16MYA99KS1MS3T8CX03VTN3"
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16MYHZTN2ECYCHY2AC01V2Y\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M16MYA99KS1MS3T8CX03VTN3\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Python code formatter the user uses",
+        "entities": [
+          "user"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.\\\",\\\"entities\\\":[\\\"user\\\"],\\\"id\\\":\\\"01M16MYHZTN2ECYCHY2AC01V2Y\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249995671763585,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999982687054338,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\",\\\"tooling\\\",\\\"python\\\"],\\\"valid_from\\\":\\\"2026-08-29T11:37:16.537945Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

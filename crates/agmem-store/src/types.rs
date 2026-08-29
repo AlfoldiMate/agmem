@@ -9,6 +9,9 @@
 //! to the engine. Read rows carry everything *except* `embedding`: vectors are
 //! large and nothing downstream of retrieval looks at them, so reads never
 //! project them and the [`MemoryRecord`] they rebuild always has `None` there.
+//! [`LiveVectorsRow`] is the one read that needs the vectors too, and it keeps
+//! that invariant by handing them back *alongside* the records rather than in
+//! them.
 
 use agmem_core::{
     ChunkId, DecayClass, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind, MemoryId,
@@ -209,6 +212,27 @@ impl MemoryReadRow {
             created_at: to_timestamp(&self.created_at),
         })
     }
+}
+
+/// One memory's vector, carrying the id that pairs it with a
+/// [`MemoryReadRow`].
+#[derive(SurrealValue)]
+pub(crate) struct VectorRow {
+    pub(crate) id: String,
+    pub(crate) embedding: Vec<f32>,
+}
+
+/// What `queries::read::live_vectors` answers with: the same selection read
+/// twice, once wide and once for the vectors.
+///
+/// The exception the module doc's "reads never project `embedding`" rule
+/// admits — and it is still true of [`MemoryRecord`], because the vector
+/// arrives beside the record rather than inside it. Consolidation is the only
+/// caller, and it needs both.
+#[derive(SurrealValue)]
+pub(crate) struct LiveVectorsRow {
+    pub(crate) memories: Vec<MemoryReadRow>,
+    pub(crate) vectors: Vec<VectorRow>,
 }
 
 /// The domain provenance the flattened `source.kind`/`source.ref` pair spells.

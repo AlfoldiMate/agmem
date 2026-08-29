@@ -8,25 +8,29 @@
 //!
 //! Retrieved records never carry their vector — reads do not project
 //! `embedding` — so a [`MemoryRecord`] or [`EpisodeChunk`] from this module
-//! always has `None` there, whatever the store holds.
+//! always has `None` there, whatever the store holds. [`live_vectors`] is the
+//! one read that needs them, and it does not break that: the vector rides
+//! beside the record in an [`Embedded`], never inside it.
 
 use std::collections::HashMap;
 
 use agmem_core::{
     ChunkId, Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName, dedup,
+    scoring,
 };
 use jiff::Timestamp;
 use surrealdb::engine::any::Any;
 use surrealdb::method::Query;
 use surrealdb::types::RecordId;
 
+use super::write::PRUNE_CLASS;
 use super::{checked, ensure_memories_exist};
 use crate::StoreError;
 use crate::db::Db;
 use crate::queries::read as queries;
 use crate::types::{
-    self, ChainRow, ChunkReadRow, EpisodeDetailRow, MemoryReadRow, NeighbourRow, SearchRow,
-    StatsRow,
+    self, ChainRow, ChunkReadRow, EpisodeDetailRow, LiveVectorsRow, MemoryReadRow, NeighbourRow,
+    SearchRow, StatsRow,
 };
 
 /// The candidate pool one recall considers, before `k` truncates it
@@ -340,6 +344,158 @@ pub async fn nearest_live(
                 .collect()
         })
         .collect()
+}
+
+/// A live memory with the vector the store holds for it.
+///
+/// The pair exists because consolidation is the one read that needs both, and
+/// because [`MemoryRecord::embedding`] staying `None` on every read is an
+/// invariant worth keeping — a record that sometimes carries a vector is one
+/// every caller has to check.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Embedded {
+    /// The memory itself, with `embedding: None` like every other read.
+    pub memory: MemoryRecord,
+    /// Its stored vector, exactly as written.
+    pub embedding: Vec<f32>,
+}
+
+/// Which rows [`stale_contexts`] selects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StaleContexts {
+    /// How often a memory must have been recalled to count as one
+    /// reinforcement kept alive rather than one merely waiting to expire.
+    pub min_access_count: u32,
+    /// How many to return, most overdue first.
+    pub limit: usize,
+}
+
+impl StaleContexts {
+    /// The defaults design §5.5 is asking for.
+    ///
+    /// Five recalls is the line between "this is in use" and "this has not
+    /// come up yet": a `fast` note nobody has touched expires on its own at
+    /// the next start, and offering it as a candidate would be reporting the
+    /// prune's own backlog as a finding.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            min_access_count: 5,
+            limit: DEFAULT_POOL,
+        }
+    }
+}
+
+impl Default for StaleContexts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Every live memory in `space` that has a vector, with it (design §5.5).
+///
+/// Consolidation's only source of similarity. It asks which stored claims are
+/// near *each other*, which is a different question from the one HNSW answers
+/// — a KNN probe needs a query vector, so asking it per row means one scan per
+/// row, each with its own recall loss. One flat read and an all-pairs pass in
+/// `core::dedup` is exact and bounded by [`MAX_POOL`].
+///
+/// Strongest first, then newest, so a space past the cap keeps what has been
+/// reinforced most. Memories written without a vector — BM25-only mode — are
+/// absent rather than empty: there is nothing to compare them by.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects,
+/// [`StoreError::MalformedRow`] for a row this schema cannot have written, and
+/// [`StoreError::UnexpectedResponse`] when the two projections disagree about
+/// which rows were selected.
+pub async fn live_vectors(
+    db: &Db,
+    space: &SpaceName,
+    limit: usize,
+) -> Result<Vec<Embedded>, StoreError> {
+    let script = queries::live_vectors(limit);
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("space", types::space_str(space)))
+            .await?,
+    )?;
+    let row: LiveVectorsRow = resp
+        .take::<Option<LiveVectorsRow>>(script.result_index)?
+        .ok_or(StoreError::UnexpectedResponse(
+            "the vector scan reported nothing",
+        ))?;
+
+    let mut vectors: HashMap<String, Vec<f32>> = row
+        .vectors
+        .into_iter()
+        .map(|vector| (vector.id, vector.embedding))
+        .collect();
+    row.memories
+        .into_iter()
+        .map(|memory| {
+            let embedding = vectors.remove(&memory.id).ok_or(
+                StoreError::UnexpectedResponse("a selected memory came back without its vector"),
+            )?;
+            Ok(Embedded {
+                memory: memory.into_record()?,
+                embedding,
+            })
+        })
+        .collect()
+}
+
+/// Live `fast` memories the startup prune can no longer reach (design §5.5).
+///
+/// The sweep scales each row's horizon by its own `strength`, so every recall
+/// buys a working note more time — deliberately, and it is the same
+/// reinforcement that flattens the decay curve at read time. The consequence
+/// is that a `fast` note recalled often enough stops being a note with a TTL,
+/// and nothing revisits the class it was filed under. This finds those rows so
+/// an agent can: re-`remember` the claim at a slower class if it turned out to
+/// be durable, or `forget` it if it did not.
+///
+/// Selection is the prune's own, with the `strength` factor removed — see
+/// `queries::read::stale_contexts`. Most overdue first.
+///
+/// An empty answer is the ordinary one: the class only ever holds what an
+/// agent chose to file as short-lived.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row this schema cannot have written.
+pub async fn stale_contexts(
+    db: &Db,
+    space: &SpaceName,
+    params: StaleContexts,
+) -> Result<Vec<MemoryRecord>, StoreError> {
+    // A class that never decays has no horizon to be past, so nothing can be
+    // overdue against it — an empty answer, not an error.
+    let Some(horizon) = prune_horizon_secs() else {
+        return Ok(Vec::new());
+    };
+    let text = queries::stale_contexts(params.limit);
+    let mut resp = checked(
+        db.query(&text)
+            .bind(("space", types::space_str(space)))
+            .bind(("class", types::decay_class_str(PRUNE_CLASS)))
+            .bind(("horizon", horizon))
+            .bind(("min_count", i64::from(params.min_access_count)))
+            .await?,
+    )?;
+    let rows: Vec<MemoryReadRow> = resp.take(0)?;
+    rows.into_iter().map(MemoryReadRow::into_record).collect()
+}
+
+/// How long an unreinforced memory of the prune's class survives idle: the
+/// point at which unit strength reaches `scoring::PRUNE_RETENTION`.
+///
+/// Public because `consolidate` reports how far past it a row has been carried
+/// and must not re-derive the number the sweep uses. `None` for a class that
+/// never decays, which [`PRUNE_CLASS`] is not.
+#[must_use]
+pub fn prune_horizon_secs() -> Option<f64> {
+    scoring::decay_horizon_secs(PRUNE_CLASS, scoring::PRUNE_RETENTION)
 }
 
 /// Reinforce every memory a recall returned, in one statement.

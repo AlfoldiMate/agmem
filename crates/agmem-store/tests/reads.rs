@@ -11,10 +11,11 @@
 //! fulltext arm's order arbitrary. Every term asserted on here appears in
 //! exactly one row of several.
 
-use agmem_core::{EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
+use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
 use agmem_store::db::Db;
 use agmem_store::repo::{
-    self, Batch, Candidate, Filters, Hit, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Search,
+    self, Batch, Candidate, Filters, Forget, Hit, Liveness, Lookup, NewChunk, NewEpisode,
+    NewMemory, Search, Written,
 };
 use agmem_store::{StoreError, db, migrate};
 use jiff::Timestamp;
@@ -586,5 +587,210 @@ async fn an_episode_comes_back_with_its_slices_and_what_it_produced() {
             Err(StoreError::UnknownEpisode { .. })
         ),
         "an id is a capability inside a space, not across them"
+    );
+}
+
+/// Backdate a row and set the counters the sweep and `stale_contexts` read.
+///
+/// `last_accessed` and `access_count` are the engine's to default, so nothing
+/// in the write API can produce a row that has been idle for a year — which is
+/// the only interesting state either query has.
+async fn age(db: &Db, id: &MemoryId, days: i64, strength: f64, accesses: i64) {
+    db.query(
+        "UPDATE type::record('memory', $id)
+         SET last_accessed = time::now() - duration::from_secs($idle),
+             strength = $strength, access_count = $accesses",
+    )
+    .bind(("id", id.to_string()))
+    .bind(("idle", days * 86_400))
+    .bind(("strength", strength))
+    .bind(("accesses", accesses))
+    .await
+    .expect("age the row")
+    .check()
+    .expect("statements");
+}
+
+#[tokio::test]
+async fn the_all_pairs_scan_pairs_every_live_row_with_its_own_vector() {
+    let db = seeded().await;
+    // A BM25-only write leaves no vector behind, and there is nothing to
+    // compare such a row by — it is absent rather than present and empty.
+    repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: None,
+            memories: vec![NewMemory::new(Kind::Fact, "the parking barrier needs a fob")],
+        },
+    )
+    .await
+    .expect("write");
+
+    let rows = repo::live_vectors(&db, &space(), repo::MAX_POOL)
+        .await
+        .expect("scan");
+    assert_eq!(
+        rows.len(),
+        5,
+        "the five seeded memories carry a vector; the sixth does not"
+    );
+
+    let profile = rows
+        .iter()
+        .find(|row| row.memory.content.starts_with("the user prefers Rust"))
+        .expect("the seeded profile");
+    assert_eq!(
+        profile.embedding,
+        axis(5),
+        "the vector comes back as it was written"
+    );
+    assert!(
+        rows.iter().all(|row| row.memory.embedding.is_none()),
+        "the vector rides beside the record, never inside it"
+    );
+
+    let closed = profile.memory.id.clone();
+    repo::forget(
+        &db,
+        &Forget {
+            spaces: vec![space()],
+            memories: vec![closed.clone()],
+            episodes: Vec::new(),
+            purge: false,
+        },
+    )
+    .await
+    .expect("forget");
+
+    let after = repo::live_vectors(&db, &space(), repo::MAX_POOL)
+        .await
+        .expect("rescan");
+    assert_eq!(after.len(), 4);
+    assert!(
+        after.iter().all(|row| row.memory.id != closed),
+        "consolidation offers merges among what is still true"
+    );
+
+    let elsewhere = "other".parse().expect("valid slug");
+    assert!(
+        repo::live_vectors(&db, &elsewhere, repo::MAX_POOL)
+            .await
+            .expect("scan")
+            .is_empty(),
+        "an empty space is an empty answer, not an error"
+    );
+}
+
+#[tokio::test]
+async fn the_all_pairs_similarity_is_the_one_the_engine_reports() {
+    // The whole point of the arm: `consolidate` compares vectors in this
+    // process against thresholds the write gate states in the engine's units.
+    // If the two spellings of cosine ever disagreed, 0.90 would mean two
+    // different things in one tool.
+    let db = seeded().await;
+    let rows = repo::live_vectors(&db, &space(), repo::MAX_POOL)
+        .await
+        .expect("scan");
+
+    // Halfway between two fixture axes, so the probe lands mid-band rather
+    // than at the 1.0 and 0.0 the one-hot fixture otherwise produces.
+    let mut probe = vec![0.0; agmem_store::migrate::EMBEDDING_DIM];
+    // 0.894 against axis 5: inside [0.75, 0.90), which an equal mix of two
+    // axes is not — that is 0.707, below the floor entirely.
+    probe[5] = 1.0;
+    probe[0] = 0.5;
+    let unit = dedup::Unit::new(&probe).expect("a direction");
+
+    let probed = repo::nearest_live(&db, &space(), &[probe])
+        .await
+        .expect("probe");
+    let neighbours = &probed[0];
+    assert!(
+        neighbours
+            .iter()
+            .any(|neighbour| dedup::is_contradiction_candidate(neighbour.similarity)),
+        "the probe is meant to land in the band the contradiction arm reads"
+    );
+
+    for neighbour in neighbours {
+        let row = rows
+            .iter()
+            .find(|row| row.memory.id == neighbour.id)
+            .expect("the scan sees what the probe sees");
+        let ours = unit.similarity(&dedup::Unit::new(&row.embedding).expect("a direction"));
+        assert!(
+            (ours - neighbour.similarity).abs() < 1e-5,
+            "{}: engine {} vs all-pairs {ours}",
+            row.memory.content,
+            neighbour.similarity
+        );
+    }
+}
+
+#[tokio::test]
+async fn stale_contexts_are_the_rows_reinforcement_carried_past_the_prune() {
+    let db = seeded().await;
+    let working = |content: &str| {
+        let mut memory = NewMemory::new(Kind::Fact, content);
+        memory.decay_class = Some(DecayClass::Fast);
+        memory
+    };
+    let ids: Vec<MemoryId> = repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: None,
+            memories: vec![
+                working("deploys go out from the release branch"),
+                working("the branch under review is called spike"),
+                working("the failing test is called roundtrip"),
+                NewMemory::new(Kind::Fact, "the office is on the third floor"),
+            ],
+        },
+    )
+    .await
+    .expect("write")
+    .memories
+    .into_iter()
+    .map(Written::into_id)
+    .collect();
+    let (carried, untouched, current, durable) =
+        (ids[0].clone(), ids[1].clone(), ids[2].clone(), ids[3].clone());
+
+    // Recalled thirty times, so `strength` bought it roughly 620 days against
+    // a class whose unreinforced horizon is twenty — the sweep will not reach
+    // it, which is exactly why it needs a decision instead.
+    age(&db, &carried, 200, 31.0, 30).await;
+    // Equally idle, but nothing ever used it — the prune's own backlog, and
+    // it will close on the next start rather than needing a decision.
+    age(&db, &untouched, 200, 1.0, 1).await;
+    // Heavily used and still in use; nothing to reconsider yet.
+    age(&db, &current, 1, 6.0, 20).await;
+    // Ancient and heavily used, but never filed as short-lived: a `normal`
+    // fact has no TTL to outlive (design §5.5).
+    age(&db, &durable, 400, 8.0, 30).await;
+
+    let found: Vec<MemoryId> = repo::stale_contexts(&db, &space(), repo::StaleContexts::new())
+        .await
+        .expect("scan")
+        .into_iter()
+        .map(|memory| memory.id)
+        .collect();
+    assert_eq!(found, vec![carried.clone()]);
+
+    // The sweep agrees it cannot reach it: that is what makes it a candidate
+    // rather than something already handled.
+    assert!(
+        !repo::prune_expired(&db).await.expect("prune").contains(&carried),
+        "the row consolidation reports is exactly the one the prune leaves"
+    );
+
+    let elsewhere = "other".parse().expect("valid slug");
+    assert!(
+        repo::stale_contexts(&db, &elsewhere, repo::StaleContexts::new())
+            .await
+            .expect("scan")
+            .is_empty()
     );
 }

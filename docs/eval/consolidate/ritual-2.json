@@ -1,0 +1,52 @@
+{
+  "scenario": "ritual",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.lnHCd2FH2Z",
+  "answer": "Checkpoint complete:\n\n- **Saved:** already stored earlier this session — the thiserror-for-libraries / anyhow-for-binaries Rust convention (id `01M16MWNXVBH2HQ8QMJF972SHH`). Recall confirms it's live with no duplicates or conflicts.\n- **Corrected:** nothing.\n- **Left out:** nothing else — the rest of the conversation was just the tool-loading mechanics of setting that memory up, not durable content on its own.",
+  "cost_usd": 0.0837098,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In Rust codebases, library crates should define error types with thiserror, and binary crates should use anyhow for error handling; the reverse (anyhow in libraries or thiserror in binaries) should be avoided.",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "conventions"
+            ],
+            "entities": [
+              "user"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16MWNXVBH2HQ8QMJF972SHH\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Rust error handling library thiserror binary anyhow convention",
+        "tags": [
+          "rust",
+          "error-handling"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In Rust codebases, library crates should define error types with thiserror, and binary crates should use anyhow for error handling; the reverse (anyhow in libraries or thiserror in binaries) should be avoided.\\\",\\\"entities\\\":[\\\"user\\\"],\\\"id\\\":\\\"01M16MWNXVBH2HQ8QMJF972SHH\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"conventions\\\"],\\\"valid_from\\\":\\\"2026-08-29T11:36:15.034974Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

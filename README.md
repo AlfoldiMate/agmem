@@ -4,12 +4,13 @@ Memory for coding agents, over MCP. One local process, one embedded database,
 no server-side LLM: the agent distils what is worth keeping, agmem stores it,
 dates it, ranks it, and shows its work.
 
-Five tools — `remember`, `recall`, `context`, `forget`, `inspect` — and two
-rituals that ask for them.
+Six tools — `remember`, `recall`, `context`, `forget`, `inspect`,
+`consolidate` — and two rituals that ask for them.
 
-> Status: Phase 2 complete. The loop, the session-start block, removal, startup
-> pruning, the shared daemon and the rituals all work end to end from Claude
-> Code. Consolidation and the memory-quality eval are Phase 3+.
+> Status: Phase 2 complete, and `consolidate` (Phase 3) has landed. The loop,
+> the session-start block, removal, startup pruning, the shared daemon, the
+> rituals and candidate surfacing all work end to end from Claude Code. The
+> entity graph and the memory-quality eval are what is left of Phase 3.
 
 ## Install
 
@@ -346,9 +347,39 @@ included), or `stats` for per-space counts.
       { "id": "01M14XY6T7RX…", "content": "The user prefers Go over Python…" } ] } }
 ```
 
+**`consolidate`** — what needs tidying up, and nothing done about it. Three
+lists: `near_duplicates` (groups of live claims saying the same thing, each
+group one `remember(supersedes:)` call away from merged), `contradictions`
+(pairs about one subject that are close without being the same) and
+`stale_contexts` (notes filed `fast` that recall has kept alive far past the
+twenty-day horizon their class implies). Every candidate carries its full text,
+not just its id — there is no server-side LLM here, so the decision is the
+agent's, and an id and a number are not something to decide on.
+
+```json
+{ "spaces": ["myproject"],
+  "scanned": [{ "space": "myproject", "compared": 34, "truncated": false }],
+  "near_duplicates": [
+    { "space": "myproject", "min_similarity": 0.94, "max_similarity": 0.97,
+      "members": [
+        { "id": "01M14XWWAXJG…", "content": "The user formats Python with black" },
+        { "id": "01M14XY6T7RX…", "content": "Python in this repo is formatted by black" } ] } ],
+  "contradictions": [],
+  "stale_contexts": [
+    { "claim": { "id": "01M14Y1ZK9PQ…", "content": "The branch under review is spike",
+                 "decay_class": "fast", "access_count": 30 },
+      "idle_days": 201.4, "expires_in_days": 418.1 } ] }
+```
+
+`min_similarity` is the weakest pair *in* a group, not the weakest link that
+formed it: clusters are transitive, so a low number is how a group that chained
+together through a middle claim tells you it may not be one claim at all.
+Unlike every other read here, `consolidate` looks in the current space alone —
+a tidy-up should not reach the shared `user` space unless you name it.
+
 ## Two rituals
 
-The five tools are what an agent *may* call. These two are what you ask it to
+The six tools are what an agent *may* call. These two are what you ask it to
 do — MCP prompts, which Claude Code shows as slash commands:
 
 | | |

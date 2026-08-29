@@ -276,6 +276,7 @@ session's wording for every project sharing the store.
 | `context` | `read_only: true, open_world: false` | Prompt-ready markdown block for session start / topic switch |
 | `forget` | `destructive: true` | Soft-invalidate (default) or purge by id/query |
 | `inspect` | `read_only: true, open_world: false` | Provenance, history chains, stats, health |
+| `consolidate` | `read_only: true, open_world: false` | Merge, contradiction and staleness *candidates*, for the agent to act on (phase 3) |
 
 Input schemas (sketch; exact schemars structs are a phase-1 task):
 
@@ -352,6 +353,23 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // that is the form `remember` and `recall` hand out, and a verbatim hit's id
 // is a *chunk* id, so requiring a prefix made the obvious call fail (#36).
 // A chunk answers as the episode it belongs to; the echoed `ref` says which.
+
+// consolidate — §5.5; no knobs, because there is no threshold an agent is in
+// a position to choose better than the write gate already did.
+{ "space": "current|user|all|<name>" }   // default: current ALONE, not current + user
+// → { spaces: [searched],
+//     scanned: [{ space, compared, truncated }],
+//     near_duplicates: [{ space, members: [MemoryView],   // strongest first
+//                         min_similarity, max_similarity }],
+//     contradictions:  [{ space, shared_entities, a: MemoryView, b: MemoryView,
+//                         similarity }],
+//     stale_contexts:  [{ claim: MemoryView, idle_days, expires_in_days }],
+//     note? }                          // present only when something limited it
+// Every candidate is a whole `MemoryView`, content included: the #38 finding
+// is that an id and a number are not something an agent can decide on.
+// `min_similarity` is the weakest pair *in* the cluster rather than the
+// weakest edge, because clusters are transitive closures — a low number is
+// how a chained group announces itself before it is merged into one claim.
 ```
 
 Behavioral rules baked into the tools:
@@ -739,7 +757,7 @@ points, keeping the process count at one:
 |---|---|
 | Decay sweep (importance × rate daily) | Computed in the scoring formula at read time — nothing to run |
 | TTL expiry of context-category | `repo::prune_expired` closes decayed `fast` records at every start |
-| Consolidation / elaboration | Phase 3: `consolidate` returns *candidates* (near-dup clusters, stale contradictions); the **agent** decides merges via `remember(supersedes)` — the LLM stays client-side |
+| Consolidation / elaboration | `consolidate` returns *candidates* — near-dup clusters, contradiction pairs, stale contexts; the **agent** decides merges via `remember(supersedes)` or `forget`. The LLM stays client-side (issue #25) |
 | Reindex / re-embed | Phase 4 explicit maintenance op (`agmem --reindex`), required for embedder change |
 | fsck duplicate audit | Folded into `inspect stats` + `consolidate` candidates |
 
@@ -765,6 +783,39 @@ Three properties the sweep is designed around:
   readable through `inspect`; `invalid_at IS NONE` guards the update, so a
   second start moves no date and a row a `forget` already closed keeps its own
   reason.
+
+`consolidate` is the other lazy point, and four things about it are decisions
+rather than details:
+
+- **Similarity is computed in this process, not by the index.** HNSW answers
+  "what is near *this* vector"; consolidation asks "which stored claims are
+  near *each other*", which is not one probe but one per row — N scans, each
+  with its own recall loss and its own exposure to the KNN shape issue #40 is
+  about. One flat read of `(row, embedding)` and an all-pairs pass in
+  `core::dedup::Unit` is exact instead of approximate, and cheaper. It is
+  O(n²), which is what bounds a pass at `MAX_POOL` rows and puts `truncated`
+  in the answer.
+- **The two similarity bands partition.** `[0.75, 0.90)` is a contradiction
+  candidate and `≥ 0.90` is a cluster edge — the write path's
+  `is_correction_candidate` stops at 0.95 instead, and deliberately: there,
+  0.95 is the gate deciding what to *block*. Here nothing is blocked, so the
+  question is only which of two lists a pair belongs in, and no pair may be in
+  both.
+- **A cluster is a transitive closure, and reports its weakest pair.** One
+  group is one `remember(supersedes: …)` call; pairwise candidates would make
+  the agent reconcile N overlapping merges for one three-way duplicate. The
+  cost is chaining — A close to B close to C, with A and C unrelated — so
+  `min_similarity` is measured over *every* pair in the group, not over the
+  edges that linked it. A cluster that formed through a middle claim announces
+  itself with a low number, and the answer is readable before it is acted on.
+- **Stale contexts are the prune's blind spot, not its backlog.** The selector
+  is `PRUNE_EXPIRED`'s with the `strength` factor removed, plus a minimum
+  `access_count`. Scaling the horizon by strength is what buys a working note
+  more time on every recall; the consequence is that a `fast` note recalled
+  thirty times has a horizon of years, and nothing ever revisits the class it
+  was filed under. Those rows are the candidates. A `fast` row nobody has
+  touched is *not* — it expires at the next start on its own, and reporting it
+  would be handing the agent the sweep's own to-do list.
 
 ---
 

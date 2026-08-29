@@ -119,7 +119,7 @@ const SCENARIOS = [
         seed: []
         turns: ["What is the capital of France? Answer in one word."]
         want: []
-        avoid: ["remember" "recall" "context" "forget" "inspect"]
+        avoid: ["remember" "recall" "context" "forget" "inspect" "consolidate"]
     }
 ]
 

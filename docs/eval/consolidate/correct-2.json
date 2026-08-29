@@ -1,0 +1,89 @@
+{
+  "scenario": "correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember",
+    "inspect"
+  ],
+  "calls": 4,
+  "superseded": true,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.BA7THQonMA",
+  "answer": "Noted and saved to memory — the old \"user formats with black\" claim is now marked superseded, and future sessions will know you're on `ruff format` with black uninstalled.",
+  "cost_usd": 0.0976954,
+  "agent_turns": 8,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black and uses ruff format for code formatting; black is uninstalled.",
+            "kind": "fact",
+            "tags": [
+              "identity",
+              "tooling"
+            ],
+            "entities": [
+              "user"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16N0EN8YKKMC5NYDQDWY2D9\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M16N09J1PWHR5QXP50AVJMXX\\\",\\\"of\\\":0,\\\"similarity\\\":0.9365016666655012}],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black and uses ruff format for code formatting; black is uninstalled.",
+            "kind": "fact",
+            "tags": [
+              "identity",
+              "tooling"
+            ],
+            "entities": [
+              "user"
+            ],
+            "supersedes": "01M16N09J1PWHR5QXP50AVJMXX"
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user has moved off black and uses ruff format for code formatting; black is uninstalled.\\\",\\\"id\\\":\\\"01M16N0EN8YKKMC5NYDQDWY2D9\\\",\\\"of\\\":0,\\\"similarity\\\":1}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "inspect",
+      "input": {
+        "ref": "memory:01M16N09J1PWHR5QXP50AVJMXX"
+      },
+      "answer": "\"{\\\"found\\\":{\\\"chain\\\":[{\\\"access_count\\\":0,\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"created_at\\\":\\\"2026-08-29T11:38:13.441234Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M16N09J1PWHR5QXP50AVJMXX\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-08-29T11:38:13.441441Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":1,\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T11:38:13.440932Z\\\"}],\\\"kind\\\":\\\"memory\\\",\\\"memory\\\":{\\\"access_count\\\":0,\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"created_at\\\":\\\"2026-08-29T11:38:13.441234Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M16N09J1PWHR5QXP50AVJMXX\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-08-29T1"
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "As of 2026-08-29, the user no longer formats Python with black; black is uninstalled and the user now uses ruff format instead.",
+            "kind": "fact",
+            "tags": [
+              "identity",
+              "tooling"
+            ],
+            "entities": [
+              "user"
+            ],
+            "supersedes": "01M16N09J1PWHR5QXP50AVJMXX"
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16N0YVSYATCBX0GVFC3EZTW\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M16N09J1PWHR5QXP50AVJMXX\\\"]}\""
+    }
+  ]
+}

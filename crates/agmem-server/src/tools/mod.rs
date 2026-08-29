@@ -19,6 +19,7 @@
 //! | `context` | `read_only_hint = true, open_world_hint = false` |
 //! | `forget` | `destructive_hint = true` |
 //! | `inspect` | `read_only_hint = true, open_world_hint = false` |
+//! | `consolidate` | `read_only_hint = true, open_world_hint = false` |
 //!
 //! rmcp omits an unset hint from the wire entirely, and the MCP spec's default
 //! for a *missing* `destructiveHint` is **true** — so a tool that says nothing
@@ -38,6 +39,7 @@
 //! )]
 //! ```
 
+pub mod consolidate;
 pub mod context;
 pub mod forget;
 pub mod inspect;
@@ -57,7 +59,7 @@ use std::sync::Arc;
 ///
 /// `list_tools` does **not** report this order — rmcp's `ToolRouter::list_all`
 /// sorts by name.
-pub const NAMES: [&str; 5] = ["remember", "recall", "context", "forget", "inspect"];
+pub const NAMES: [&str; 6] = ["remember", "recall", "context", "forget", "inspect", "consolidate"];
 
 use agmem_core::{Source, SpaceName};
 use agmem_store::{StoreError, repo};

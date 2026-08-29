@@ -4,6 +4,361 @@ expression: "&tools.tools"
 ---
 [
   {
+    "name": "consolidate",
+    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nThree lists come back, and every claim in each carries its full text rather than only its id, so you can judge it here instead of looking it up:\n\n- `near_duplicates` — groups of live claims saying the same thing. Merge a group by calling `remember` with the one wording worth keeping and `supersedes` set to the id it replaces. Read `min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means the group chained together through a middle claim and may not be one claim at all.\n- `contradictions` — pairs about the same subject that are close without being the same. Nothing here has judged that they disagree; read both and decide. When one of them is wrong, send the right one with `supersedes` set to the wrong one's id.\n- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point their class would have expired them. If one turned out to be durable, store it again with a slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "space": {
+          "default": null,
+          "description": "Where to look: `current`, `user`, `all`, or a space name. Defaults to\n`current` alone — unlike every other read, which also covers `user`.\nMaintenance is scoped to the project you are in unless you widen it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "outputSchema": {
+      "$defs": {
+        "Cluster": {
+          "description": "Live claims close enough to be one claim.",
+          "properties": {
+            "max_similarity": {
+              "description": "The closest pair in the cluster.",
+              "format": "double",
+              "type": "number"
+            },
+            "members": {
+              "description": "The claims, strongest first — the first is the natural survivor, and\neach carries its own text so the merge can be judged rather than\nguessed.",
+              "items": {
+                "$ref": "#/$defs/MemoryView"
+              },
+              "type": "array"
+            },
+            "min_similarity": {
+              "description": "The **weakest** similarity between any two members, not merely between\nthe two that were linked. A cluster forms transitively, so a low number\nhere means it chained: A resembles B and B resembles C, while A and C\nmay be about different things. Read it before merging the whole group.",
+              "format": "double",
+              "type": "number"
+            },
+            "space": {
+              "description": "The space they are in. Ids are only meaningful inside one.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "space",
+            "members",
+            "min_similarity",
+            "max_similarity"
+          ],
+          "type": "object"
+        },
+        "Contradiction": {
+          "description": "Two live claims about one subject, close but not the same.",
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/MemoryView",
+              "description": "The stronger claim, with its text."
+            },
+            "b": {
+              "$ref": "#/$defs/MemoryView",
+              "description": "The other one, with its text."
+            },
+            "shared_entities": {
+              "description": "The subjects they both name — what makes them comparable at all.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "similarity": {
+              "description": "How close they are: high enough to be one subject, below the clustering\nbar, which is where a disagreement lives rather than a restatement.",
+              "format": "double",
+              "type": "number"
+            },
+            "space": {
+              "description": "The space they are in.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "space",
+            "shared_entities",
+            "a",
+            "b",
+            "similarity"
+          ],
+          "type": "object"
+        },
+        "DecayClass": {
+          "description": "How fast a memory's retention falls off between accesses.\n\nThe rates themselves live with the scoring functions; this is the label\nstored on the row.",
+          "oneOf": [
+            {
+              "const": "pinned",
+              "description": "Never decays.",
+              "type": "string"
+            },
+            {
+              "const": "slow",
+              "description": "Fades over months.",
+              "type": "string"
+            },
+            {
+              "const": "normal",
+              "description": "The default: fades over weeks.",
+              "type": "string"
+            },
+            {
+              "const": "fast",
+              "description": "Working context: fades over days, then gets pruned at startup.",
+              "type": "string"
+            }
+          ]
+        },
+        "Kind": {
+          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
+          "oneOf": [
+            {
+              "const": "fact",
+              "description": "A distilled statement about the world, the user, or the project.",
+              "type": "string"
+            },
+            {
+              "const": "lesson",
+              "description": "A procedural insight: \"X fails when Y; do Z\".",
+              "type": "string"
+            },
+            {
+              "const": "instruction",
+              "description": "A standing behavioral rule, always part of assembled context.",
+              "type": "string"
+            }
+          ]
+        },
+        "MemoryView": {
+          "description": "A memory as `inspect` renders it: the whole row, including the counters\n`recall` folds away into a score.",
+          "properties": {
+            "access_count": {
+              "description": "How often recall has returned it.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "content": {
+              "description": "The claim itself.",
+              "type": "string"
+            },
+            "created_at": {
+              "description": "When the row was written, RFC3339.",
+              "type": "string"
+            },
+            "decay_class": {
+              "$ref": "#/$defs/DecayClass",
+              "description": "How fast it fades between uses."
+            },
+            "entities": {
+              "description": "The subjects it is about.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "id": {
+              "description": "The record id.",
+              "type": "string"
+            },
+            "invalid_at": {
+              "description": "When it stopped; absent while it is still live.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "invalid_reason": {
+              "description": "Why it stopped: `superseded`, `forgotten`, or `expired`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "$ref": "#/$defs/Kind",
+              "description": "What the claim is."
+            },
+            "last_accessed": {
+              "description": "When recall last returned it, RFC3339.",
+              "type": "string"
+            },
+            "source": {
+              "description": "Where it came from: `agent`, `episode:<id>`, or `external:<origin>`.",
+              "type": "string"
+            },
+            "space": {
+              "description": "The space holding it.",
+              "type": "string"
+            },
+            "strength": {
+              "description": "Ebbinghaus stability: 1.0 when written, raised by every recall that\nreturns it. A high number on an old memory means it is still in use.",
+              "format": "double",
+              "type": "number"
+            },
+            "superseded_by": {
+              "description": "The claim that corrected this one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "supersedes": {
+              "description": "The claim this one corrected.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tags": {
+              "description": "Its labels.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "valid_from": {
+              "description": "When the claim started being true, RFC3339.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "content",
+            "space",
+            "entities",
+            "tags",
+            "source",
+            "decay_class",
+            "strength",
+            "access_count",
+            "last_accessed",
+            "valid_from",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        "SpaceScan": {
+          "description": "How much of one space this pass actually looked at.",
+          "properties": {
+            "compared": {
+              "description": "How many live memories carried a vector and were compared against each\nother. Zero means either an empty space or BM25-only mode — `note`\nsays which.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "space": {
+              "description": "The space.",
+              "type": "string"
+            },
+            "truncated": {
+              "description": "Whether the space holds more live memories than one pass compares. The\nstrongest were kept; run again after acting on these.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "space",
+            "compared",
+            "truncated"
+          ],
+          "type": "object"
+        },
+        "StaleContext": {
+          "description": "A short-lived note that outlived its class.",
+          "properties": {
+            "claim": {
+              "$ref": "#/$defs/MemoryView",
+              "description": "The claim, with its text and its counters."
+            },
+            "expires_in_days": {
+              "description": "How much longer the automatic sweep will leave it, because every recall\nextended its horizon. A large number is the finding: this stopped being\na short-lived note some time ago.",
+              "format": "double",
+              "type": "number"
+            },
+            "idle_days": {
+              "description": "How long since it was last recalled.",
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "claim",
+            "idle_days",
+            "expires_in_days"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "contradictions": {
+          "description": "Pairs of live claims about one subject that may disagree. Nothing here\njudges that they do — read both and decide.",
+          "items": {
+            "$ref": "#/$defs/Contradiction"
+          },
+          "type": "array"
+        },
+        "near_duplicates": {
+          "description": "Groups of live claims saying the same thing. Merge one by sending\n`remember` with the surviving wording and `supersedes` set to the id of\nwhat it replaces.",
+          "items": {
+            "$ref": "#/$defs/Cluster"
+          },
+          "type": "array"
+        },
+        "note": {
+          "description": "Present only when something limited the answer — no embedder, or a\nspace larger than one pass compares.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scanned": {
+          "description": "What each space held, so an empty answer can be told apart from an\nunexamined one.",
+          "items": {
+            "$ref": "#/$defs/SpaceScan"
+          },
+          "type": "array"
+        },
+        "spaces": {
+          "description": "The spaces that were examined.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "stale_contexts": {
+          "description": "Short-lived notes that recall has kept alive past the point their class\nwould have expired them.",
+          "items": {
+            "$ref": "#/$defs/StaleContext"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "spaces",
+        "scanned",
+        "near_duplicates",
+        "contradictions",
+        "stale_contexts"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "context",
     "description": "Read this before your first move in a session: the standing instructions, who the user is, what is relevant right now, and the lessons earlier sessions paid for — as one markdown block.\n\nCall it once at the start of a session, and again when the topic shifts enough that a different set of memories matters. Pass `query` to aim the Relevant section at what you are about to do; leave it out for a general orientation. The other sections do not change with it.\n\nThe block is capped at `budget_chars` (6000 by default) and fills its sections in priority order, dropping whole entries rather than cutting one in half — so it is a briefing, not an inventory. Use `recall` for anything it left out, including the verbatim text, which never appears here.\n\nEvery line ends with its memory id. Hand that to `inspect` to see where the claim came from, or to `remember`'s `supersedes` the moment you learn it is wrong.",
     "inputSchema": {

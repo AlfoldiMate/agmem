@@ -442,7 +442,11 @@ pub async fn prune_expired(db: &Db) -> Result<Vec<MemoryId>, StoreError> {
 }
 
 /// The one decay class with a TTL (design §2.3).
-const PRUNE_CLASS: DecayClass = DecayClass::Fast;
+///
+/// `pub(super)` because the read half selects against the same class: what
+/// `consolidate` reports is exactly the rows this sweep cannot reach, and two
+/// spellings of "which class expires" could drift apart.
+pub(super) const PRUNE_CLASS: DecayClass = DecayClass::Fast;
 
 /// Parse a list of reported ids, failing on the first the schema cannot have
 /// minted.

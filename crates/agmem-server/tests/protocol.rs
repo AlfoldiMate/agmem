@@ -135,6 +135,18 @@ impl Harness {
             .expect("recall answers with structured content, not just text")
     }
 
+    /// One successful `consolidate`, as the structured result an agent reads.
+    async fn consolidate(&self, arguments: Value) -> Value {
+        let result = self
+            .call("consolidate", arguments)
+            .await
+            .expect("consolidate");
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        result
+            .structured_content
+            .expect("consolidate answers with structured content, not just text")
+    }
+
     /// One successful `context`, as the markdown block an agent reads.
     async fn context(&self, arguments: Value) -> String {
         let result = self.call("context", arguments).await.expect("context");
@@ -249,6 +261,90 @@ fn vector(text: &str) -> Vec<f32> {
         vector[VOCABULARY.len()] = 1.0;
     }
     vector
+}
+
+/// Vectors at a chosen angle on one plane, so a test can put two memories at
+/// an exact cosine similarity.
+///
+/// [`KeywordEmbedder`] cannot: one-hot axes over a three-word vocabulary only
+/// ever produce 1.0, 0.707, 0.577 or 0.0, and every band `consolidate` reads
+/// sits strictly between 0.75 and 1.0. Nothing built on it can seed a
+/// near-duplicate that the write gate does not also block, let alone a
+/// contradiction candidate.
+#[derive(Debug, Clone, Copy)]
+struct AngleEmbedder;
+
+/// Where each marker word sits, in degrees on the first two axes.
+///
+/// 20° apart is cosine 0.94 — a cluster, and still under the 0.95 write gate,
+/// so a pair can actually be stored in the state `consolidate` exists to find.
+/// 30° is 0.87, the contradiction band. 40° is 0.77, which is neither: two
+/// claims 20° either side of a third form one chained cluster whose ends do
+/// not resemble each other, and that is what `min_similarity` reports.
+const ANGLES: [(&str, f64); 4] = [
+    ("black", 0.0),
+    ("blackfmt", 20.0),
+    ("ruff", 30.0),
+    ("blake", 40.0),
+];
+
+impl Embedder for AngleEmbedder {
+    fn dim(&self) -> usize {
+        migrate::EMBEDDING_DIM
+    }
+
+    fn model_id(&self) -> &str {
+        "test-angle"
+    }
+
+    fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
+        Ok(passages.iter().map(|text| angled(text)).collect())
+    }
+
+    fn embed_query(&self, query: &str) -> Result<Vec<f32>, EmbedError> {
+        Ok(angled(query))
+    }
+}
+
+/// The vector for the first marker word `text` contains; 90° — orthogonal to
+/// every marker — for text carrying none.
+fn angled(text: &str) -> Vec<f32> {
+    let lowered = text.to_lowercase();
+    let degrees = lowered
+        .split_whitespace()
+        .find_map(|word| {
+            ANGLES
+                .iter()
+                .find(|(marker, _)| word == *marker)
+                .map(|(_, degrees)| *degrees)
+        })
+        .unwrap_or(90.0);
+    let radians = degrees.to_radians();
+    let mut vector = vec![0.0; migrate::EMBEDDING_DIM];
+    vector[0] = radians.cos() as f32;
+    vector[1] = radians.sin() as f32;
+    vector
+}
+
+/// Backdate a row and set the counters `stale_contexts` reads.
+///
+/// `last_accessed`, `strength` and `access_count` are the engine's to keep, so
+/// no sequence of tool calls produces a note that has been in use for months —
+/// which is the only state the stale arm has an opinion about.
+async fn age(db: &Db, id: &str, days: i64, strength: f64, accesses: i64) {
+    db.query(
+        "UPDATE type::record('memory', $id)
+         SET last_accessed = time::now() - duration::from_secs($idle),
+             strength = $strength, access_count = $accesses",
+    )
+    .bind(("id", id.to_owned()))
+    .bind(("idle", days * 86_400))
+    .bind(("strength", strength))
+    .bind(("accesses", accesses))
+    .await
+    .expect("age the row")
+    .check()
+    .expect("statements");
 }
 
 /// The ids in one array of a `remember` diff.
@@ -1832,4 +1928,201 @@ async fn verbatim_text_can_only_be_purged_and_its_claims_outlive_it() {
         "there is simply nothing left to quote: {seen}"
     );
     agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn consolidate_clusters_near_duplicates_and_says_how_loose_the_group_is() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    // 0°, 20° and 40°: each adjacent pair clears the clustering bar, the ends
+    // do not. One group, chained — which is the case worth reporting honestly,
+    // because merging it whole would lose a distinction.
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the user formats python with black" },
+                { "content": "python here is formatted by blackfmt" },
+                { "content": "formatting runs blake over python" },
+                { "content": "the kitchen tap drips at night" },
+            ]
+        }))
+        .await;
+
+    let found = agmem.consolidate(json!({})).await;
+    let clusters = found["near_duplicates"].as_array().expect("an array");
+    assert_eq!(clusters.len(), 1, "{found:#}");
+
+    let members = clusters[0]["members"].as_array().expect("an array");
+    assert_eq!(members.len(), 3, "the orthogonal note joins nothing: {found:#}");
+    for member in members {
+        let content = member["content"].as_str().expect("every member is readable");
+        assert!(content.contains("python"), "{content}");
+        assert!(member["id"].as_str().is_some(), "and addressable: {member:#}");
+    }
+
+    let min = clusters[0]["min_similarity"].as_f64().expect("a number");
+    let max = clusters[0]["max_similarity"].as_f64().expect("a number");
+    assert!(
+        min < 0.80,
+        "the two ends of the chain are not a duplicate pair, and the answer \
+         has to say so: {min}"
+    );
+    assert!(max > 0.93, "the adjacent pairs are what linked them: {max}");
+
+    // Two of those pairs sit in the contradiction band, and neither claim
+    // names an entity — nothing is offered as a disagreement on similarity
+    // alone.
+    assert!(
+        found["contradictions"]
+            .as_array()
+            .expect("an array")
+            .is_empty(),
+        "{found:#}"
+    );
+    assert_eq!(found["scanned"][0]["compared"], 4);
+    assert_eq!(found["scanned"][0]["truncated"], false);
+    assert_eq!(found["spaces"], json!(["default"]));
+    assert!(found.get("note").is_none(), "{found:#}");
+}
+
+#[tokio::test]
+async fn consolidate_pairs_claims_about_one_subject_that_may_disagree() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the user formats python with black", "entities": ["python"] },
+                { "content": "the user formats python with ruff", "entities": ["Python"] },
+                { "content": "the kitchen tap drips at night", "entities": ["home"] },
+            ]
+        }))
+        .await;
+
+    let found = agmem.consolidate(json!({})).await;
+    assert!(
+        found["near_duplicates"]
+            .as_array()
+            .expect("an array")
+            .is_empty(),
+        "30° apart is one subject stated twice, not one claim: {found:#}"
+    );
+
+    let pairs = found["contradictions"].as_array().expect("an array");
+    assert_eq!(pairs.len(), 1, "{found:#}");
+    let shared = pairs[0]["shared_entities"].as_array().expect("an array");
+    assert_eq!(shared.len(), 1, "{found:#}");
+    assert_eq!(
+        shared[0].as_str().expect("a subject").to_lowercase(),
+        "python",
+        "the same subject spelled two ways is one subject"
+    );
+
+    let (left, right) = (
+        pairs[0]["a"]["content"].as_str().expect("readable"),
+        pairs[0]["b"]["content"].as_str().expect("readable"),
+    );
+    assert!(
+        left.contains("black") != right.contains("black"),
+        "both sides carry their text, or there is nothing to decide between: \
+         {left:?} / {right:?}"
+    );
+    let similarity = pairs[0]["similarity"].as_f64().expect("a number");
+    assert!((0.75..0.90).contains(&similarity), "{similarity}");
+}
+
+#[tokio::test]
+async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
+    // No embedder at all: the stale arm is the one finding that needs no
+    // vectors, and it has to keep working in BM25-only mode.
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let written = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the branch under review is called spike", "decay_class": "fast" },
+                { "content": "the failing test is called roundtrip", "decay_class": "fast" },
+            ]
+        }))
+        .await;
+    let created = ids(&written["created"]);
+    // Recalled thirty times, so `strength` bought it roughly 620 days against
+    // a class whose unreinforced horizon is twenty.
+    age(&agmem.db, created[0], 200, 31.0, 30).await;
+    // Equally idle and never used: the prune closes this one on its own.
+    age(&agmem.db, created[1], 200, 1.0, 1).await;
+
+    let found = agmem.consolidate(json!({})).await;
+    let stale = found["stale_contexts"].as_array().expect("an array");
+    assert_eq!(stale.len(), 1, "{found:#}");
+    assert_eq!(stale[0]["claim"]["id"], created[0]);
+    assert!(
+        stale[0]["claim"]["content"]
+            .as_str()
+            .expect("readable")
+            .contains("spike"),
+        "{found:#}"
+    );
+    assert_eq!(stale[0]["claim"]["decay_class"], "fast");
+    assert!(stale[0]["idle_days"].as_f64().expect("a number") > 199.0);
+    assert!(
+        stale[0]["expires_in_days"].as_f64().expect("a number") > 300.0,
+        "the finding is that the sweep will not reach it for a year: {found:#}"
+    );
+
+    let note = found["note"].as_str().expect("a note");
+    assert!(
+        note.contains("without an embedder"),
+        "an empty similarity section has to say whether it is empty or blind: {note}"
+    );
+}
+
+#[tokio::test]
+async fn consolidate_on_an_empty_store_answers_empty_rather_than_failing() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    let found = agmem.consolidate(json!({})).await;
+
+    assert_eq!(found["near_duplicates"], json!([]));
+    assert_eq!(found["contradictions"], json!([]));
+    assert_eq!(found["stale_contexts"], json!([]));
+    assert_eq!(found["spaces"], json!(["default"]));
+    assert_eq!(found["scanned"], json!([{ "space": "default", "compared": 0, "truncated": false }]));
+    assert!(
+        found.get("note").is_none(),
+        "nothing limited this answer: {found:#}"
+    );
+}
+
+#[tokio::test]
+async fn consolidate_stays_in_the_current_space_unless_asked_otherwise() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    agmem
+        .remember(json!({
+            "space": "user",
+            "memories": [
+                { "content": "the user formats python with black" },
+                { "content": "python here is formatted by blackfmt" },
+            ]
+        }))
+        .await;
+
+    // Every other read defaults to the current space *and* `user`. This one
+    // does not: a tidy-up should not reach across projects by default.
+    let here = agmem.consolidate(json!({})).await;
+    assert_eq!(here["spaces"], json!(["default"]));
+    assert!(
+        here["near_duplicates"]
+            .as_array()
+            .expect("an array")
+            .is_empty(),
+        "{here:#}"
+    );
+
+    let asked = agmem.consolidate(json!({ "space": "user" })).await;
+    assert_eq!(asked["spaces"], json!(["user"]));
+    assert_eq!(
+        asked["near_duplicates"]
+            .as_array()
+            .expect("an array")
+            .len(),
+        1,
+        "{asked:#}"
+    );
 }

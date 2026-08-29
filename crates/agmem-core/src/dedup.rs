@@ -68,6 +68,96 @@ pub fn is_correction_candidate(similarity: f64) -> bool {
     (CORRECTION_FLOOR..NEAR_DUP_THRESHOLD).contains(&similarity)
 }
 
+/// Cosine similarity at or above which two *stored* memories are worth
+/// offering as one cluster (design §5.5, issue #25).
+///
+/// Lower than [`NEAR_DUP_THRESHOLD`] on purpose, and that gap is the whole
+/// point: the write gate only ever compares a new claim against its nearest
+/// live neighbour, so a pair can end up live together at any similarity — two
+/// entries of one batch never meet each other, and a `forget` or a
+/// supersession can leave a row whose twin was written while it was closed.
+/// Consolidation is where those show up, and it can afford a looser bar than
+/// the gate because it *proposes* rather than blocks: a false cluster costs
+/// the agent a glance, where a false auto-merge would silently lose a
+/// distinction.
+///
+/// There is no ceiling. A pair at 0.99 is the most duplicated thing the store
+/// holds and belongs in the same list as one at 0.91.
+pub const CLUSTER_THRESHOLD: f64 = 0.90;
+
+/// Whether two live memories are close enough to offer as the same claim.
+pub fn is_cluster_candidate(similarity: f64) -> bool {
+    similarity >= CLUSTER_THRESHOLD
+}
+
+/// Whether two live memories are close enough to be about one subject and far
+/// enough apart to disagree about it.
+///
+/// The band's floor is [`CORRECTION_FLOOR`], the same one the write path uses
+/// — the shape of "same subject, different statement" does not change with
+/// who is asking. Its ceiling is [`CLUSTER_THRESHOLD`] rather than
+/// [`NEAR_DUP_THRESHOLD`], so that the two things `consolidate` reports
+/// *partition*: a pair is a cluster edge or a contradiction candidate, never
+/// both, and an agent reading the answer never has to work out whether two
+/// sections are talking about the same pair.
+pub fn is_contradiction_candidate(similarity: f64) -> bool {
+    (CORRECTION_FLOOR..CLUSTER_THRESHOLD).contains(&similarity)
+}
+
+/// A vector prepared for repeated comparison: scaled to unit length, so
+/// cosine similarity is a plain dot product.
+///
+/// Consolidation compares every live memory against every other one, and
+/// recomputing both magnitudes inside that loop triples its cost for an answer
+/// that does not change. Normalizing once at the edge also makes the invalid
+/// cases unrepresentable: a zero vector has no direction, so it never becomes
+/// a `Unit` at all rather than producing a silent NaN half a million
+/// comparisons later.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Unit(Vec<f32>);
+
+impl Unit {
+    /// Scale `vector` to length 1, or `None` when it has no direction to
+    /// scale — an empty vector, an all-zero one, or one carrying a non-finite
+    /// component from a broken embedder.
+    #[must_use]
+    pub fn new(vector: &[f32]) -> Option<Self> {
+        let norm = vector
+            .iter()
+            .map(|value| f64::from(*value) * f64::from(*value))
+            .sum::<f64>()
+            .sqrt();
+        if !norm.is_finite() || norm == 0.0 {
+            return None;
+        }
+        Some(Self(
+            vector
+                .iter()
+                .map(|value| (f64::from(*value) / norm) as f32)
+                .collect(),
+        ))
+    }
+
+    /// Cosine similarity against another unit vector: 1.0 for the same
+    /// direction, 0.0 for orthogonal, negative for opposed.
+    ///
+    /// Two vectors of different widths are reported as 0.0 rather than
+    /// refused. It cannot happen through the store — the HNSW index rejects
+    /// any width but its own at write time — and a maintenance read is not
+    /// the place to fail a whole call over one impossible row.
+    #[must_use]
+    pub fn similarity(&self, other: &Self) -> f64 {
+        if self.0.len() != other.0.len() {
+            return 0.0;
+        }
+        self.0
+            .iter()
+            .zip(&other.0)
+            .map(|(left, right)| f64::from(*left) * f64::from(*right))
+            .sum()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -104,7 +194,81 @@ mod tests {
         assert!(!is_near_duplicate(similarity_from_distance(1.0)));
     }
 
+    #[test]
+    fn the_two_consolidate_bands_partition_at_the_cluster_threshold() {
+        assert!(is_cluster_candidate(CLUSTER_THRESHOLD));
+        assert!(!is_contradiction_candidate(CLUSTER_THRESHOLD));
+        assert!(is_contradiction_candidate(0.8999));
+        assert!(!is_cluster_candidate(0.8999));
+        assert!(!is_contradiction_candidate(CORRECTION_FLOOR - 0.0001));
+
+        // A pair the write gate would have blocked is still a cluster — the
+        // gate never compared these two to each other.
+        assert!(is_cluster_candidate(NEAR_DUP_THRESHOLD));
+        assert!(is_cluster_candidate(1.0));
+    }
+
+    #[test]
+    fn a_unit_vector_scores_itself_at_one_and_its_opposite_at_minus_one() {
+        let east = Unit::new(&[3.0, 0.0]).expect("a direction");
+        let north = Unit::new(&[0.0, 0.5]).expect("a direction");
+        let west = Unit::new(&[-2.0, 0.0]).expect("a direction");
+
+        assert!((east.similarity(&east) - 1.0).abs() < 1e-6);
+        assert!(east.similarity(&north).abs() < 1e-6);
+        assert!((east.similarity(&west) + 1.0).abs() < 1e-6);
+
+        // Magnitude is scaled away, so only the angle is left.
+        assert!((east.similarity(&Unit::new(&[100.0, 0.0]).expect("a direction")) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_vector_with_no_direction_is_not_a_unit() {
+        assert!(Unit::new(&[]).is_none());
+        assert!(Unit::new(&[0.0, 0.0, 0.0]).is_none());
+        assert!(Unit::new(&[f32::NAN, 1.0]).is_none());
+        assert!(Unit::new(&[f32::INFINITY]).is_none());
+    }
+
+    #[test]
+    fn widths_that_cannot_be_compared_score_zero_rather_than_panicking() {
+        let short = Unit::new(&[1.0, 0.0]).expect("a direction");
+        let long = Unit::new(&[1.0, 0.0, 0.0]).expect("a direction");
+        assert_eq!(short.similarity(&long), 0.0);
+    }
+
+    #[test]
+    fn the_unit_dot_product_is_the_similarity_the_engine_reports() {
+        // What `nearest_live` hands back is `1 - cosine_distance`, and the
+        // consolidate arms compare the same numbers against the same
+        // thresholds — so the two spellings have to agree.
+        let a = Unit::new(&[1.0, 1.0]).expect("a direction");
+        let b = Unit::new(&[1.0, 0.0]).expect("a direction");
+        let engine = similarity_from_distance(1.0 - 0.5_f64.sqrt());
+        assert!((a.similarity(&b) - engine).abs() < 1e-6);
+    }
+
     proptest! {
+        #[test]
+        fn a_unit_vector_has_unit_length(
+            values in prop::collection::vec(-100.0_f32..100.0, 1..32)
+        ) {
+            if let Some(unit) = Unit::new(&values) {
+                prop_assert!((unit.similarity(&unit) - 1.0).abs() < 1e-5);
+            }
+        }
+
+        #[test]
+        fn similarity_never_leaves_the_cosine_range(
+            left in prop::collection::vec(-100.0_f32..100.0, 8..16),
+            right in prop::collection::vec(-100.0_f32..100.0, 8..16),
+        ) {
+            if let (Some(a), Some(b)) = (Unit::new(&left), Unit::new(&right)) {
+                let similarity = a.similarity(&b);
+                prop_assert!((-1.0 - 1e-5..=1.0 + 1e-5).contains(&similarity), "{similarity}");
+            }
+        }
+
         #[test]
         fn normalization_is_idempotent(text in "(?s).{0,2000}") {
             let once = normalize(&text);

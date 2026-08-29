@@ -1,0 +1,80 @@
+{
+  "scenario": "correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 3,
+  "superseded": true,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.W8ACgdySJy",
+  "answer": "Noted — I've recorded that you've moved off black to ruff format, and superseded the old memory that said you used black.",
+  "cost_usd": 0.0644686,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black and now formats code with ruff format; black is uninstalled and should not be used or suggested.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16MZW4Y6ER8WCVZJRM27Z5R\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M16MZN6JBXX2PQAYF0H6GFH2\\\",\\\"of\\\":0,\\\"similarity\\\":0.9377626032263553}],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black and now formats code with ruff format; black is uninstalled and should not be used or suggested.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling"
+            ],
+            "supersedes": "01M16MZN6JBXX2PQAYF0H6GFH2"
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user has moved off black and now formats code with ruff format; black is uninstalled and should not be used or suggested.\\\",\\\"id\\\":\\\"01M16MZW4Y6ER8WCVZJRM27Z5R\\\",\\\"of\\\":0,\\\"similarity\\\":1}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "As of 2026-08-29, the user no longer uses black for formatting (previously recorded); ruff format is now the standard and black has been uninstalled.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling"
+            ],
+            "supersedes": "01M16MZN6JBXX2PQAYF0H6GFH2"
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16N05HCGY1GD2Y1PM8SJD23\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M16MZN6JBXX2PQAYF0H6GFH2\\\"]}\""
+    }
+  ]
+}

@@ -360,6 +360,71 @@ pub(crate) const STATS: &str = "RETURN {
          WHERE space = $space AND invalid_at IS NONE GROUP BY kind ORDER BY kind)
  }";
 
+/// Every live memory in `$space` with the vector behind it (design §5.5).
+///
+/// The one read that projects `embedding`, and the only one that has a reason
+/// to: `consolidate` asks which stored claims are near *each other*, which is
+/// not a question a KNN probe answers — that one takes a query vector and
+/// finds its neighbours, so asking it N times means N HNSW scans, each with
+/// its own recall loss and its own exposure to the shape issue #40 is about.
+/// One flat scan and an all-pairs pass in Rust is exact, cheaper, and needs no
+/// index at all.
+///
+/// `embedding IS NOT NONE` drops what a BM25-only write left behind: a row
+/// with no vector has nothing to be near, and carrying it to the caller only
+/// to discard it there wastes the widest column in the projection.
+///
+/// Ordered like [`direct_lookup`] — strongest first, then newest — so a space
+/// past the cap loses its weakest rows rather than an arbitrary slice, and the
+/// first member of a cluster is the natural one to keep.
+///
+/// The row and its vector come back as two projections over one selection
+/// rather than one wide row, because the `SurrealValue` derive has no
+/// `flatten`: spelling them together would mean a second copy of
+/// [`MEMORY_FIELDS`]'s nineteen columns in Rust. Both carry the id, so the
+/// caller pairs them by name and depends on nothing about their order.
+pub(crate) fn live_vectors(limit: usize) -> Script {
+    let limit = limit.clamp(1, MAX_POOL);
+    let mut builder = Builder::plain();
+    builder.push(format!(
+        "LET $ids = (SELECT VALUE id FROM memory
+             WHERE space = $space AND invalid_at IS NONE AND embedding IS NOT NONE
+             ORDER BY strength DESC, id DESC LIMIT {limit})"
+    ));
+    builder.finish(format!(
+        "RETURN {{ memories: (SELECT {MEMORY_FIELDS} FROM $ids),
+             vectors: (SELECT record::id(id) AS id, embedding FROM $ids) }}"
+    ))
+}
+
+/// Live `fast` memories the startup prune can no longer reach (design §5.5).
+///
+/// This is [`crate::queries::write::PRUNE_EXPIRED`]'s selector with the
+/// `strength` factor taken *out*, which is the whole finding: the sweep scales
+/// each row's horizon by its own strength, so reinforcement buys a working
+/// note more time on every recall, and a `fast` note recalled often enough
+/// outlives the class it was filed under by years. Those rows are not a bug —
+/// the scaling is deliberate — but nothing ever revisits them, so they sit in
+/// the `fast` class holding something that turned out to be durable. The fix
+/// is a judgement call (`remember` it again at a slower class, or `forget`
+/// it), which is why this surfaces candidates instead of acting.
+///
+/// `$min_count` is what separates "reinforcement kept this alive" from "this
+/// is merely a fast note nobody has touched yet"; the latter is the prune's
+/// business and will expire on its own.
+///
+/// Idle-first, so the most overdue row is the one the agent reads first.
+pub(crate) fn stale_contexts(limit: usize) -> String {
+    let limit = limit.clamp(1, MAX_POOL);
+    format!(
+        "SELECT {MEMORY_FIELDS} FROM memory
+         WHERE space = $space AND decay_class = $class AND invalid_at IS NONE
+           AND access_count >= $min_count
+           AND last_accessed + duration::from_secs(<int> math::round($horizon)) < time::now()
+         ORDER BY last_accessed ASC LIMIT {limit}"
+    )
+}
+
 /// The `WHERE` clauses every `memory` read shares.
 ///
 /// A filter that is empty is left out of the text entirely rather than bound
@@ -504,5 +569,38 @@ mod tests {
             script.contains("LIMIT 10"),
             "the pool still caps the arm: {script}"
         );
+    }
+
+    #[test]
+    fn consolidations_scan_carries_the_vector_and_no_knn() {
+        let script = live_vectors(50).text;
+        assert!(script.contains("embedding FROM $ids"), "{script}");
+        assert!(
+            !script.contains("<|"),
+            "an all-pairs read has no query vector to probe with: {script}"
+        );
+        assert!(script.contains("LIMIT 50"), "{script}");
+        assert!(
+            live_vectors(usize::MAX)
+                .text
+                .contains(&format!("LIMIT {MAX_POOL}")),
+            "the cap is what keeps the all-pairs pass bounded"
+        );
+    }
+
+    #[test]
+    fn the_stale_selector_does_not_scale_the_horizon_by_strength() {
+        // The whole arm exists because `PRUNE_EXPIRED` *does* scale it, which
+        // is what puts these rows out of the sweep's reach. Scaling here too
+        // would select exactly the rows the prune already closed — nothing.
+        let script = stale_contexts(20);
+        let selector = &script[script.find("WHERE").expect("a selector")..];
+        assert!(selector.contains("$horizon"), "{selector}");
+        assert!(
+            !selector.contains("strength"),
+            "the unscaled horizon is the point of this query: {selector}"
+        );
+        assert!(selector.contains("access_count >= $min_count"), "{selector}");
+        assert!(selector.contains("decay_class = $class"), "{selector}");
     }
 }

@@ -411,15 +411,40 @@ What the sketch leaves out, settled while building it (#19):
   meant for the prompt, and the `Json` wrapper puts the JSON serialisation in
   `content`, so every client would show the model an escaped string.
 
-### 3.3 Prompts (MCP prompts — rituals, v1.5)
+### 3.3 Prompts (MCP prompts — rituals)
 
-- `agmem_checkpoint` — instructs the agent: review the session, distill new
-  durable facts/lessons/corrections, call `remember` (with `supersedes` where
-  a belief changed), confirm what was saved.
-- `agmem_recall_first` — session-start ritual: call `context`, then proceed.
+- `recall_first` — session-start: call `context`, read the block as
+  established fact rather than as a suggestion, `recall` what it does not
+  cover, and correct what it gets wrong instead of working around it.
+- `checkpoint` — end of session: review the conversation for what is durable,
+  **`recall` each candidate before writing it** to find the id it corrects,
+  then one batched `remember` with `supersedes` set on the corrections, then
+  say what was saved and what was left out.
 
-These carry the extraction discipline that Spectron implements as a server-side
-pipeline. Resources (`memory://<space>/<id>` URIs) are a phase-4 progressive
+Both take one optional `focus` argument — free text, because that is how a
+client renders a prompt argument (Claude Code passes whatever follows the
+slash command), and a ritual that needs configuring is one nobody runs.
+
+Neither touches the store. A ritual returns text about which tools to call in
+which order; running them is the agent's turn, which is what keeps the
+extraction discipline Spectron implements as a server-side pipeline on this
+side of the "no server-side LLM" line.
+
+**Why this is a prompt and not a longer description.** #23 measured the
+difference: a tool description is read while the model is choosing between
+options and loses that choice to whatever the host already put in its system
+prompt, while a prompt arrives as a turn in the conversation because somebody
+asked for it. The two rituals therefore carry exactly the instructions the
+descriptions could not make stick — `checkpoint` step 2 is "look before you
+correct", which `remember`'s description states in as many words and which was
+skipped in 6 of 6 measured runs (§9 item 6, issue #38).
+
+Naming: the prompts are `checkpoint` and `recall_first`, not
+`agmem_checkpoint` / `agmem_recall_first` as this section originally said. A
+client that shows prompts scopes them by server — Claude Code renders them
+`/mcp__agmem__checkpoint` — so the prefix only stutters.
+
+Resources (`memory://<space>/<id>` URIs) are a phase-4 progressive
 enhancement — tools-first, since resources have uneven client support.
 
 ---
@@ -801,7 +826,10 @@ Each phase is releasable; later phases only add.
    (`recall` called 3/3 before answering, and correctly *not* called 3/3 on a
    question memory has nothing to say about), writing does not happen at all
    (`remember` 0/3 on a stated convention, every session replying that it had
-   saved it). See item 5.
+   saved it). See item 5. **Closed at #22 for the write half**: the identical
+   turn followed by `/mcp__agmem__checkpoint` writes 3/3. A description cannot
+   win the write path and a ritual can, because a ritual is asked for rather
+   than chosen.
 5. Settled at #23, against the hypothesis: **the write path is not a wording
    problem.** `remember` was reworded to open with its trigger, the way the two
    tools that *were* called do, and measured again over 12 more sessions: no
@@ -822,14 +850,25 @@ Each phase is releasable; later phases only add.
    isolated runs, told that a seeded fact no longer holds, the agent called
    `remember` with a fresh memory and never `recall`ed for the id or set
    `supersedes` — leaving both claims live at once, which is the state the
-   chain exists to prevent. `remember` asks for the right thing in as many
-   words, so this is the correction path hitting the same wall the write path
-   did. **Issue #38**: have `remember` return contradiction candidates the way
-   it already returns near-duplicates, so the old id is handed over rather than
-   looked up.
-7. Still open: whether `user` space writes need an explicit `space: "user"`
+   chain exists to prevent. **Issue #38**: have `remember` return
+   contradiction candidates the way it already returns near-duplicates, so the
+   old id is handed over rather than looked up.
+   Measuring it again at #22 turned up a confound and a second bug. With the
+   `checkpoint` ritual the agent *does* look — and gets an empty answer for a
+   claim that is live in the store, which is **issue #39**: `recall` with a
+   query omitting a row that a filters-only `recall` returns. So the 0/6 above
+   says less than it appears to, and #39 blocks re-measuring it.
+7. Open, found at #22: **`recall` with a query can silently omit a live
+   memory** that a filters-only `recall` returns, on a small store with an
+   episode in it — a query containing `formats` and `python` missing *"The user
+   formats Python with black."* Nothing errors; the answer is short. Suspects
+   are HNSW returning fewer neighbours than asked on a tiny graph, BM25's IDF
+   clamping to 0 when a term is in more than half the corpus (both already in
+   the ledger from #13), and `search::rrf`'s `limit`. **Issue #39**, with a
+   store that reproduces it kept on disk.
+8. Still open: whether `user` space writes need an explicit `space: "user"`
    (current answer: yes — cross-project writes should be deliberate).
-8. Settled at #16: **`recall` unions episodes by default**, with no
+9. Settled at #16: **`recall` unions episodes by default**, with no
    `include_episodes` flag. The §5.3 flow already fuses `$ft_ec`/`$vs_ec` into
    the same pool, distillation is lossy by design, and a chunk that outranks
    every memory is exactly the case the verbatim copy exists for. `kind:

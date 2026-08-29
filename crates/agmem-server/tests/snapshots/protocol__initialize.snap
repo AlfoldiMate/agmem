@@ -3,5 +3,6 @@ source: crates/agmem-server/tests/protocol.rs
 expression: "&info.capabilities"
 ---
 {
+  "prompts": {},
   "tools": {}
 }

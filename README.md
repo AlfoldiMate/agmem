@@ -224,6 +224,29 @@ included), or `stats` for per-space counts.
       { "id": "01M14XY6T7RX…", "content": "The user prefers Go over Python…" } ] } }
 ```
 
+## Two rituals
+
+The five tools are what an agent *may* call. These two are what you ask it to
+do — MCP prompts, which Claude Code shows as slash commands:
+
+| | |
+|---|---|
+| `/mcp__agmem__recall_first` | Read the memory block before the first move, work from it, and correct it rather than working around it |
+| `/mcp__agmem__checkpoint` | Review the session, recall each candidate to find what it corrects, then write the batch with `supersedes` on the corrections |
+
+Both take an optional focus — `/mcp__agmem__checkpoint the auth refactor` —
+which narrows what the ritual looks at. Neither touches the store itself: what
+comes back is an instruction, and the agent's next turn is what runs.
+
+They exist because a tool description and a ritual are read at different
+moments. A description is one option among several while the model is deciding
+what to do next; measured against Claude Code, whose own memory is named in the
+system prompt, `remember` was reached for in 0 of 6 sessions that all replied
+"Saved". Add `/mcp__agmem__checkpoint` to the identical sessions and it is 6 of
+6, each one recalling first and then writing a batch. A ritual is not in that
+competition — you asked for it, so it is the instruction in front of the model.
+The numbers and the harness behind them are in `docs/tool-descriptions.md`.
+
 ## Spaces
 
 | `space` value | means |
@@ -308,6 +331,12 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
 - **A session came up with no memory tools** — read `<data dir>/daemon.log`:
   the shared store failed to start, and the session refused rather than open a
   second copy of a single-writer store.
+- **A `recall` came back without something you know is stored** — on a small
+  store, a query-shaped `recall` can leave out a live memory that a
+  filters-only `recall` (drop `query`, keep `entities`/`tags`/`kinds`) returns.
+  Known bug, [#39](https://github.com/AlfoldiMate/agmem/issues/39); `inspect
+  stats` tells you whether the row is there at all, and dropping the query is
+  the workaround until it is fixed.
 - **First call is slow** — the model loads on start; `--doctor` once after
   install gets the download out of the way.
 - **No ONNX Runtime on the platform** — `--embedder none` runs BM25-only, and

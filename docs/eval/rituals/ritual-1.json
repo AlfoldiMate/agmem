@@ -1,0 +1,61 @@
+{
+  "scenario": "ritual",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Checkpointed:\n\n- **Saved:** two new claims — an instruction (library crates → `thiserror`, binaries → `anyhow`, never swapped) and a lesson (getting this backwards has bitten the team twice before), both linked to the verbatim episode.\n- **Corrected:** nothing — recall found no existing claim on this topic.\n- **Left out:** nothing else from this session was durable; it was a single standing-preference statement with no other decisions or context to distill.",
+  "cost_usd": 0.1634296,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Rust library crates use thiserror, binaries use anyhow for error handling",
+        "k": 5
+      }
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user wants Rust library crates to use thiserror for their error types, and Rust binary crates to use anyhow, and never the reverse.",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          },
+          {
+            "content": "Getting the thiserror/anyhow convention backwards (using anyhow in a library or thiserror in a binary) has caused problems for the user's team twice before.",
+            "kind": "lesson",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.",
+          "session": "rust-error-handling-convention"
+        }
+      }
+    }
+  ]
+}

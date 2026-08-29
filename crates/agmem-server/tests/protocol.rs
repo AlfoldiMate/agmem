@@ -24,7 +24,9 @@ use agmem_store::repo::{self, Liveness, Lookup, SpaceStats};
 use clap::Parser as _;
 use rmcp::RoleClient;
 use rmcp::ServiceExt as _;
-use rmcp::model::{CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode, GetPromptRequestParams, Role,
+};
 use rmcp::service::{RunningService, ServiceError};
 use serde_json::{Value, json};
 
@@ -315,6 +317,11 @@ async fn initialize_announces_agmem_and_its_tool_capability() {
         info.capabilities.tools.is_some(),
         "a hand-written get_info must re-declare the tool capability"
     );
+    assert!(
+        info.capabilities.prompts.is_some(),
+        "and the prompt capability — a client that is not told about prompts \
+         never asks, and the rituals simply do not exist for it"
+    );
     let instructions = info.instructions.as_deref().expect("instructions");
     assert!(
         instructions.contains("supersedes"),
@@ -338,6 +345,113 @@ async fn list_tools_matches_the_recorded_surface() {
     );
 
     agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn list_prompts_matches_the_recorded_rituals() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let prompts = agmem.client.list_prompts(None).await.expect("list_prompts");
+
+    // Same reasoning as the tool snapshot: this text is a contract with every
+    // agent, and nothing about changing it fails loudly on its own.
+    insta::assert_json_snapshot!("list_prompts", &prompts.prompts);
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_ritual_renders_one_instruction_for_the_model() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    for (name, must_name) in [
+        ("recall_first", "`context`"),
+        ("checkpoint", "`supersedes`"),
+    ] {
+        let result = agmem
+            .client
+            .get_prompt(GetPromptRequestParams::new(name))
+            .await
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+
+        let [message] = &result.messages[..] else {
+            panic!("{name} is one turn in the conversation, got {result:?}");
+        };
+        assert_eq!(
+            message.role,
+            Role::User,
+            "a ritual is what the person asking says next, not something the \
+             model is made to have already said"
+        );
+        let ContentBlock::Text(text) = &message.content else {
+            panic!("{name} is text, got {:?}", message.content);
+        };
+        assert!(
+            text.text.contains(must_name),
+            "{name} must name the tool it is a ritual for: {}",
+            text.text
+        );
+        assert!(
+            result.description.is_some(),
+            "{name} answers with what it is, for a client that shows it"
+        );
+    }
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_ritual_takes_the_focus_it_was_given_and_runs_without_one() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    let arguments = json!({ "focus": "the auth refactor" })
+        .as_object()
+        .expect("an object")
+        .clone();
+    let aimed = agmem
+        .client
+        .get_prompt(GetPromptRequestParams::new("recall_first").with_arguments(arguments))
+        .await
+        .expect("recall_first with a focus");
+    assert!(
+        text_of(&aimed).contains("the auth refactor"),
+        "a focus the caller typed has to reach the instruction: {aimed:?}"
+    );
+
+    // The argument is optional in the schema, and optional has to mean the
+    // call works with the key absent — not merely with it null.
+    let plain = agmem
+        .client
+        .get_prompt(GetPromptRequestParams::new("recall_first"))
+        .await
+        .expect("recall_first with no arguments at all");
+    assert!(!text_of(&plain).contains("query:"), "{plain:?}");
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_unknown_ritual_is_refused_rather_than_ignored() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let error = agmem
+        .client
+        .get_prompt(GetPromptRequestParams::new("no_such_ritual"))
+        .await
+        .expect_err("an unrouted name must fail");
+
+    let ServiceError::McpError(error) = &error else {
+        panic!("expected a protocol error, got {error:?}");
+    };
+    assert_eq!(error.code, ErrorCode::INVALID_PARAMS, "{error:?}");
+
+    agmem.shutdown().await;
+}
+
+/// The one text block a ritual answers with.
+fn text_of(result: &rmcp::model::GetPromptResult) -> &str {
+    match &result.messages.first().expect("one message").content {
+        ContentBlock::Text(text) => &text.text,
+        other => panic!("a ritual is text, got {other:?}"),
+    }
 }
 
 #[tokio::test]

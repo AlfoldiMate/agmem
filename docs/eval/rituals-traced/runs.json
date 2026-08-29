@@ -1,0 +1,172 @@
+[
+  {
+    "scenario": "ritual_correct",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "remember",
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Already stored — no new call needed.\n\n- **Saved:** nothing new; the black→ruff format switch (black uninstalled) was already captured in the prior turn.\n- **Corrected:** nothing.\n- **Left out:** everything else in this session was mechanical (tool lookups, the checkpoint process itself) — no other durable facts, decisions, or preferences came up.",
+    "cost_usd": 0.1061706,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user's project has moved off the black code formatter to ruff format; black is uninstalled and should not be used or suggested.",
+              "kind": "fact",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "formatting",
+                "tooling"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M163038KFWBNYEQA86HD2091\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"superseded\\\":[]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "black formatter ruff format project",
+          "tags": [
+            "formatting"
+          ]
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user's project has moved off the black code formatter to ruff format; black is uninstalled and should not be used or suggested.\\\",\\\"entities\\\":[\\\"project\\\"],\\\"id\\\":\\\"01M163038KFWBNYEQA86HD2091\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996307126569,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999985228506281,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"formatting\\\",\\\"tooling\\\"],\\\"valid_from\\\":\\\"2026-08-29T06:23:32.627078Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 3,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpoint complete.\n\n- **Saved:** two facts — the project dropped black (now uninstalled), and it uses `ruff format` as the replacement formatter. Stored with the verbatim episode for provenance.\n- **Corrected:** nothing — no prior claims existed about the formatting tool.\n- **Left out:** nothing else from this session was durable; it was just the one tooling-migration note (the local file-based memory update I did earlier for the same fact is separate from this agmem store).",
+    "cost_usd": 0.160026,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "project uses black for formatting"
+        },
+        "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "project formatting tool ruff format"
+        },
+        "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The project has moved off black for Python code formatting; black has been uninstalled from the project.",
+              "kind": "fact",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "formatting",
+                "tooling"
+              ]
+            },
+            {
+              "content": "The project uses ruff format as its Python code formatter, replacing black.",
+              "kind": "fact",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "formatting",
+                "tooling"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "formatting-tool-migration"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M1631FJT781BD5XKE07RACAS\\\",\\\"01M1631FK2KNNNM820AHPS6QB3\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M1631FJG4P55372Y7D1RAWQF\\\",\\\"superseded\\\":[]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpoint complete:\n\n- **Saved**: The user has moved off `black` for Python formatting and now uses `ruff format` exclusively; `black` is uninstalled in their environment. (new fact, no duplicates found)\n- **Corrected**: nothing — no conflicting prior claim existed.\n- **Left out**: nothing else in this session was durable — the rest of the conversation was just me writing that same fact into the file-based auto-memory system, which is scratch/session mechanics, not separate content worth a second claim.",
+    "cost_usd": 0.1493368,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "user's Python code formatting tool preference black ruff",
+          "space": "all"
+        },
+        "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has moved off black for Python code formatting and now uses ruff format exclusively; black is uninstalled in their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "formatting",
+                "tooling",
+                "python"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "tmp.PbdxjTvKtK"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M1632TZFCZAKJ9CX2G5CA7WP\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M1632TZ5J71XPHPAEJED6DV0\\\",\\\"superseded\\\":[]}\""
+      }
+    ]
+  }
+]

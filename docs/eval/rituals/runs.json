@@ -1,0 +1,329 @@
+[
+  {
+    "scenario": "ritual",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpointed:\n\n- **Saved:** two new claims — an instruction (library crates → `thiserror`, binaries → `anyhow`, never swapped) and a lesson (getting this backwards has bitten the team twice before), both linked to the verbatim episode.\n- **Corrected:** nothing — recall found no existing claim on this topic.\n- **Left out:** nothing else from this session was durable; it was a single standing-preference statement with no other decisions or context to distill.",
+    "cost_usd": 0.1634296,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "Rust library crates use thiserror, binaries use anyhow for error handling",
+          "k": 5
+        }
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user wants Rust library crates to use thiserror for their error types, and Rust binary crates to use anyhow, and never the reverse.",
+              "kind": "instruction",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ]
+            },
+            {
+              "content": "Getting the thiserror/anyhow convention backwards (using anyhow in a library or thiserror in a binary) has caused problems for the user's team twice before.",
+              "kind": "lesson",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "rust",
+                "error-handling"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.",
+            "session": "rust-error-handling-convention"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "ritual",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpoint complete:\n\n- **Saved:** two new claims — (1) an instruction that library crates must use `thiserror` and binaries must use `anyhow`, never swapped; (2) a lesson noting this convention exists because getting it backwards has bitten the codebase twice.\n- **Corrected:** nothing — no prior claim existed on this topic.\n- **Left out:** nothing else from this session was durable; the rest was just executing the file-based memory write, which is scratch/mechanical, not a fact worth storing separately.",
+    "cost_usd": 0.1467812,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "Rust library crates use thiserror, binaries use anyhow for error handling"
+        }
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user requires that in Rust codebases, library crates use thiserror for their error types and binary crates use anyhow, and this convention must never be reversed.",
+              "kind": "instruction",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ]
+            },
+            {
+              "content": "Getting the thiserror/anyhow convention backwards (using anyhow in a library crate or thiserror in a binary) has caused problems twice in the user's codebase, which is why the convention is now a strict rule.",
+              "kind": "lesson",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "rust",
+                "error-handling"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.\n\nAssistant saved this as a feedback memory in the local file-based memory system (feedback_rust_error_handling.md) and confirmed it would apply and flag the convention going forward.",
+            "session": "rust-error-handling-convention"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "ritual",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpoint complete:\n\n- **Saved:** two new claims — (1) an instruction that Rust libraries must use `thiserror` and binaries must use `anyhow`, never swapped, and (2) a lesson recording the \"bitten twice\" reason behind that rule. Both are new, not corrections (recall found nothing prior on this topic).\n- **Corrected:** nothing.\n- **Left out:** nothing else — this was a short session with just the one durable preference; no scratch work or turn-local details to store.",
+    "cost_usd": 0.1705132,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "library crates thiserror binaries anyhow error handling",
+          "space": "all"
+        }
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user requires Rust library crates to define their error types using thiserror, and Rust binary crates to use anyhow for error handling, and never the reverse.",
+              "kind": "instruction",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "rust",
+                "error-handling"
+              ]
+            },
+            {
+              "content": "The user has been bitten twice by Rust crates using the wrong error-handling library for their crate kind (e.g. anyhow in a library, or thiserror in a binary), which is why they now require thiserror for libraries and anyhow for binaries.",
+              "kind": "lesson",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "rust",
+                "error-handling"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.",
+            "session": "rust-error-handling-preference"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "**Checkpoint summary:**\n- **Saved:** The project has moved off black for Python formatting and now uses `ruff format`; black is uninstalled.\n- **Corrected:** Nothing — no prior claim existed on this topic.\n- **Left out:** Nothing else in this short session was durable (no other decisions, conventions, or lessons surfaced).",
+    "cost_usd": 0.1591032,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "project code formatting tool black ruff format",
+          "space": "current"
+        }
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The project has moved off black for Python code formatting and now uses `ruff format`; black is uninstalled and should not be used or suggested.",
+              "kind": "fact",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "formatting",
+                "tooling"
+              ],
+              "decay_class": "slow"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpoint complete.\n\n- **Saved:** the user's project has moved off black to `ruff format`; black is uninstalled and shouldn't be suggested.\n- **Corrected:** nothing — no prior conflicting claim existed.\n- **Left out:** nothing else — the rest of the session was just file-based memory bookkeeping (already handled separately in `MEMORY.md`/`formatting_ruff.md`), with no other durable decisions or lessons to capture.",
+    "cost_usd": 0.1431614,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "Python code formatter preference black ruff format"
+        }
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user's project has moved off black to ruff format for Python code formatting; black is uninstalled and should not be suggested.",
+              "kind": "fact",
+              "entities": [
+                "user",
+                "project"
+              ],
+              "tags": [
+                "formatting",
+                "python",
+                "tooling"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "checkpoint-2026-08-29"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": true,
+    "answer": "Checkpoint complete:\n\n- **Saved**: The project has moved off black for Python formatting and now uses `ruff format`; black is uninstalled.\n- **Corrected**: nothing (no prior conflicting claim existed).\n- **Left out**: nothing else in this short session was durable — it was a single tooling note.",
+    "cost_usd": 0.1478482,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "project formatting tool ruff black",
+          "space": "current"
+        }
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The project has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled.",
+              "kind": "fact",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "formatting",
+                "tooling"
+              ],
+              "decay_class": "normal"
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "formatting-tool-note"
+          }
+        }
+      }
+    ]
+  }
+]

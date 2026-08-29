@@ -1,0 +1,50 @@
+{
+  "scenario": "ritual_correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Checkpoint complete.\n\n- **Saved:** the user's project has moved off black to `ruff format`; black is uninstalled and shouldn't be suggested.\n- **Corrected:** nothing — no prior conflicting claim existed.\n- **Left out:** nothing else — the rest of the session was just file-based memory bookkeeping (already handled separately in `MEMORY.md`/`formatting_ruff.md`), with no other durable decisions or lessons to capture.",
+  "cost_usd": 0.1431614,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Python code formatter preference black ruff format"
+      }
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user's project has moved off black to ruff format for Python code formatting; black is uninstalled and should not be suggested.",
+            "kind": "fact",
+            "entities": [
+              "user",
+              "project"
+            ],
+            "tags": [
+              "formatting",
+              "python",
+              "tooling"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "checkpoint-2026-08-29"
+        }
+      }
+    }
+  ]
+}

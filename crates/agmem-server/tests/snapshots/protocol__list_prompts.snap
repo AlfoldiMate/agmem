@@ -1,0 +1,30 @@
+---
+source: crates/agmem-server/tests/protocol.rs
+expression: "&prompts.prompts"
+---
+[
+  {
+    "name": "checkpoint",
+    "title": "Checkpoint",
+    "description": "End-of-session ritual: distil what is durable, recall each claim before writing it, then remember the batch with supersedes on the corrections.",
+    "arguments": [
+      {
+        "name": "focus",
+        "description": "What to aim this at — a task, a topic, a file. Omit it for the whole session.",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "recall_first",
+    "title": "Recall first",
+    "description": "Session-start ritual: read the memory block, treat it as established fact, and correct it rather than working around it.",
+    "arguments": [
+      {
+        "name": "focus",
+        "description": "What to aim this at — a task, a topic, a file. Omit it for the whole session.",
+        "required": false
+      }
+    ]
+  }
+]

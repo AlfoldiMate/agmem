@@ -1,0 +1,46 @@
+{
+  "scenario": "ritual_correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "**Checkpoint summary:**\n- **Saved:** The project has moved off black for Python formatting and now uses `ruff format`; black is uninstalled.\n- **Corrected:** Nothing — no prior claim existed on this topic.\n- **Left out:** Nothing else in this short session was durable (no other decisions, conventions, or lessons surfaced).",
+  "cost_usd": 0.1591032,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "project code formatting tool black ruff format",
+        "space": "current"
+      }
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The project has moved off black for Python code formatting and now uses `ruff format`; black is uninstalled and should not be used or suggested.",
+            "kind": "fact",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "formatting",
+              "tooling"
+            ],
+            "decay_class": "slow"
+          }
+        ]
+      }
+    }
+  ]
+}

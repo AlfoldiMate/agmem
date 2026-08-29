@@ -1,0 +1,60 @@
+{
+  "scenario": "ritual",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Checkpoint complete:\n\n- **Saved:** two new claims — (1) an instruction that library crates must use `thiserror` and binaries must use `anyhow`, never swapped; (2) a lesson noting this convention exists because getting it backwards has bitten the codebase twice.\n- **Corrected:** nothing — no prior claim existed on this topic.\n- **Left out:** nothing else from this session was durable; the rest was just executing the file-based memory write, which is scratch/mechanical, not a fact worth storing separately.",
+  "cost_usd": 0.1467812,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Rust library crates use thiserror, binaries use anyhow for error handling"
+      }
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user requires that in Rust codebases, library crates use thiserror for their error types and binary crates use anyhow, and this convention must never be reversed.",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          },
+          {
+            "content": "Getting the thiserror/anyhow convention backwards (using anyhow in a library crate or thiserror in a binary) has caused problems twice in the user's codebase, which is why the convention is now a strict rule.",
+            "kind": "lesson",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.\n\nAssistant saved this as a feedback memory in the local file-based memory system (feedback_rust_error_handling.md) and confirmed it would apply and flag the convention going forward.",
+          "session": "rust-error-handling-convention"
+        }
+      }
+    }
+  ]
+}

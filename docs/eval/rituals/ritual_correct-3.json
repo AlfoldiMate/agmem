@@ -1,0 +1,50 @@
+{
+  "scenario": "ritual_correct",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Checkpoint complete:\n\n- **Saved**: The project has moved off black for Python formatting and now uses `ruff format`; black is uninstalled.\n- **Corrected**: nothing (no prior conflicting claim existed).\n- **Left out**: nothing else in this short session was durable — it was a single tooling note.",
+  "cost_usd": 0.1478482,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "project formatting tool ruff black",
+        "space": "current"
+      }
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The project has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled.",
+            "kind": "fact",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "formatting",
+              "tooling"
+            ],
+            "decay_class": "normal"
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "formatting-tool-note"
+        }
+      }
+    }
+  ]
+}

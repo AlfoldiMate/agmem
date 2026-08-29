@@ -16,15 +16,21 @@ use agmem_embed::Embedder;
 use agmem_store::db::Db;
 use rmcp::{
     ErrorData, Json, ServerHandler, ServiceExt,
+    handler::server::router::prompt::PromptRouter,
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
-    model::{CallToolResult, Implementation, ServerCapabilities, ServerInfo},
+    model::{
+        CallToolResult, GetPromptResult, Implementation, PromptMessage, Role, ServerCapabilities,
+        ServerInfo,
+    },
+    prompt, prompt_handler, prompt_router,
     service::ServerInitializeError,
     tool, tool_handler, tool_router,
     transport::stdio,
 };
 
 use crate::config::Config;
+use crate::prompts::{self, Focus};
 use crate::tools::context::{self, ContextParams};
 use crate::tools::forget::{self, ForgetParams, ForgetResult, Pending};
 use crate::tools::inspect::{self, InspectParams, InspectResult};
@@ -63,6 +69,11 @@ pub struct AgmemService {
     /// what a bare `#[tool_handler]` does — so the surface is decided once, at
     /// the same moment as the rest of the configuration.
     tool_router: ToolRouter<Self>,
+    /// The rituals (design §3.3). A field for symmetry with `tool_router`
+    /// rather than necessity — `#[prompt_handler]` would rebuild it per
+    /// request quite happily — so that a prompt-side override has the same
+    /// seam waiting for it that `AGMEM_TOOL_DESC_<TOOL>` uses.
+    prompt_router: PromptRouter<Self>,
 }
 
 impl AgmemService {
@@ -73,6 +84,7 @@ impl AgmemService {
             embedder,
             pending_forget: Pending::default(),
             tool_router: described(Self::tool_router(), &config),
+            prompt_router: Self::prompt_router(),
             config,
         }
     }
@@ -301,20 +313,86 @@ which is what lets you tell a belief that changed from a belief that was always 
     }
 }
 
-// The router comes from the field, not from `Self::tool_router()`. The
-// default expression rebuilds the routes on every request, which would serve
-// the built-in descriptions and silently discard every override.
+/// The rituals, and only the rituals (design §3.3).
+///
+/// A separate `impl` block because each router macro appends its own
+/// generated fn to the block it decorates, and because the two are different
+/// kinds of thing: a tool is something the model may choose to call, a prompt
+/// is something a person asks for and the model then reads as its
+/// instruction. #23 measured how much that difference is worth — a
+/// description competing with the host's own memory lost 6 sessions out of 6,
+/// and a ritual is not in that competition.
+///
+/// Neither body touches the store. What a ritual returns is text about which
+/// tools to call in which order; running them is the agent's turn, not this
+/// one, and a prompt that did the work itself would be the server-side
+/// pipeline design §1 exists to not have.
+#[prompt_router]
+impl AgmemService {
+    /// Read memory before the first move: call `context`, then work from it.
+    #[prompt(
+        name = "recall_first",
+        title = "Recall first",
+        description = "Session-start ritual: read the memory block, treat it as \
+established fact, and correct it rather than working around it."
+    )]
+    async fn recall_first(
+        &self,
+        Parameters(focus): Parameters<Focus>,
+    ) -> Result<GetPromptResult, ErrorData> {
+        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+            Role::User,
+            prompts::recall_first(&focus),
+        )])
+        .with_description("Read memory before the first move"))
+    }
+
+    /// Distil the session and write down what outlives it.
+    #[prompt(
+        name = "checkpoint",
+        title = "Checkpoint",
+        description = "End-of-session ritual: distil what is durable, recall each \
+claim before writing it, then remember the batch with supersedes on the corrections."
+    )]
+    async fn checkpoint(
+        &self,
+        Parameters(focus): Parameters<Focus>,
+    ) -> Result<GetPromptResult, ErrorData> {
+        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+            Role::User,
+            prompts::checkpoint(&focus),
+        )])
+        .with_description("Checkpoint this session into memory"))
+    }
+}
+
+// Both routers come from fields rather than from `Self::*_router()`. For tools
+// that is load-bearing — the default expression rebuilds the routes on every
+// request, which would serve the built-in descriptions and silently discard
+// every override — and for prompts it is symmetry.
+//
+// `#[tool_handler]` stays first: with `get_info` hand-written neither macro
+// generates one, but the order is what decides which capabilities an
+// auto-generated one would carry, and a future edit that deletes `get_info`
+// should degrade to "tools and prompts" rather than to "tools".
 #[tool_handler(router = self.tool_router)]
+#[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for AgmemService {
     fn get_info(&self) -> ServerInfo {
-        // Writing `get_info` by hand replaces the one `#[tool_handler]` would
-        // generate, so `enable_tools` has to be repeated here or the server
-        // advertises no tool capability at all. The server info likewise:
-        // rmcp's `Implementation::from_build_env()` reports *rmcp's* name and
-        // version, not ours.
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("agmem", env!("CARGO_PKG_VERSION")))
-            .with_instructions(INSTRUCTIONS)
+        // Writing `get_info` by hand replaces the one the handler macros would
+        // generate, so every capability has to be repeated here or the server
+        // advertises none of it — a client that is not told about prompts does
+        // not ask for them, and the rituals simply never appear. The server
+        // info likewise: rmcp's `Implementation::from_build_env()` reports
+        // *rmcp's* name and version, not ours.
+        ServerInfo::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_prompts()
+                .build(),
+        )
+        .with_server_info(Implementation::new("agmem", env!("CARGO_PKG_VERSION")))
+        .with_instructions(INSTRUCTIONS)
     }
 }
 
@@ -348,6 +426,7 @@ mod tests {
 
     use super::*;
     use crate::config::{Cli, ToolDescriptions};
+    use crate::prompts;
     use crate::tools::NAMES;
 
     fn config(tool_desc: ToolDescriptions) -> Config {
@@ -372,6 +451,46 @@ mod tests {
             "tools::NAMES is what an override is validated against; a tool \
              renamed in the #[tool] attribute has to be renamed there too"
         );
+    }
+
+    #[test]
+    fn the_ritual_list_is_the_prompt_router() {
+        let mut routed: Vec<_> = AgmemService::prompt_router()
+            .list_all()
+            .into_iter()
+            .map(|prompt| prompt.name)
+            .collect();
+        routed.sort();
+        let mut declared = prompts::NAMES;
+        declared.sort_unstable();
+
+        assert_eq!(routed, declared, "prompts::NAMES is the ritual vocabulary");
+    }
+
+    #[test]
+    fn every_ritual_declares_its_focus_argument() {
+        for prompt in AgmemService::prompt_router().list_all() {
+            let arguments = prompt.arguments.unwrap_or_default();
+            let names: Vec<_> = arguments.iter().map(|arg| arg.name.as_str()).collect();
+            assert_eq!(
+                names,
+                ["focus"],
+                "{} takes exactly one optional argument, because a client \
+                 renders a prompt argument as free text and a ritual that \
+                 needs configuring is one nobody runs",
+                prompt.name
+            );
+            assert_ne!(
+                arguments[0].required,
+                Some(true),
+                "{} must run with no argument at all",
+                prompt.name
+            );
+            assert!(
+                prompt.description.is_some_and(|text| !text.is_empty()),
+                "a ritual with no description is one nobody finds"
+            );
+        }
     }
 
     #[test]

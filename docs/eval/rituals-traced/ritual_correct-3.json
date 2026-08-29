@@ -1,0 +1,52 @@
+{
+  "scenario": "ritual_correct",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Checkpoint complete:\n\n- **Saved**: The user has moved off `black` for Python formatting and now uses `ruff format` exclusively; `black` is uninstalled in their environment. (new fact, no duplicates found)\n- **Corrected**: nothing — no conflicting prior claim existed.\n- **Left out**: nothing else in this session was durable — the rest of the conversation was just me writing that same fact into the file-based auto-memory system, which is scratch/session mechanics, not separate content worth a second claim.",
+  "cost_usd": 0.1493368,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "user's Python code formatting tool preference black ruff",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format exclusively; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "formatting",
+              "tooling",
+              "python"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "tmp.PbdxjTvKtK"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M1632TZFCZAKJ9CX2G5CA7WP\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M1632TZ5J71XPHPAEJED6DV0\\\",\\\"superseded\\\":[]}\""
+    }
+  ]
+}

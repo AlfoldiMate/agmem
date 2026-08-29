@@ -24,18 +24,28 @@ mentions memory.** Asking an agent to `recall` and watching it `recall`
 measures instruction-following; the question here is whether the description
 alone is enough.
 
-Four scenarios, three sessions each, Sonnet 5:
+Six scenarios, three sessions each, Sonnet 5:
 
-| scenario | seeded store | prompt | passes when |
+| scenario | seeded store | turns | passes when |
 |---|---|---|---|
 | `orient` | two facts about a project called atlas | "How do I deploy atlas?" | `recall` or `context` was called |
 | `store` | empty | a standing convention stated in passing | `remember` was called |
-| `correct` | one fact the prompt contradicts | "I have moved off black…" | `remember` was called |
+| `correct` | one fact the turn contradicts | "I have moved off black…" | `remember` was called |
 | `restraint` | empty | "What is the capital of France?" | no agmem tool was called |
+| `ritual` | empty | `store`'s turn, then `/mcp__agmem__checkpoint` | `remember` was called |
+| `ritual_correct` | `correct`'s fact | `correct`'s turn, then `/mcp__agmem__checkpoint` | `remember` was called |
 
 `restraint` is there because over-calling is a failure too: a description that
 makes an agent open the store to answer trivia has bought reflexive reads at
-the cost of every session's first turn.
+the cost of every session's first turn. The two `ritual` scenarios (added at
+#22) are their neighbours with one extra turn asking for the ritual, so the
+pair is controlled: same words, same conditions, one difference.
+
+Every recorded call keeps what it was given *and* the first 700 characters of
+what it got back. Without that a `recall` that returned nothing and a `recall`
+whose answer the agent ignored look identical in the record, and those are
+opposite findings — a retrieval bug in one case and a reasoning failure in the
+other.
 
 ## Before
 
@@ -200,21 +210,80 @@ prevent, and `remember`'s description asks for the right thing in as many words
 to that id").
 
 So the correction path has the same shape as the write path: an instruction in
-a description that the model does not act on. **Issue #38** — `remember` should
-hand back contradiction candidates the way it already hands back
-near-duplicates, which turns "remember to look first" into something the tool
-does rather than something the agent is asked to.
+a description that the model does not act on. Issue **#38** follows it up.
+
+## The mechanism: a ritual instead of a paragraph
+
+If the problem is that a description is one option among several while the
+model decides what to do next, the answer is text that is not in that
+competition. That is what an MCP prompt is: it arrives as a turn in the
+conversation because somebody asked for it. Issue #22 added two —
+`recall_first` and `checkpoint` (design §3.3) — and `checkpoint` carries the
+instructions the descriptions could not make stick.
+
+The two `ritual` scenarios are the write scenarios with one extra turn asking
+for it, so the comparison is controlled: same words, same client, auto-memory
+left **on**, one difference.
+
+| | description alone | with `/mcp__agmem__checkpoint` |
+|---|---|---|
+| write a stated convention | 0/3 | **3/3** |
+| correct a contradicted claim | 0/3 | **3/3** written, **0/3 superseded** |
+
+Every one of those calls landed in the ritual turn; the first turn produced
+none, which is the earlier table happening again in the same session. And the
+shape is the shape the ritual asks for — a `recall`, then one batched
+`remember`, then a summary. Verbatim, from one run:
+
+```
+turn 1  recall   { query: "error handling convention thiserror anyhow library binary crates" }
+turn 1  remember { memories: [ <instruction>, <lesson> ], episode: {…} }
+```
+
+> **Saved:** two new claims — an instruction and a lesson (this rule exists
+> because mixing them up caused bugs twice), plus the verbatim episode they're
+> provenanced to. **Corrected:** nothing. **Left out:** the mechanics of the
+> file-based memory write — that's implementation detail of the earlier turn.
+
+That last clause is the agent noticing, out loud, that its first turn had
+written to Claude Code's own memory instead. The ritual is recovering exactly
+what the description lost.
+
+### The supersedes column is not a result yet
+
+`ritual_correct` writes 3/3 and supersedes 0/3, and the obvious reading — the
+ritual gets the write and still not the correction — is **wrong**, or at least
+unproven. Re-running it with tool *answers* recorded, not just tool calls,
+shows what the agents were actually working from:
+
+```
+turn 1  recall  { query: "project uses black or ruff format for Python formatting", k: 10 }
+        → {"hits":[], "spaces":["eval","user"]}
+```
+
+The seeded claim was live in the store the whole time — `inspect stats` counts
+it, and a filters-only `recall` returns it — but the query-shaped `recall` did
+not return it. Every agent then said "no prior claim existed", which was a
+correct conclusion from a wrong answer. That is **issue #39**, and until it is
+fixed this scenario measures agmem's retrieval rather than the ritual's
+instruction.
+
+Worth stating plainly because the first read of this data was the flattering
+one: the agent looked, was told, and ignored it. The recorded answers say
+otherwise. Recording what a tool *returned* alongside what it was *given* was
+added for exactly this reason, one finding too late.
 
 ## What follows
 
-- **Reading is not the problem and never was.** `recall` at 3/3 with
+- **Reaching for reading is not the problem.** `recall` at 3/3 with
   `restraint` at 3/3 is the behaviour agmem wants, and it holds because a
   session's *first* question — "what do I already know about this?" — has no
-  competing answer in the host prompt.
-- **The write path needs a mechanism, not a paragraph.** MCP prompts as
-  rituals (issue #22, design §3.3), or the host's own hooks — something that
-  fires at a point in the session rather than something that hopes to be
-  chosen.
+  competing answer in the host prompt. What comes *back* from it is a
+  different matter: see #39.
+- **The write path needed a mechanism, not a paragraph, and got one.** The
+  rituals (#22, design §3.3) take the write from 0/3 to 3/3 on the identical
+  turn. The host's own hooks are the other candidate, for a session that
+  should checkpoint without being asked.
 - **`AGMEM_TOOL_DESC_<TOOL>` is the lever that survives all of this.** A
   deployment on a client with no memory of its own, or with a different
   instinct about when to write, can reword without waiting for a release —

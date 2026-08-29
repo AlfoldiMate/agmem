@@ -1,0 +1,69 @@
+{
+  "scenario": "ritual_correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Checkpoint complete.\n\n- **Saved:** two facts — the project dropped black (now uninstalled), and it uses `ruff format` as the replacement formatter. Stored with the verbatim episode for provenance.\n- **Corrected:** nothing — no prior claims existed about the formatting tool.\n- **Left out:** nothing else from this session was durable; it was just the one tooling-migration note (the local file-based memory update I did earlier for the same fact is separate from this agmem store).",
+  "cost_usd": 0.160026,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "project uses black for formatting"
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "project formatting tool ruff format"
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The project has moved off black for Python code formatting; black has been uninstalled from the project.",
+            "kind": "fact",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "formatting",
+              "tooling"
+            ]
+          },
+          {
+            "content": "The project uses ruff format as its Python code formatter, replacing black.",
+            "kind": "fact",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "formatting",
+              "tooling"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "formatting-tool-migration"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M1631FJT781BD5XKE07RACAS\\\",\\\"01M1631FK2KNNNM820AHPS6QB3\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M1631FJG4P55372Y7D1RAWQF\\\",\\\"superseded\\\":[]}\""
+    }
+  ]
+}

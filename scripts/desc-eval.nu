@@ -1,30 +1,39 @@
 #!/usr/bin/env nu
 
-# Does an agent actually reach for agmem? (design §9 risk 4, issue #23)
+# Does an agent actually reach for agmem? (design §9 risk 4, issues #23 and #22)
 #
-# The tool descriptions are the product surface: nothing else decides whether a
-# model calls `recall` before answering or `remember` after learning something.
-# That cannot be unit-tested, so this drives real headless Claude Code sessions
-# against a throwaway store and counts what each one reached for.
+# The tool descriptions and the rituals are the product surface: nothing else
+# decides whether a model calls `recall` before answering or `remember` after
+# learning something. That cannot be unit-tested, so this drives real headless
+# Claude Code sessions against a throwaway store and counts what each one
+# reached for.
 #
 # Each scenario runs in its own data dir and its own empty working directory,
 # with `--strict-mcp-config` and no settings sources, so agmem is the only MCP
-# server present and nothing in the developer's own configuration leaks in. The
-# prompts never mention memory — asking for a `recall` and getting one measures
-# instruction-following, not the description.
+# server present and nothing in the developer's own configuration leaks in.
+# Except in the `ritual` scenario, no turn mentions memory — asking for a
+# `recall` and getting one measures instruction-following, not the description.
 #
 #     nu scripts/desc-eval.nu --label before --runs 3
 #     nu scripts/desc-eval.nu --label after --runs 3
 #     nu scripts/desc-eval.nu report before after
 #
 # Results land in `docs/eval/<label>/`: one JSON per run plus a summary the
-# report subcommand renders. Sessions cost money — 4 scenarios × `--runs` each.
+# report subcommand renders. Sessions cost money — one per turn, per scenario,
+# per `--runs`.
 
-# The four questions risk 4 actually asks, one scenario apiece.
+# The questions risk 4 actually asks, one scenario apiece.
 #
 # `want` passes when *any* of its tools was called (orientation is `context` or
 # `recall`, either is the right instinct); `avoid` fails when any of its tools
 # was called at all. A scenario with an empty `want` is testing restraint.
+#
+# `turns` is a list because a ritual is a slash command with nothing to act on
+# until a session has happened. Every call records which turn made it.
+# How much of a tool's answer each recorded call keeps. Enough to see whether
+# a recall came back with hits; not so much that a saved run is a transcript.
+const ANSWER_CHARS = 700
+
 const SCENARIOS = [
     {
         name: "orient"
@@ -42,7 +51,7 @@ const SCENARIOS = [
                 entities: ["atlas"]
             }
         ]
-        prompt: "How do I deploy atlas?"
+        turns: ["How do I deploy atlas?"]
         want: ["recall" "context"]
         avoid: []
     }
@@ -50,7 +59,43 @@ const SCENARIOS = [
         name: "store"
         asks: "does it write a durable preference down without being told to?"
         seed: []
-        prompt: "Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice."
+        turns: ["Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice."]
+        want: ["remember"]
+        avoid: []
+    }
+    {
+        name: "ritual"
+        asks: "does the checkpoint prompt get the write the description could not?"
+        seed: []
+        # The first turn is `store` verbatim, so the pair is a controlled
+        # comparison: same words, same conditions, one extra turn asking for
+        # the ritual. `store` measures what a description wins on its own;
+        # this measures what a prompt wins when somebody asks for it.
+        turns: [
+            "Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice."
+            "/mcp__agmem__checkpoint"
+        ]
+        want: ["remember"]
+        avoid: []
+    }
+    {
+        name: "ritual_correct"
+        asks: "does the checkpoint prompt get the supersedes the description could not?"
+        seed: [
+            {
+                content: "The user formats Python with black."
+                kind: "fact"
+                tags: ["identity"]
+            }
+        ]
+        # `correct` with the ritual added, the same way `ritual` is `store`
+        # with the ritual added. The metric that matters here is `superseded`,
+        # not `pass`: #23 measured `remember` called 3/3 in isolation and
+        # `supersedes` set 0/3, so writing is not what is in doubt.
+        turns: [
+            "I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later."
+            "/mcp__agmem__checkpoint"
+        ]
         want: ["remember"]
         avoid: []
     }
@@ -64,7 +109,7 @@ const SCENARIOS = [
                 tags: ["identity"]
             }
         ]
-        prompt: "I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later."
+        turns: ["I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later."]
         want: ["remember"]
         avoid: []
     }
@@ -72,7 +117,7 @@ const SCENARIOS = [
         name: "restraint"
         asks: "does it leave memory alone when there is nothing to remember?"
         seed: []
-        prompt: "What is the capital of France? Answer in one word."
+        turns: ["What is the capital of France? Answer in one word."]
         want: []
         avoid: ["remember" "recall" "context" "forget" "inspect"]
     }
@@ -223,29 +268,57 @@ def run-one [
     # measuring the competition rather than the description.
     let settings = if $isolated { ["--settings" '{"autoMemoryEnabled": false}'] } else { [] }
 
-    let session = (
-        ^claude -p $scenario.prompt
-            --model $model
-            --output-format stream-json --verbose
-            --strict-mcp-config --mcp-config $config
-            --permission-mode bypassPermissions
-            --setting-sources ""
-            --no-session-persistence
-            --disable-slash-commands
-            ...$settings
-        | complete
-    )
+    # A ritual is a slash command, and a slash command has nothing to act on
+    # until a session has happened — so a scenario is a *list* of turns, run
+    # through one resumed session. Single-turn scenarios keep the old flags
+    # exactly, including `--no-session-persistence`, which is incompatible with
+    # resuming and is why it is conditional.
+    let conversation = (($scenario.turns | length) > 1)
+    let session_id = (random uuid)
+    let slash = if ($scenario.turns | any {|turn| $turn | str starts-with "/"}) {
+        []
+    } else {
+        ["--disable-slash-commands"]
+    }
+
     let events = (
-        $session.stdout
-        | lines
-        | where ($it | str starts-with "{")
-        | each {|line| $line | from json}
+        $scenario.turns
+        | enumerate
+        | each {|turn|
+            let continuity = if not $conversation {
+                ["--no-session-persistence"]
+            } else if $turn.index == 0 {
+                ["--session-id" $session_id]
+            } else {
+                ["--resume" $session_id]
+            }
+            let spoken = (
+                ^claude -p $turn.item
+                    --model $model
+                    --output-format stream-json --verbose
+                    --strict-mcp-config --mcp-config $config
+                    --permission-mode bypassPermissions
+                    --setting-sources ""
+                    ...$continuity
+                    ...$slash
+                    ...$settings
+                | complete
+            )
+            $spoken.stdout
+            | lines
+            | where ($it | str starts-with "{")
+            | each {|line| $line | from json | insert turn $turn.index}
+        }
+        | flatten
     )
     let calls = (agmem-calls $events)
     let used = ($calls | get tool | uniq)
     let hit = (($scenario.want | is-empty) or ($scenario.want | any {|tool| $tool in $used}))
     let clean = ($scenario.avoid | all {|tool| $tool not-in $used})
-    let result = ($events | where type == "result")
+    # One result event per turn; the last one is what the session ended up
+    # saying, and the cost is all of them.
+    let results = ($events | where type == "result")
+    let result = ($results | last 1)
 
     {
         scenario: $scenario.name
@@ -270,39 +343,84 @@ def run-one [
         # pass on `restraint` and a failure everywhere else, both wrong.
         served: (
             $events
-            | where type == "system"
-            | get -o 0.mcp_servers
-            | default []
-            | any {|server| $server.name == "agmem" and $server.status == "connected"}
+            | init-events
+            | all {|system|
+                $system.mcp_servers?
+                | default []
+                | any {|server| $server.name == "agmem" and $server.status == "connected"}
+            }
         )
         # Whether the client offered a memory of its own this run. With one
         # available the agent writes there instead, which is the whole reason
         # `--isolated` exists — so the answer is recorded, not assumed.
         rival_memory: (
             $events
-            | where type == "system"
-            | get -o 0.memory_paths
-            | is-not-empty
+            | init-events
+            | any {|system| $system.memory_paths? | is-not-empty}
         )
+        # The store this run used, kept so a surprising result can be opened
+        # and looked at rather than argued about. It is a temp dir, so it is
+        # only good until the machine cleans up.
+        data: $data
         answer: ($result | get -o 0.result | default "")
-        cost_usd: ($result | get -o 0.total_cost_usd | default 0)
-        turns: ($result | get -o 0.num_turns | default 0)
+        cost_usd: (
+            $results
+            | each {|turn| $turn.total_cost_usd? | default 0}
+            | math sum
+        )
+        agent_turns: ($result | get -o 0.num_turns | default 0)
         session: $calls
     }
 }
 
+# What each turn reported about itself at startup, one event per turn.
+#
+# Not every `system` event is an init: with slash commands enabled the client
+# emits others that carry no `mcp_servers` at all, and a check written as
+# "every system event says agmem is connected" fails on those — reporting a
+# session that worked as one that had no server.
+def init-events [] {
+    $in | where type == "system" and ($it.subtype? | default "") == "init"
+}
+
 # The agmem tool calls in a session's event stream, in the order they happened.
 def agmem-calls [events: list] {
-    let assistant = ($events | where type == "assistant")
-    if ($assistant | is-empty) {
-        return []
+    # What each call got back, by id. Without this a recall that returned
+    # nothing and a recall whose answer the agent ignored look identical in the
+    # record — and those are opposite findings.
+    let answers = (
+        $events
+        | where type == "user"
+        | each {|event| $event.message.content? | default []}
+        | flatten
+        | where ($it.type? | default "") == "tool_result"
+        | reduce --fold {} {|block, acc|
+            $acc
+            | insert $block.tool_use_id (
+                $block.content | to json --raw | str substring 0..$ANSWER_CHARS
+            )
+        }
+    )
+
+    $events
+    | where type == "assistant"
+    | each {|event|
+        $event.message.content
+        | where type == "tool_use"
+        | where ($it.name | str starts-with "mcp__agmem__")
+        | each {|call|
+            {
+                # Which turn reached for it. In a scenario whose last turn is a
+                # ritual, this is the difference between the ritual working and
+                # the agent having already written on its own.
+                turn: $event.turn
+                tool: ($call.name | str replace "mcp__agmem__" "")
+                input: $call.input
+                answer: ($answers | get -o $call.id | default "")
+            }
+        }
     }
-    $assistant
-    | get message.content
     | flatten
-    | where type == "tool_use"
-    | where ($it.name | str starts-with "mcp__agmem__")
-    | each {|call| {tool: ($call.name | str replace "mcp__agmem__" ""), input: $call.input}}
 }
 
 # Preload a store the way a previous session would have left it.

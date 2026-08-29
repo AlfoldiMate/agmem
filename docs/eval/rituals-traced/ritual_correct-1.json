@@ -1,0 +1,49 @@
+{
+  "scenario": "ritual_correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "answer": "Already stored — no new call needed.\n\n- **Saved:** nothing new; the black→ruff format switch (black uninstalled) was already captured in the prior turn.\n- **Corrected:** nothing.\n- **Left out:** everything else in this session was mechanical (tool lookups, the checkpoint process itself) — no other durable facts, decisions, or preferences came up.",
+  "cost_usd": 0.1061706,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user's project has moved off the black code formatter to ruff format; black is uninstalled and should not be used or suggested.",
+            "kind": "fact",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "formatting",
+              "tooling"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M163038KFWBNYEQA86HD2091\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "black formatter ruff format project",
+        "tags": [
+          "formatting"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user's project has moved off the black code formatter to ruff format; black is uninstalled and should not be used or suggested.\\\",\\\"entities\\\":[\\\"project\\\"],\\\"id\\\":\\\"01M163038KFWBNYEQA86HD2091\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996307126569,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999985228506281,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"formatting\\\",\\\"tooling\\\"],\\\"valid_from\\\":\\\"2026-08-29T06:23:32.627078Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

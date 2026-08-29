@@ -270,6 +270,21 @@ pub(crate) struct VectorRow {
     pub(crate) embedding: Vec<f32>,
 }
 
+/// A row `--reindex` still has to embed: whichever column that table keeps
+/// its text in, under one name.
+#[derive(SurrealValue)]
+pub(crate) struct PassageRow {
+    pub(crate) id: RecordId,
+    pub(crate) text: String,
+}
+
+/// One freshly built vector on its way back to the row it came from.
+#[derive(SurrealValue)]
+pub(crate) struct VectorWrite {
+    pub(crate) id: RecordId,
+    pub(crate) vector: Vec<f32>,
+}
+
 /// What `queries::read::live_vectors` answers with: the same selection read
 /// twice, once wide and once for the vectors.
 ///

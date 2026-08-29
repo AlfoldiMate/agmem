@@ -7,6 +7,7 @@
 //! engine's error reporting.
 
 mod read;
+pub mod reindex;
 mod write;
 
 pub use read::{

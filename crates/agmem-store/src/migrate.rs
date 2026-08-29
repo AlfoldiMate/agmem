@@ -26,11 +26,14 @@ const MIGRATIONS: &[&str] = &[
 /// The schema version this binary produces.
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
 
-/// Embedding width the HNSW indexes are defined with (design §2.2).
+/// Embedding width the v1 schema defines its HNSW indexes with (design §2.2).
 ///
-/// The dimension is baked into the index definitions, so changing embedder
-/// families needs a new migration plus a re-embed, never a silent swap —
-/// startup compares this against `meta:main.embedder_dim`.
+/// What a store starts at, not what it is stuck at: the dimension is baked
+/// into the index definitions, so changing embedder families means rebuilding
+/// them and re-embedding every row, which is what `agmem --reindex` does and
+/// the only way it is allowed to happen. Startup compares the configured
+/// backend against `meta:main.embedder_dim` — the pair the store recorded —
+/// rather than against this constant.
 pub const EMBEDDING_DIM: usize = 384;
 
 /// Read the applied schema version (0 = fresh store).
@@ -102,6 +105,56 @@ pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), 
             Ok(())
         }
     }
+}
+
+/// The model and width this store's vectors were built with, if a run has
+/// ever recorded one.
+///
+/// `None` for a store only ever opened in BM25-only mode: a dimensionless
+/// backend claims no vector space, so it writes nothing here.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects.
+pub async fn stored_embedder(db: &Db) -> Result<Option<(String, i64)>, StoreError> {
+    let mut resp = db
+        .query(
+            "SELECT VALUE embedder_model FROM meta:main;
+             SELECT VALUE embedder_dim FROM meta:main;",
+        )
+        .await?
+        .check()?;
+    let model: Option<String> = resp
+        .take::<Vec<Option<String>>>(0)?
+        .into_iter()
+        .flatten()
+        .next();
+    let dim: Option<i64> = resp
+        .take::<Vec<Option<i64>>>(1)?
+        .into_iter()
+        .flatten()
+        .next();
+    Ok(model.zip(dim))
+}
+
+/// Record `model_id`/`dim` as the store's vector space, replacing whatever
+/// was there.
+///
+/// [`ensure_embedder`] only ever writes the pair when it is absent — it is a
+/// guard, and a guard that overwrites what it guards is not one. `--reindex`
+/// is the sanctioned way to change the pair, and this is where it says so.
+/// Writing it *before* the re-embedding loop is deliberate: the rows without
+/// vectors are the resume marker, so a run interrupted halfway must not come
+/// back to a store that thinks it still belongs to the old model.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects.
+pub async fn set_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), StoreError> {
+    db.query("UPSERT meta:main SET embedder_model = $model, embedder_dim = $dim")
+        .bind(("model", model_id.to_owned()))
+        .bind(("dim", i64::try_from(dim).unwrap_or(i64::MAX)))
+        .await?
+        .check()?;
+    Ok(())
 }
 
 /// Apply the bootstrap plus any pending migrations; returns the version.

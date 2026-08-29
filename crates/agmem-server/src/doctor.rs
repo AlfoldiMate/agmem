@@ -123,6 +123,7 @@ async fn check_store(cfg: &Config) -> u32 {
                         eprintln!("  FAIL  embedder vs store    {err}");
                     }
                 }
+                failures += check_vector_coverage(db).await;
             }
         }
         Err(err) => {
@@ -131,6 +132,35 @@ async fn check_store(cfg: &Config) -> u32 {
         }
     }
     failures
+}
+
+/// Rows the vector half of retrieval cannot reach.
+///
+/// A `--reindex` killed between its reset and the end of its embed loop
+/// leaves exactly this: rows with no vector, under a `meta` that already
+/// names the new model — so the guard above is satisfied and a vector recall
+/// silently misses them. Nothing else notices, which is why this is a check
+/// and not a log line. Rows written in BM25-only mode look identical and have
+/// the same remedy, so the message names it rather than guessing which
+/// happened.
+async fn check_vector_coverage(db: &agmem_store::db::Db) -> u32 {
+    match agmem_store::repo::reindex::pending_count(db).await {
+        Ok(0) => {
+            eprintln!("  ok    vector coverage      every row carries a vector");
+            0
+        }
+        Ok(pending) => {
+            eprintln!(
+                "  FAIL  vector coverage      {pending} row(s) carry no vector, so a vector \
+                 recall cannot reach them; run `agmem --reindex`"
+            );
+            1
+        }
+        Err(err) => {
+            eprintln!("  FAIL  vector coverage      {err}");
+            1
+        }
+    }
 }
 
 /// The embedder check on its own, for when the store belongs to the daemon.

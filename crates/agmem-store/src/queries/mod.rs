@@ -13,6 +13,7 @@
 //!   a parse error — so the candidate pool is formatted into the text.
 
 pub(crate) mod read;
+pub(crate) mod reindex;
 pub(crate) mod write;
 
 /// A request's text plus the index of the statement carrying its result.

@@ -219,8 +219,8 @@ Notes:
   semantic near-dup gate (cosine ≥ 0.95 against top-1 neighbor) runs in Rust
   during `remember` because it needs the query-side embedding anyway.
 - Dimension 384 matches the default embedder. The dimension is recorded in
-  `meta`; switching embedders requires an explicit `reindex` maintenance
-  operation (phase 4) — startup refuses a model/dim mismatch with a clear
+  `meta`; switching embedders requires an explicit `agmem --reindex`
+  maintenance pass — startup refuses a model/dim mismatch with a clear
   error rather than silently mixing spaces.
 
 ### 2.3 Kinds, decay classes, and lifecycle
@@ -823,7 +823,7 @@ points, keeping the process count at one:
 | Decay sweep (importance × rate daily) | Computed in the scoring formula at read time — nothing to run |
 | TTL expiry of context-category | `repo::prune_expired` closes decayed `fast` records at every start |
 | Consolidation / elaboration | `consolidate` returns *candidates* — near-dup clusters, contradiction pairs, stale contexts; the **agent** decides merges via `remember(supersedes)` or `forget`. The LLM stays client-side (issue #25) |
-| Reindex / re-embed | Phase 4 explicit maintenance op (`agmem --reindex`), required for embedder change |
+| Reindex / re-embed | Explicit maintenance op (`agmem --reindex`), required for embedder change: clears every vector, redefines both HNSW indexes at the new width, then re-embeds — the rows still without a vector are what an interrupted pass resumes from |
 | fsck duplicate audit | Folded into `inspect stats` + `consolidate` candidates |
 
 The prune is one `UPDATE`, and the decay curve is not repeated in it. The

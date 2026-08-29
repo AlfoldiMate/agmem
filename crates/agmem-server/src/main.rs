@@ -16,7 +16,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use agmem_server::daemon;
 use agmem_server::service::{self, AgmemService};
-use agmem_server::{config, doctor, embedder, lock, startup, telemetry};
+use agmem_server::{config, doctor, embedder, lock, reindex, startup, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -32,6 +32,13 @@ async fn main() -> anyhow::Result<()> {
 
     if cfg.doctor {
         return doctor::run(&cfg).await;
+    }
+
+    // Before the daemon branch: reindexing rewrites every vector in the
+    // store, which is the one thing that must not be handed to a process
+    // already serving sessions from it.
+    if cfg.reindex {
+        return reindex::run(&cfg).await;
     }
 
     // A failure on the shared path exits non-zero rather than falling back to

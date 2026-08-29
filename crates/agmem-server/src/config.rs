@@ -65,6 +65,13 @@ pub struct Cli {
     #[arg(long)]
     pub doctor: bool,
 
+    /// Re-embed the store with the configured backend and exit — the
+    /// sanctioned way to change embedding model or width. No env var: a
+    /// maintenance pass that rewrites every vector should not be switchable
+    /// by a stray export.
+    #[arg(long)]
+    pub reindex: bool,
+
     /// Open the store in this process instead of through the shared daemon.
     /// One process can hold an embedded store, so this is the old
     /// one-session-at-a-time behaviour.
@@ -214,6 +221,7 @@ pub struct Config {
     pub log: String,
     pub log_file: Option<PathBuf>,
     pub doctor: bool,
+    pub reindex: bool,
     pub no_daemon: bool,
     pub daemon_serve: bool,
     pub idle_timeout: u64,
@@ -252,6 +260,7 @@ impl Cli {
             log: self.log,
             log_file: self.log_file,
             doctor: self.doctor,
+            reindex: self.reindex,
             no_daemon: self.no_daemon,
             daemon_serve: self.daemon_serve,
             idle_timeout: self.idle_timeout,

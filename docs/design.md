@@ -655,12 +655,32 @@ recall(q)
       norm  = min–max over the pool: (rrf − min) / (max − min)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history)
  5. take k; fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
- 6. → hits with per-signal scores (agent can see *why* something surfaced)
+ 6. did the page fill exactly k? → COUNT the same filters; if it exceeds what
+    came back, say so in `truncated`
+ 7. → hits with per-signal scores (agent can see *why* something surfaced)
 ```
 
 Pool size 64 default (`AGMEM_POOL`), k default 10 / max 50. Tier-2 semantic
 response caching à la Spectron is intentionally absent — there is no
 generation step to save; retrieval itself is the whole cost, and it is local.
+
+**A full page is indistinguishable from a whole store**, which is where an
+audit done by hand goes quietly wrong. Measured (`docs/eval/consolidate-bigseed-*`):
+asked what memory holds about a subject, an agent makes exactly one `recall` at
+the largest `k` it is allowed — `k: 50`, the `AGMEM_MAX_K` ceiling — and reads
+the answer as everything there is. Against 47 matching claims it was; against
+470 the same call returns a ranked tenth of the store in the same shape, with
+nothing marking the cut. So when `take(k)` returns exactly `k`, recall counts
+the selection its filters describe — `repo::count_matching`, one `GROUP ALL`
+over the same WHERE clause the read used — and answers with
+`truncated: { matching_claims, returned_claims, k, note }` when that count is
+larger than what came back. The count runs only on a full page; a short answer
+is its own evidence of being whole. The `note` is where routing lives: judging
+what is duplicated, contradicted or stale needs every claim compared against
+every other, which is `consolidate` and not a page. Three batches of wording
+work on `consolidate` (0/3 each, $1.08) said a tool that is never read cannot
+be reworded into being called — the answer an agent is already holding is the
+only place a pointer arrives in time.
 
 `norm` is **min–max, not max-only** (issue #34). RRF barely spreads —
 `1/(60 + rank)` differs by 3% between the first hit and the fourth — so

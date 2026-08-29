@@ -287,6 +287,24 @@ pub async fn direct_lookup(db: &Db, lookup: &Lookup) -> Result<Vec<MemoryRecord>
     rows.into_iter().map(MemoryReadRow::into_record).collect()
 }
 
+/// How many live claims the filters select, ignoring `lookup.limit`.
+///
+/// A page carries no evidence of what it left behind: fifty hits out of fifty
+/// rows and fifty out of five hundred look identical to the agent reading
+/// them. This is the second number. It counts memories and not episode
+/// chunks, because the filters narrow memories and the question it answers is
+/// how many claims the ranking chose between.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects.
+pub async fn count_matching(db: &Db, lookup: &Lookup) -> Result<u64, StoreError> {
+    let text = queries::count_matching(lookup);
+    let query = db.query(&text).bind(("spaces", space_strs(&lookup.spaces)));
+    let mut resp = checked(bind_filters(query, &lookup.filters, lookup.liveness).await?)?;
+    let total: Option<i64> = resp.take(0)?;
+    Ok(count(total.unwrap_or_default()))
+}
+
 /// The nearest live memories in `space` to each of `vectors`, closest first,
 /// in input order.
 ///

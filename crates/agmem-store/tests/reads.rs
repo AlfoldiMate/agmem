@@ -367,6 +367,76 @@ async fn direct_lookup_filters_on_the_indexed_columns() {
 }
 
 #[tokio::test]
+async fn a_count_answers_for_the_whole_selection_a_limit_only_pages() {
+    let db = seeded().await;
+    let count_of = async |filters: Filters, liveness: Liveness| {
+        let mut lookup = Lookup::new(vec![space()]);
+        lookup.filters = filters;
+        lookup.liveness = liveness;
+        // Deliberately smaller than the answer: the limit is what makes a page
+        // look like a store, and the count exists to be immune to it.
+        lookup.limit = 1;
+        repo::count_matching(&db, &lookup).await.expect("count")
+    };
+
+    assert_eq!(
+        count_of(Filters::default(), Liveness::Live).await,
+        5,
+        "the limit pages the rows and never the count"
+    );
+    assert_eq!(
+        count_of(
+            Filters {
+                kinds: vec![Kind::Instruction],
+                ..Filters::default()
+            },
+            Liveness::Live
+        )
+        .await,
+        1,
+        "and it narrows exactly like the lookup it sits beside"
+    );
+    assert_eq!(
+        count_of(
+            Filters {
+                tags: vec!["nobody-uses-this".to_owned()],
+                ..Filters::default()
+            },
+            Liveness::Live
+        )
+        .await,
+        0,
+        "a selection matching nothing groups into no rows, which is still zero"
+    );
+
+    let old = live_id(&db, "the user prefers Rust").await;
+    let mut correction = NewMemory::new(Kind::Fact, "the user now prefers Rust over Go");
+    correction.supersedes = Some(old);
+    correction.valid_from = Some(stamp(CORRECTED_AT));
+    repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: None,
+            memories: vec![correction],
+        },
+    )
+    .await
+    .expect("correction");
+
+    assert_eq!(
+        count_of(Filters::default(), Liveness::Live).await,
+        5,
+        "a correction closes one row and opens another"
+    );
+    assert_eq!(
+        count_of(Filters::default(), Liveness::Any).await,
+        6,
+        "and the closed one is still there to be counted"
+    );
+}
+
+#[tokio::test]
 async fn a_history_walk_returns_the_whole_chain_from_any_link() {
     let db = seeded().await;
     let first = live_id(&db, "the user prefers Rust").await;

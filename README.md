@@ -253,6 +253,20 @@ rescored by how well each claim has held up since it was last used.
 Every hit carries the `signals` behind its place in the order, so a claim that
 surfaced only because it never decays is visible as such.
 
+When the answer fills `k` and more claims match than came back, it also carries
+what it left behind:
+
+```json
+{ "truncated": { "matching_claims": 312, "returned_claims": 50, "k": 50,
+                 "note": "These are the 50 strongest of 312 live claims these filters select — a ranked page…" } }
+```
+
+A page of hits and a whole store serialise identically, so without this an
+agent asked what memory holds about a subject answers from the top fifty and
+has no way to know it. `truncated` is absent when nothing was cut. Reading a
+page is still not an audit: what is duplicated or out of date needs every claim
+compared against every other, which is `consolidate`.
+
 **Corrections** — never store a contradiction; send `supersedes`:
 
 ```json

@@ -1260,6 +1260,49 @@ async fn a_filters_only_recall_ranks_on_decay_alone() {
 }
 
 #[tokio::test]
+async fn a_full_page_says_how_much_of_the_store_it_is_not() {
+    // The measurement behind this: asked what memory holds about a subject, an
+    // agent makes one `recall` with the largest `k` it is allowed and reads the
+    // answer as the whole store. That is true right up until the store outgrows
+    // `k`, and a page of hits carries nothing that says which of the two
+    // happened.
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [
+            { "content": "The user prefers Rust" },
+            { "content": "Deploys run from bin/ship.sh" },
+            { "content": "The suite runs with cargo nextest" },
+            { "content": "CI denies clippy warnings" },
+            { "content": "Secrets come from the environment" }
+        ] }))
+        .await;
+
+    // No query, so this is the filters-only path: rank is strength then id
+    // rather than a BM25 order that a five-row corpus makes arbitrary.
+    let paged = agmem.recall(json!({ "k": 2 })).await;
+    assert_eq!(hits(&paged).len(), 2);
+    let cut = &paged["truncated"];
+    assert_eq!(cut["matching_claims"].as_u64(), Some(5), "{paged}");
+    assert_eq!(cut["returned_claims"].as_u64(), Some(2), "{paged}");
+    assert_eq!(cut["k"].as_u64(), Some(2), "{paged}");
+    assert!(
+        cut["note"]
+            .as_str()
+            .expect("a note")
+            .contains("consolidate"),
+        "a page names the read that is not one: {paged}"
+    );
+
+    let whole = agmem.recall(json!({ "k": 10 })).await;
+    assert_eq!(hits(&whole).len(), 5);
+    assert!(
+        whole["truncated"].is_null(),
+        "an answer nothing was cut from carries no cut: {whole}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
     agmem

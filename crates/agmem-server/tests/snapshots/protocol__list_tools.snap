@@ -1282,6 +1282,40 @@ expression: "&tools.tools"
             "tags"
           ],
           "type": "object"
+        },
+        "Truncated": {
+          "description": "What a `k` left behind.\n\nA page of hits looks exactly like a whole store: fifty out of fifty and\nfifty out of five hundred serialise identically, so an agent that reads a\npage and reports what memory holds is right by luck. This says which of\nthe two happened, in the answer, at the moment it matters.",
+          "properties": {
+            "k": {
+              "description": "The `k` that did the cutting.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "matching_claims": {
+              "description": "How many live claims the filters select across the searched spaces,\nignoring `query` and `k`. Relevance is not counted here: this is the\nsize of the set the ranking chose from, not of what matched well.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "note": {
+              "description": "The same thing in words, because a number is only acted on when\nsomething says why it matters.",
+              "type": "string"
+            },
+            "returned_claims": {
+              "description": "How many of them this answer carries.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "matching_claims",
+            "returned_claims",
+            "k",
+            "note"
+          ],
+          "type": "object"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1299,6 +1333,17 @@ expression: "&tools.tools"
             "type": "string"
           },
           "type": "array"
+        },
+        "truncated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Truncated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present when this answer filled `k` and the filters select more claims\nthan it carries — so what came back is a page. Absent means `k` did not\ncut anything short: either the page never filled, or nothing beyond it\nmatches these filters."
         }
       },
       "required": [

@@ -242,6 +242,18 @@ pub(crate) fn direct_lookup(lookup: &Lookup) -> String {
     )
 }
 
+/// How many memories the filters select, with no limit and no ordering.
+///
+/// The companion to [`direct_lookup`]: both that and the search answer with a
+/// page, and a page the size of the whole set is indistinguishable from it
+/// unless something counts. `GROUP ALL` with a `?? 0` fallback because a
+/// selection that matches nothing groups into no rows at all rather than into
+/// a zero.
+pub(crate) fn count_matching(lookup: &Lookup) -> String {
+    let clauses = memory_where(&lookup.filters, lookup.liveness);
+    format!("RETURN (SELECT count() AS count FROM memory WHERE {clauses} GROUP ALL)[0].count ?? 0")
+}
+
 /// Everything in one supersession chain, oldest first, `$target` included.
 ///
 /// `{..N+collect}` follows a record link repeatedly and gathers what it

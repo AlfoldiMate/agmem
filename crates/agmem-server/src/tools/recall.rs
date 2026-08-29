@@ -78,6 +78,56 @@ pub struct RecallResult {
 
     /// The matches, highest `score` first.
     pub hits: Vec<RecallHit>,
+
+    /// Present when this answer filled `k` and the filters select more claims
+    /// than it carries — so what came back is a page. Absent means `k` did not
+    /// cut anything short: either the page never filled, or nothing beyond it
+    /// matches these filters.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<Truncated>,
+}
+
+/// What a `k` left behind.
+///
+/// A page of hits looks exactly like a whole store: fifty out of fifty and
+/// fifty out of five hundred serialise identically, so an agent that reads a
+/// page and reports what memory holds is right by luck. This says which of
+/// the two happened, in the answer, at the moment it matters.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Truncated {
+    /// How many live claims the filters select across the searched spaces,
+    /// ignoring `query` and `k`. Relevance is not counted here: this is the
+    /// size of the set the ranking chose from, not of what matched well.
+    pub matching_claims: u64,
+
+    /// How many of them this answer carries.
+    pub returned_claims: usize,
+
+    /// The `k` that did the cutting.
+    pub k: usize,
+
+    /// The same thing in words, because a number is only acted on when
+    /// something says why it matters.
+    pub note: String,
+}
+
+impl Truncated {
+    /// Only ever built when the count exceeds what came back.
+    fn new(matching_claims: u64, returned_claims: usize, k: usize) -> Self {
+        let note = format!(
+            "These are the {returned_claims} strongest of {matching_claims} live claims these \
+             filters select — a ranked page, which reads exactly like a whole store. Raise `k` \
+             to see more of it. Do not audit memory from this: judging what is duplicated, \
+             contradicted or stale needs every claim compared against every other, which is \
+             what `consolidate` does and no page can."
+        );
+        Self {
+            matching_claims,
+            returned_claims,
+            k,
+            note,
+        }
+    }
 }
 
 /// One match, with the reasoning behind its place in the order.
@@ -194,6 +244,9 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         entities,
         tags,
     };
+    // The search consumes the filters; the count that follows needs the same
+    // ones, or it would answer a different question than the one that was cut.
+    let counted = filters.clone();
     let pool = usize::from(service.config().pool);
 
     // 1. A call with nothing to match on is not a search — it is the tier-1
@@ -240,6 +293,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     .into_iter()
     .take(k)
     .collect();
+    let considered = ranked.len();
 
     // 3. Being recalled is what keeps a memory alive; verbatim text has no
     //    curve to be pushed back up.
@@ -252,12 +306,29 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         .collect();
     reinforce(service, &touched).await;
 
+    // 4. `take(k)` is silent, and a full page is the one shape that cannot be
+    //    read as complete or partial from the outside. Count only when the
+    //    page filled up: a short answer is its own evidence of being whole.
+    let truncated = if considered == k {
+        let mut lookup = Lookup::new(spaces.clone());
+        lookup.filters = counted;
+        lookup.liveness = liveness;
+        let matching = repo::count_matching(service.db(), &lookup)
+            .await
+            .map_err(|error| store_error(&error))?;
+        let returned = touched.len();
+        (matching > returned as u64).then(|| Truncated::new(matching, returned, k))
+    } else {
+        None
+    };
+
     Ok(RecallResult {
         spaces: spaces.iter().map(ToString::to_string).collect(),
         hits: ranked
             .into_iter()
             .map(|(hit, ranked)| RecallHit::new(hit, &ranked))
             .collect(),
+        truncated,
     })
 }
 

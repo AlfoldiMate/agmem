@@ -4,15 +4,17 @@ Memory for coding agents, over MCP. One local process, one embedded database,
 no server-side LLM: the agent distils what is worth keeping, agmem stores it,
 dates it, ranks it, and shows its work.
 
-Five tools — `remember`, `recall`, `context`, `forget`, `inspect`.
+Five tools — `remember`, `recall`, `context`, `forget`, `inspect` — and two
+rituals that ask for them.
 
-> Status: Phase 1 (MVP) plus the `context` block and `forget`. The loop works
-> end to end from Claude Code. Startup pruning, prompts and consolidation are
-> Phase 2+.
+> Status: Phase 2 complete. The loop, the session-start block, removal, startup
+> pruning, the shared daemon and the rituals all work end to end from Claude
+> Code. Consolidation and the memory-quality eval are Phase 3+.
 
 ## Install
 
-Requires Rust 1.89+.
+Requires Rust 1.89+. The crate is `agmem-server`; the binary it installs is
+`agmem`.
 
 ```sh
 cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
@@ -20,15 +22,18 @@ cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
 agmem --doctor
 ```
 
-`--doctor` is the install check: it creates the data directory, takes the
-single-writer lock, opens the database, runs migrations, loads the embedding
-model, and does a write/read roundtrip. The first run downloads the model
-(~30 MB, BGE-small-en-v1.5 quantised) into `<data dir>/models` — about 25
-seconds on a warm connection; every run after that is offline.
+`--doctor` is the install check: it creates the data directory, looks for a
+running daemon, takes the single-writer lock, opens the database, runs
+migrations, does a write/read roundtrip, and loads the embedding model. The
+first run downloads that model into `<data dir>/models` — BGE-small-en-v1.5,
+quantised, 65 MB on disk — which took 23 seconds here on a warm connection.
+Every run after that is offline.
 
 ```
 agmem doctor
   ok    data dir writable    ~/Library/Application Support/dev.agmem.agmem
+  ok    tool descriptions    agmem's own wording
+  ok    shared daemon        not running; the next session starts one
   ok    single-writer lock   held by this process
   ok    database open        surrealkv://…/agmem.db
   ok    schema               v1
@@ -38,9 +43,31 @@ agmem doctor
 doctor: all checks passed
 ```
 
+That report goes to **stderr**, with a few INFO log lines; stdout is the MCP
+wire and stays empty even here. The exit status is 0 only when every check
+passed, so `agmem --doctor` works as a CI or setup gate.
+
+### Where it keeps things
+
+| | |
+|---|---|
+| macOS | `~/Library/Application Support/dev.agmem.agmem` |
+| Linux | `~/.local/share/agmem` (`$XDG_DATA_HOME/agmem`) |
+| Windows | `%APPDATA%\agmem\agmem\data` |
+
+One directory holds all of it: `agmem.db/` (the store), `models/` (the
+embedding model), `agmem.lock`, and, while sessions are running, `agmem.sock`
+and `daemon.log`. Back it up, move it or delete it as a unit. `--data` /
+`AGMEM_DATA` points somewhere else — a scratch dir per experiment is the easiest
+way to try something without touching real memory.
+
 ## Register it
 
-`.mcp.json` in the project root — that is the whole install story:
+The same three lines in every client: an `mcpServers` entry naming the binary
+and this project's space.
+
+**Claude Code** — `.mcp.json` in the project root, checked in so everyone on
+the repo gets it:
 
 ```json
 {
@@ -55,9 +82,47 @@ doctor: all checks passed
 }
 ```
 
+or, without editing a file:
+
+```sh
+claude mcp add agmem --scope project -e AGMEM_SPACE=myproject -- agmem
+```
+
+This repo's own `.mcp.json` is the working example.
+
+**Cursor** — `.cursor/mcp.json` for one project, `~/.cursor/mcp.json` for all of
+them. Identical shape:
+
+```json
+{ "mcpServers": { "agmem": {
+    "command": "agmem",
+    "env": { "AGMEM_SPACE": "myproject" }
+} } }
+```
+
+**Claude Desktop** — `claude_desktop_config.json`, reachable from Settings →
+Developer → Edit Config, at
+`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and
+`%APPDATA%\Claude\claude_desktop_config.json` on Windows:
+
+```json
+{ "mcpServers": { "agmem": {
+    "command": "/Users/you/.cargo/bin/agmem",
+    "env": { "AGMEM_SPACE": "user" }
+} } }
+```
+
+**Give Desktop the absolute path.** A desktop app is not launched from your
+shell and does not inherit its `PATH`, so a bare `agmem` fails to spawn with no
+other clue; `which agmem` prints what to paste. Desktop also has no project, so
+the cross-project `user` space is usually the right one there.
+
+Any other MCP client works the same way: agmem is a stdio server, `command:
+"agmem"`, no arguments.
+
 `AGMEM_SPACE` names this project's memory. One space per project, plus the
 reserved `user` space for what follows the person everywhere — preferences,
-working style, things true regardless of repo. This repo's own `.mcp.json` is the working example.
+working style, things true regardless of repo.
 
 **Several sessions at once, one store.** The embedded store is single-writer,
 so the first session that needs it starts a small background daemon to own it
@@ -72,6 +137,31 @@ a `--resume` alongside a running session all read and write the same store, so
 and its log is `<data dir>/daemon.log`. `--no-daemon` goes back to one process
 owning the store; `AGMEM_IDLE_TIMEOUT=0` keeps the daemon until the machine
 restarts.
+
+The daemon is a Unix socket, so on Windows — and with `--no-daemon`, or a
+remote `--db` — agmem opens the store in the session's own process instead.
+That is one session at a time on an embedded store.
+
+### One store, several machines
+
+Point every agmem at a SurrealDB server rather than an embedded file:
+
+```json
+{ "mcpServers": { "agmem": {
+    "command": "agmem",
+    "env": {
+      "AGMEM_SPACE": "myproject",
+      "AGMEM_DB": "ws://memory.internal:8000"
+    }
+} } }
+```
+
+The server becomes the single-writer boundary, so there is no lock file and no
+daemon — `--doctor` reports `skip single-writer lock, remote engine`. agmem
+uses the `agmem` namespace and the `main` database and applies its own
+migrations on first connect. It sends no credentials, so the server has to
+accept the connection unauthenticated: this is a trusted-network arrangement,
+not an exposed one.
 
 ## The loop
 
@@ -96,16 +186,30 @@ It answers with a **diff**, not an acknowledgement:
   "duplicates": [], "superseded": [], "episode": "01M14XWWANHH…" }
 ```
 
+Add `episode` and the conversation those claims came from is stored unedited as
+ground truth — chunked for retrieval, never rewritten — with every claim in the
+same call provenanced to it:
+
+```json
+{ "memories": [ { "content": "The user prefers Rust over Python for command-line tools" } ],
+  "episode": { "content": "…the raw turn, quoted rather than summarised…" } }
+```
+
+Those chunks compete in `recall` and come back as `kind: "episode"`;
+`inspect` shows the text behind any claim that names one.
+
 Send the same claim again and nothing is written — the claim already stored is
-reported instead, with how close a match it was (`1.0` once case and whitespace
-are folded, otherwise the cosine similarity that tripped the near-duplicate
-gate) and which entry of your batch it refers to:
+reported instead, with how close a match it was and which entry of your batch
+it refers to:
 
 ```json
 { "created": [],
-  "duplicates": [ { "id": "01M14XWWAXJG…", "of": 0, "similarity": 1.0 },
-                  { "id": "01M14XWWAXJG…", "of": 1, "similarity": 0.967 } ] }
+  "duplicates": [ { "id": "01M14XWWAXJG…", "of": 0, "similarity": 0.9999998 },
+                  { "id": "01M14XWWAXJG…", "of": 1, "similarity": 0.982940 } ] }
 ```
+
+Identical text lands a rounding error short of 1.0; a reworded version of the
+same claim lands wherever the near-duplicate gate caught it.
 
 **`recall`** — ask in words. Both halves of retrieval use the question: BM25
 matches the wording, vectors match the meaning, and the two are fused, then
@@ -128,8 +232,7 @@ rescored by how well each claim has held up since it was last used.
 ```
 
 Every hit carries the `signals` behind its place in the order, so a claim that
-surfaced only because it never decays is visible as such. Episode chunks
-compete in the same ranking and come back as `kind: "episode"`.
+surfaced only because it never decays is visible as such.
 
 **Corrections** — never store a contradiction; send `supersedes`:
 
@@ -168,10 +271,11 @@ at the work in front of you.
 ```
 
 Every line carries its id, so a claim you find is wrong goes straight back
-through `remember`'s `supersedes` without a `recall` in between. Verbatim
-episode text never appears — one chunk would eat a quarter of the budget, and
-`recall` is the way to it. Nothing is reinforced either: the block is read on a
-schedule, so being in it is no evidence a memory was useful.
+through `remember`'s `supersedes` without a `recall` in between. A section with
+nothing to say leaves no heading behind. Verbatim episode text never appears —
+one chunk would eat a quarter of the budget, and `recall` is the way to it.
+Nothing is reinforced either: the block is read on a schedule, so being in it is
+no evidence a memory was useful.
 
 **`forget`** — removal, with the scope confirmed before anything moves. By
 default it *closes* a memory rather than deleting it: it stops answering
@@ -268,13 +372,14 @@ The numbers and the harness behind them are in `docs/tool-descriptions.md`.
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `AGMEM_TOOL_DESC_<TOOL>` | agmem's own wording | Replace one tool's description — see below |
+| `FASTEMBED_CACHE_DIR` | `<data>/models` | Where the embedding model is downloaded and read from |
 | `--log` / `AGMEM_LOG`, `--log-file` / `AGMEM_LOG_FILE` | agmem at `info`, its dependencies at `warn`, stderr | Telemetry |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process; one session at a time |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it |
 | `--doctor` | — | Self-check, then exit |
 
 stdout is the MCP wire: all logging goes to stderr or `--log-file`, never
-stdout.
+stdout. `agmem --help` is the same list with the exact spellings.
 
 ### Rewording a tool
 
@@ -306,21 +411,30 @@ your own.
 
 ## Verify the loop
 
-Five checks, in two separate sessions — this is the dogfood checklist the MVP
-is signed off against (run 2026-08-28 against a fresh data dir, all passing):
+The walkthrough this is signed off against — a clean data directory, the two
+sessions sharing one daemon. Last run 2026-08-29 against the release binary
+over raw JSON-RPC, all passing:
 
-1. `agmem --doctor` on an empty data directory — every line `ok`, nothing on
-   stdout.
-2. **Session A**: `remember` three claims plus the verbatim episode they came
-   from → three ids and an episode id.
-3. **Session B** (a new process, same data dir): `recall` a question about them
-   → the claims come back, and the episode chunk with them.
+1. `agmem --doctor` on an empty `--data` — every line `ok`, nothing on stdout.
+   23s the first time (model download included), 1.9s after.
+2. **Session A**: `remember` three claims plus the episode they came from →
+   three ids and an episode id.
+3. **Session B** (a second process on the same data dir, attached to the daemon
+   A started): `recall` a question about them → the claims come back, and the
+   episode chunk with them.
 4. Re-send one claim verbatim and once reworded → nothing written; both
-   reported as duplicates of the stored id, at `1.0` and `0.967`.
-5. `remember` a correction with `supersedes` → the old claim disappears from
-   `recall`, and `inspect` shows the two-link chain with the old one dated and
-   marked `superseded`. `inspect entity:user` shows both; `inspect stats`
-   counts `live: 3, invalidated: 1, episodes: 1`.
+   reported as duplicates of the stored id, at `0.9999998` and `0.983`.
+5. `remember` a correction with `supersedes` → the new id in `created`, the old
+   one in `superseded`.
+6. `inspect memory:<the old id>` → a two-link chain, the old one dated,
+   `invalid_reason: "superseded"` and pointing at its replacement.
+7. `inspect stats` → `live: 3, invalidated: 1, episodes: 1, chunks: 1`.
+8. `context` → Instructions, Relevant and Lessons, each line ending in its id;
+   no Profile heading, because the only `identity` fact was the one just
+   superseded.
+9. `forget` by query without a dry run → refused, naming the two-step. The same
+   call with `dry_run: true` → one match; sent again unchanged → invalidated.
+10. `prompts/list` → `recall_first` and `checkpoint`.
 
 ## Troubleshooting
 
@@ -331,6 +445,24 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
 - **A session came up with no memory tools** — read `<data dir>/daemon.log`:
   the shared store failed to start, and the session refused rather than open a
   second copy of a single-writer store.
+- **Claude Desktop shows the server as failed** — almost always the `PATH`: it
+  needs the absolute path to the binary, not `agmem`. Its own log names the
+  spawn error.
+- **`--doctor` says `skip` on three lines** — that is a healthy report with a
+  daemon running. The lock, the database and the schema belong to the daemon,
+  and checking them from here would open the second copy of the store the whole
+  design exists to prevent. Stop the sessions (or add `--no-daemon`) for the
+  full report.
+- **The first run hangs or fails on the model download** — it is pulling ~65 MB
+  from Hugging Face into `<data dir>/models`. Behind a proxy or an air gap,
+  copy that directory from a machine that has it, or set
+  `FASTEMBED_CACHE_DIR` to wherever it already lives — that variable *replaces*
+  the data-dir default rather than adding to it, so one cache can serve several
+  data dirs. A half-finished download is safe to delete; the directory is a
+  cache, and `agmem --doctor` refills it.
+- **First call after a start is slow** — the model loads on start;
+  `agmem --doctor` once after install gets the download out of the way, and the
+  shared daemon means later sessions attach to an already-loaded one.
 - **A `recall` came back without something you know is stored** — much rarer
   since [#39](https://github.com/AlfoldiMate/agmem/issues/39), which fixed a
   fulltext arm that returned nothing whenever the question contained a word the
@@ -340,10 +472,14 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
   that arm can under-return. Ask again in words the claim would use, or drop
   `query` and filter on `entities`/`tags`/`kinds`; `inspect stats` says whether
   the row is there at all.
-- **First call is slow** — the model loads on start; `--doctor` once after
-  install gets the download out of the way.
 - **No ONNX Runtime on the platform** — `--embedder none` runs BM25-only, and
-  `cargo install --no-default-features` drops the ONNX build entirely.
+  `cargo install --no-default-features` drops the ONNX build entirely. A store
+  written with one model refuses to open under a *different* one: the model and
+  width are recorded, and `--doctor` reports the mismatch. Dropping to `none` is
+  always allowed — it stores no vectors.
+- **Starting over** — delete the data directory. Everything agmem wrote is
+  under it, and the next start recreates the schema. Keep `models/` if you do
+  not want the download again.
 
 ## Docs
 

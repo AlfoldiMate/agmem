@@ -890,3 +890,12 @@ Each phase is releasable; later phases only add.
    every memory is exactly the case the verbatim copy exists for. `kind:
    "episode"` on the hit is what makes the two distinguishable, so the flag
    would buy nothing a filter cannot.
+10. Found at #24, writing the install docs: **an exact duplicate does not report
+    `1.0`.** The near-duplicate vector gate runs before the transaction whose
+    content-hash lookup produces `Written::Duplicate`, so verbatim text is
+    always caught by the gate first, at the f32 self-similarity of its own
+    embedding (0.9999998). The `similarity: 1.0` branch is only reached when
+    there is no embedding to gate on — `--embedder none` — so the same input
+    reports different numbers under the two backends. §3.1's wording and the
+    tool schema both still claim 1.0; the README no longer does. **Issue #41**
+    carries the choice: hash-check first, or document the cosine.

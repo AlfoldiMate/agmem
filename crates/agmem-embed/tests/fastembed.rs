@@ -50,3 +50,75 @@ fn related_sentences_land_closer_than_unrelated_ones() {
         "the query must find the language memory, not the tap"
     );
 }
+
+/// Regenerates the KNN under-return fixture the store tests probe with
+/// (issue #40).
+///
+/// The bug is **probe-vector dependent** — a stored row's own embedding or a
+/// random vector returns the full candidate set, and a real BGE query
+/// embedding does not — so the reproduction needs real model output for both
+/// the rows and the question, captured once and committed. Everything here is
+/// data, not behaviour: nothing is asserted, and the store test that reads the
+/// file is where the claim lives.
+///
+/// Run with `cargo test -p agmem-embed --test fastembed -- --ignored
+/// regenerate_knn_fixture`. The rows are the two live memories in the repro
+/// store at `~/.local/share/agmem-repro/recall-omits-live-row/`, verbatim.
+#[test]
+#[ignore = "writes a committed fixture from real model output"]
+fn regenerate_knn_fixture() {
+    /// Shortest-round-tripping decimal for each component, so f32 → text →
+    /// f64 → f32 is exact both ways.
+    fn json_vector(vector: &[f32]) -> String {
+        let components: Vec<String> = vector.iter().map(|x| format!("{x}")).collect();
+        format!("[{}]", components.join(","))
+    }
+
+    let cache = std::env::temp_dir().join("agmem-model-cache");
+    let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+
+    let rows = [
+        "The user formats Python with black.",
+        "This project has moved off black for Python code formatting and now uses \
+         ruff format instead; black is uninstalled.",
+    ];
+    // Questions sharing no word with either row: the fulltext arm is empty for
+    // them by construction, which is what isolates the vector arm (issue #39).
+    let queries = [
+        "which tool tidies up source layout automatically",
+        "how is our source styled these days",
+        "what did we switch our layout helper to",
+    ];
+
+    let passages: Vec<String> = rows.iter().map(|row| (*row).to_owned()).collect();
+    let vectors = embedder.embed_passages(&passages).expect("embed passages");
+
+    let mut entries: Vec<String> = Vec::new();
+    for (row, vector) in rows.iter().zip(&vectors) {
+        entries.push(format!(
+            "    {{ \"content\": {row:?}, \"embedding\": {} }}",
+            json_vector(vector)
+        ));
+    }
+    let mut probes: Vec<String> = Vec::new();
+    for query in queries {
+        let vector = embedder.embed_query(query).expect("embed query");
+        probes.push(format!(
+            "    {{ \"text\": {query:?}, \"embedding\": {} }}",
+            json_vector(&vector)
+        ));
+    }
+
+    let document = format!(
+        "{{\n  \"model\": \"BGE-small-en-v1.5-q\",\n  \"dim\": {},\n  \
+         \"rows\": [\n{}\n  ],\n  \"queries\": [\n{}\n  ]\n}}\n",
+        DIM,
+        entries.join(",\n"),
+        probes.join(",\n")
+    );
+
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../agmem-server/tests/fixtures/knn_underreturn.json");
+    std::fs::create_dir_all(path.parent().expect("fixture dir")).expect("create fixture dir");
+    std::fs::write(&path, document).expect("write fixture");
+}

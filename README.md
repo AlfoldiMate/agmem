@@ -463,15 +463,14 @@ over raw JSON-RPC, all passing:
 - **First call after a start is slow** — the model loads on start;
   `agmem --doctor` once after install gets the download out of the way, and the
   shared daemon means later sessions attach to an already-loaded one.
-- **A `recall` came back without something you know is stored** — much rarer
-  since [#39](https://github.com/AlfoldiMate/agmem/issues/39), which fixed a
-  fulltext arm that returned nothing whenever the question contained a word the
-  stored claim did not. What is left is
-  [#40](https://github.com/AlfoldiMate/agmem/issues/40): on a small store, a
-  question sharing *no* words with the claim leans on the vector arm alone, and
-  that arm can under-return. Ask again in words the claim would use, or drop
-  `query` and filter on `entities`/`tags`/`kinds`; `inspect stats` says whether
-  the row is there at all.
+- **A `recall` came back without something you know is stored** — two faults
+  behind this, both fixed. [#39](https://github.com/AlfoldiMate/agmem/issues/39)
+  emptied the fulltext arm whenever the question contained a word the stored
+  claim did not, and [#40](https://github.com/AlfoldiMate/agmem/issues/40) had
+  the vector arm come back short on every recall a process served, because a
+  filter travelling inside the vector scan loses rows on a cold index. If it
+  still happens, drop `query` and filter on `entities`/`tags`/`kinds`;
+  `inspect stats` says whether the row is there at all.
 - **No ONNX Runtime on the platform** — `--embedder none` runs BM25-only, and
   `cargo install --no-default-features` drops the ONNX build entirely. A store
   written with one model refuses to open under a *different* one: the model and

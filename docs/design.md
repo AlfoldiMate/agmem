@@ -618,9 +618,14 @@ recall(q)
                  WHERE space IN $spaces AND invalid_at IS NONE
                    AND (content @1@ $t0 OR content @2@ $t1)
                  ORDER BY s DESC LIMIT 64);
-      LET $vs = (SELECT id, vector::distance::knn() AS d FROM memory
+      -- the scan runs bare and its result is filtered: no conjunct may ride
+      -- the KNN operator (issue #40), so K is over-fetched 4x and re-capped
+      LET $vs = (SELECT id, d FROM
+                   (SELECT id, space, kind, entities, tags, valid_from,
+                           invalid_at, vector::distance::knn() AS d
+                    FROM memory WHERE embedding <|256,80|> $vec)
                  WHERE space IN $spaces AND invalid_at IS NONE
-                   AND embedding <|64,80|> $vec ORDER BY d);
+                 ORDER BY d LIMIT 64);
       -- same pair over episode_chunk; fuse all lists:
       LET $fused = search::rrf([$ft, $vs, $ft_ec, $vs_ec], 64, 60);
       -- then project the survivors by id, in the same request
@@ -645,7 +650,8 @@ implies; the price is that the pool's weakest candidate scores zero on it. A
 pool where nothing was retrieved (the tier-1 path) normalises to 0 throughout;
 one where every candidate tied, to 1.
 
-Four engine details the sketch has to obey (verified on 3.2, issues #13, #39):
+Five engine details the sketch has to obey (verified on 3.2, issues #13, #39,
+#40):
 
 - **`@N@` ANDs the words inside one reference.** `content @1@ 'who formats
   python'` matches only rows holding all three, so a question — which always
@@ -658,6 +664,18 @@ Four engine details the sketch has to obey (verified on 3.2, issues #13, #39):
   halves), deduplicated, and capped at 12 — a question is a handful of words,
   and a pasted paragraph is not a question. No stop-word list: a row matching
   only `the` scores near zero in a pool that exists to be rescored.
+- **No conjunct may ride the KNN operator.** A `KnnScan` on a cold index that
+  carries a predicate emits fewer rows than the same scan without one — a bare
+  `1 = 1` is enough, and one *unfiltered* scan repairs every filtered scan
+  after it for that connection's life. agmem's arms all carry `space` and
+  liveness, so nothing ever warmed them and every recall a process served came
+  back short. Each vector arm therefore scans bare in a subquery and filters
+  its result. The cost is that candidates spent on other spaces and superseded
+  rows no longer count toward the pool, which a 4× over-fetch buys back:
+  measured on 384 rows across two spaces, a full 64 of 64 where a bare `K`
+  gave 48 — and *faster* than the pushed-down form it replaces, ~72 ms against
+  ~112 ms. Same treatment for the near-dup gate (§5.2 step 4), whose `K` of 1
+  had the same predicate riding it.
 - The KNN operator's `K` must be an **integer literal** — `<|$pool,80|>` is a
   parse error — so the pool is formatted into the query text and clamped there.
 - `ORDER BY` may only name an idiom the projection carries, which is why each
@@ -879,9 +897,15 @@ Each phase is releasable; later phases only add.
    at #39 (one match reference per word, OR'd, scores summed; §5.3). Second,
    **`KnnScan` under-returns when a predicate is pushed into it** — `k: 64`, two
    matching rows, one emitted, and any conjunct triggers it including `1 = 1`.
-   That one is probe-vector dependent and looks like an engine bug; **issue
-   #40**, with the mitigation to weigh written down there. The first masked the
-   second, which is why the symptom looked like one thing.
+   The first masked the second, which is why the symptom looked like one thing.
+   Closed at #40: the state is per **connection**, not per query — one
+   *unfiltered* scan repairs every filtered scan after it, repeating the
+   filtered scan does not, and agmem's arms always carried a filter, so no
+   agmem process ever warmed itself. That is also why it read as
+   unreproducible four times: any probe that measures the unfiltered arm first
+   has already destroyed what it came to observe. The arms now scan bare and
+   filter outside (§5.3); it is confirmed against surrealdb 3.2.4 and worth
+   reporting upstream.
 8. Still open: whether `user` space writes need an explicit `space: "user"`
    (current answer: yes — cross-project writes should be deliberate).
 9. Settled at #16: **`recall` unions episodes by default**, with no

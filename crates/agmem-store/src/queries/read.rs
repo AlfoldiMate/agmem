@@ -19,12 +19,46 @@
 //!   matches nothing unless a row contains all three words, so one absent word
 //!   — and a question always has one — takes the whole fulltext arm to empty.
 //!   OR is spelled as one match reference per term (issue #39).
+//! - **A conjunct beside the KNN operator loses rows on a cold index**, so
+//!   every vector arm runs bare in a subquery and is filtered outside it
+//!   (issue #40; see [`OVER_FETCH`]).
 
 use super::{Builder, Script};
 use crate::repo::{Filters, Liveness, Lookup, Search};
 
 /// How many neighbours HNSW visits per query; the `EF` of `<|K,EF|>`.
 const EF_SEARCH: usize = 80;
+
+/// How many candidates a vector arm draws before its filters are applied.
+///
+/// **No conjunct may ride the KNN operator** (issue #40). A cold `KnnScan`
+/// carrying one — `1 = 1` is enough — emits fewer rows than the same scan
+/// without it, and a single unfiltered scan repairs every filtered scan after
+/// it for that connection's life. agmem's arms all carry `space`/liveness, so
+/// nothing ever warms them and every recall a process serves comes back short.
+/// Running the scan bare and filtering its *result* cannot hit that, because
+/// there is no predicate to push.
+///
+/// What it costs is that a candidate spent on another space, or on a
+/// superseded row, no longer counts toward the pool — which is what this
+/// multiplier buys back. Measured on 384 rows across two spaces: a full 64 of
+/// 64 where a bare `K` gave 48, and faster than the pushed-down form it
+/// replaces (~72 ms against ~112 ms).
+const OVER_FETCH: usize = 4;
+
+/// How many candidates the near-dup gate draws before narrowing to its space.
+///
+/// Its `K` is 1 — the single nearest live neighbour — but for the reason in
+/// [`OVER_FETCH`] the scan no longer knows what "live" or "in this space"
+/// mean, so it needs room to reach past the rows the gate will discard.
+const NEAR_DUP_PROBE: usize = 64;
+
+/// The `memory` columns [`memory_where`] can name.
+///
+/// A filter applied outside the scan reads them off materialised rows rather
+/// than off the table, so the subquery has to carry every one of them whether
+/// this particular request filters on it or not.
+const FILTERABLE: &str = "id, space, kind, entities, tags, valid_from, invalid_at";
 
 /// How many query words reach the fulltext arms.
 ///
@@ -138,10 +172,12 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
         arms.push("$ft");
     }
     if search.vector.is_some() {
+        let inner = pool * OVER_FETCH;
         builder.push(format!(
-            "LET $vs = (SELECT id, vector::distance::knn() AS d FROM memory
-                 WHERE {memories} AND embedding <|{pool},{EF_SEARCH}|> $vector
-                 ORDER BY d)"
+            "LET $vs = (SELECT id, d FROM
+                 (SELECT {FILTERABLE}, vector::distance::knn() AS d FROM memory
+                  WHERE embedding <|{inner},{EF_SEARCH}|> $vector)
+                 WHERE {memories} ORDER BY d LIMIT {pool})"
         ));
         arms.push("$vs");
     }
@@ -159,10 +195,12 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
         arms.push("$ftc");
     }
     if search.episodes && search.vector.is_some() {
+        let inner = pool * OVER_FETCH;
         builder.push(format!(
-            "LET $vsc = (SELECT id, vector::distance::knn() AS d FROM episode_chunk
-                 WHERE space IN $spaces AND embedding <|{pool},{EF_SEARCH}|> $vector
-                 ORDER BY d)"
+            "LET $vsc = (SELECT id, d FROM
+                 (SELECT id, space, vector::distance::knn() AS d FROM episode_chunk
+                  WHERE embedding <|{inner},{EF_SEARCH}|> $vector)
+                 WHERE space IN $spaces ORDER BY d LIMIT {pool})"
         ));
         arms.push("$vsc");
     }
@@ -260,8 +298,10 @@ pub(crate) fn chunk_episode() -> Script {
 ///
 /// This is the near-dup gate (design §5.2 step 4), which asks the same
 /// question once per memory a `remember` batch carries — so the probes travel
-/// as one request rather than one round-trip each. `K` is 1 and, like every
-/// other `K`, a literal.
+/// as one request rather than one round-trip each. The scan draws
+/// [`NEAR_DUP_PROBE`] candidates bare and the space and liveness narrow its
+/// result to one, rather than riding along inside it (issue #40); every `K` is
+/// a literal, which the operator requires.
 ///
 /// `(SELECT … LIMIT 1)[0]` is `NONE` when the space holds no vectors at all,
 /// which is what an empty store answers with; the distance is cast because a
@@ -270,10 +310,11 @@ pub(crate) fn nearest_live(count: usize) -> Script {
     let mut builder = Builder::plain();
     for index in 0..count {
         builder.push(format!(
-            "LET $n{index} = (SELECT record::id(id) AS id,
-                 <float> vector::distance::knn() AS distance FROM memory
+            "LET $n{index} = (SELECT id, distance FROM
+                 (SELECT record::id(id) AS id, space, invalid_at,
+                      <float> vector::distance::knn() AS distance FROM memory
+                  WHERE embedding <|{NEAR_DUP_PROBE},{EF_SEARCH}|> $vec{index})
                  WHERE space = $space AND invalid_at IS NONE
-                     AND embedding <|1,{EF_SEARCH}|> $vec{index}
                  ORDER BY distance LIMIT 1)[0]"
         ));
     }
@@ -337,6 +378,8 @@ fn memory_where(filters: &Filters, liveness: Liveness) -> String {
 
 #[cfg(test)]
 mod tests {
+    use agmem_core::Kind;
+
     use super::*;
 
     #[test]
@@ -390,6 +433,66 @@ mod tests {
             both.contains("text @1@ $t0"),
             "the chunk arm restarts its references — they are scoped to the \
              statement, and that is a different statement: {both}"
+        );
+    }
+
+    /// For every `<|K,EF|>` in the script, the text between the `WHERE` that
+    /// governs it and the operator itself — which is exactly what a
+    /// `KnnScan` would carry as a pushed-down predicate.
+    fn knn_clauses(script: &str) -> Vec<String> {
+        script
+            .match_indices("<|")
+            .map(|(at, _)| {
+                let before = &script[..at];
+                let start = before.rfind("WHERE").map_or(0, |where_| where_ + 5);
+                before[start..].to_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn no_conjunct_rides_the_knn_operator() {
+        // Issue #40: a cold `KnnScan` carrying any predicate at all — a bare
+        // `1 = 1` reproduces it — emits fewer rows than the same scan without
+        // one. Every vector arm therefore scans bare and filters its result,
+        // and this is what says so before a store is ever opened.
+        let mut request = Search::new(vec!["test".parse().expect("slug")]);
+        request.vector = Some(vec![0.0; 384]);
+        request.filters.kinds = vec![Kind::Fact];
+
+        let script = search(&request, &["red".to_owned()]).text;
+        let clauses = knn_clauses(&script);
+        assert_eq!(clauses.len(), 2, "one arm per table: {script}");
+        for clause in &clauses {
+            assert!(
+                !clause.contains(" AND "),
+                "a predicate rides the scan: {clause}"
+            );
+        }
+
+        let gate = nearest_live(2).text;
+        for clause in knn_clauses(&gate) {
+            assert!(
+                !clause.contains(" AND "),
+                "a predicate rides the gate's scan: {clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_vector_arm_over_fetches_and_caps_at_the_pool() {
+        let mut request = Search::new(vec!["test".parse().expect("slug")]);
+        request.vector = Some(vec![0.0; 384]);
+        request.pool = 10;
+
+        let script = search(&request, &[]).text;
+        assert!(
+            script.contains(&format!("<|{},{EF_SEARCH}|>", 10 * OVER_FETCH)),
+            "the scan draws more than the pool keeps: {script}"
+        );
+        assert!(
+            script.contains("LIMIT 10"),
+            "the pool still caps the arm: {script}"
         );
     }
 }

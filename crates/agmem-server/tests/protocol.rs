@@ -2554,3 +2554,152 @@ async fn an_insight_blocked_by_an_uncited_claim_is_told_how_to_cite_it() {
     assert!(new.is_live() && new.derived_from.len() == 1, "{new:?}");
     agmem.shutdown().await;
 }
+
+/// A store holding a two-link ownership chain and the decoys around it.
+///
+/// The shape is `docs/eval/multihop-gate/`'s scenario in four rows: the
+/// question matches only the first, whose `entities` name `harbour-crew`, and
+/// the row that answers the follow-up shares no word with the question — it
+/// is reachable only through that entity.
+async fn chain_store() -> Harness {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "Atlas ingestion is owned by the harbour crew",
+                  "entities": ["atlas", "harbour-crew"] },
+                { "content": "Nadia Osei leads that team",
+                  "entities": ["harbour-crew", "nadia-osei"] },
+                { "content": "Ingestion alerts land in a shared mailbox" },
+                { "content": "Nobody owns snacks for standup" }
+            ]
+        }))
+        .await;
+    agmem
+}
+
+#[tokio::test]
+async fn a_chain_row_arrives_without_a_second_call() {
+    let agmem = chain_store().await;
+    let found = agmem
+        .recall(json!({ "query": "who owns atlas ingestion" }))
+        .await;
+    let hop = hits(&found)
+        .iter()
+        .find(|hit| hit["content"] == "Nadia Osei leads that team")
+        .expect("the row no arm of the query can reach arrives anyway");
+    assert!(
+        hop["signals"]["rrf"].as_f64().expect("rrf") > 0.0,
+        "it holds a real retrieval score, not a zero smuggled past fusion: {hop}"
+    );
+    assert_eq!(
+        hop["entities"],
+        json!(["harbour-crew", "nadia-osei"]),
+        "and carries the entities the *next* hop would need: {hop}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_hop_arm_cannot_outrank_what_matched() {
+    let agmem = chain_store().await;
+    let found = agmem
+        .recall(json!({ "query": "who owns atlas ingestion" }))
+        .await;
+    let contents = hit_contents(&found);
+    assert_eq!(contents.len(), 4, "three matches and one hop row: {found}");
+    assert_eq!(
+        contents[0], "Atlas ingestion is owned by the harbour crew",
+        "the head of the page is still what the query matched best"
+    );
+    assert_eq!(
+        contents.last(),
+        Some(&"Nadia Osei leads that team"),
+        "a hop-only row sits under every row the query itself matched"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn nothing_to_hop_from_changes_nothing() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The deploy runs from tagged releases only" },
+                { "content": "A deploy needs two approvals" },
+                { "content": "Lunch is at noon" }
+            ]
+        }))
+        .await;
+    let found = agmem.recall(json!({ "query": "deploy approvals" })).await;
+    // No row carries entities, so the hop has nothing to seed from: the
+    // answer is the primary arm alone, and every fused score is a pure
+    // 1 / (60 + rank) with nothing hop-weighted added on.
+    assert_eq!(
+        hits(&found).len(),
+        2,
+        "only what the words matched: {found}"
+    );
+    for (rank, hit) in hits(&found).iter().enumerate() {
+        let pure = 1.0 / (60 + rank + 1) as f64;
+        let rrf = hit["signals"]["rrf"].as_f64().expect("rrf");
+        assert!(
+            (rrf - pure).abs() < 1e-9,
+            "rank {rank} scores exactly one arm's vote, got {rrf}: {hit}"
+        );
+    }
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_entity_filter_turns_the_hop_off() {
+    let agmem = chain_store().await;
+    let found = agmem
+        .recall(json!({ "query": "who owns atlas ingestion", "entities": ["atlas"] }))
+        .await;
+    for hit in hits(&found) {
+        assert!(
+            hit["entities"]
+                .as_array()
+                .expect("entities")
+                .contains(&json!("atlas")),
+            "a caller's entity filter binds every hit, hop rows included: {hit}"
+        );
+    }
+    assert_eq!(
+        hit_contents(&found),
+        ["Atlas ingestion is owned by the harbour crew"],
+        "no hop row leaked past the filter: {found}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_hub_entity_never_seeds() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    // Eight rows carrying the same entity make it the pool's topic — hopping
+    // on it would re-fetch the pool — plus one row reachable only through it.
+    let mut rows: Vec<Value> = (1..=8)
+        .map(|n| {
+            json!({
+                "content": format!("Atlas checklist item number {n}"),
+                "entities": ["atlas"]
+            })
+        })
+        .collect();
+    rows.push(json!({ "content": "Nadia keeps the spare keys", "entities": ["atlas"] }));
+    agmem.remember(json!({ "memories": rows })).await;
+
+    let found = agmem.recall(json!({ "query": "atlas checklist" })).await;
+    assert_eq!(
+        hits(&found).len(),
+        8,
+        "the eight checklist rows, and nothing hopped in: {found}"
+    );
+    assert!(
+        !hit_contents(&found).contains(&"Nadia keeps the spare keys"),
+        "a hub entity is the topic, not a link, and never seeds a hop: {found}"
+    );
+    agmem.shutdown().await;
+}

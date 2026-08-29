@@ -1,0 +1,37 @@
+{
+  "scenario": "multihop",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "cited": null,
+  "answered": false,
+  "bridged": true,
+  "misled": false,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.ZBuek6aBJX",
+  "answer": "The **harbour crew** owns the atlas search index — that's who you should reach out to.\n\nIf you need someone faster than waiting on the team, the atlas support inbox is triaged by whoever's on call, which could get you a quicker first response.\n\nOne flag: I found conflicting info in memory about how the index refreshes — one note says atlas runs a nightly job at 02:00 UTC to rebuild it, another says atlas has no background job queue and everything is request-scoped. Worth confirming with the harbour crew which is actually true, since it affects how you'd explain the staleness to them.",
+  "cost_usd": 0.06845599999999999,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index ownership who is responsible",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17FHA9Y2XK07X3NDKSK57NQ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996773892706,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999987095570826,\\\"rrf\\\":0.03957816377171216,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:21:53.622597Z\\\"},{\\\"content\\\":\\\"No personal data is written to the atlas search index.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M17FHA7Y66E6Q67MQEW0NYV4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9149020392372575,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999986944698337,"
+    }
+  ]
+}

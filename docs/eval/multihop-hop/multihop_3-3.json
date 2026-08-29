@@ -1,0 +1,65 @@
+{
+  "scenario": "multihop_3",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 4,
+  "superseded": false,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 4,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.MYom1ewL4C",
+  "answer": "**Ownership:** The atlas search index is owned by the **harbour crew**. Their tech lead is Priya Raman, but she's on sabbatical until October — **Ines Fabre** is standing in for her, so she's the one to loop in for anything requiring a lead's call this week.\n\n**Who to actually talk to:** Day-to-day, stale-index issues go through whoever is on-call — the atlas on-call rotation is weekly, PagerDuty-driven, and hands over Tuesday mornings. I don't have visibility into PagerDuty itself, so I can't tell you the specific name currently on rotation — worth a quick check there rather than assuming it's Ines.\n\nOne thing worth flagging before you dig into the \"why\": my notes have a **direct contradiction** on how the index refresh even works —\n- \"atlas runs a nightly job at 02:00 UTC to refresh its search index\"\n- \"atlas has no background job queue: everything is request scoped\"\n\nThose can't both be true, and it matters for diagnosing an overnight staleness bug (nightly cron failing vs. no such job existing at all). Also relevant: there's a known lesson that **deploys skipping `bin/ship.sh` leave the index stale** and once cost the team an afternoon of downtime — worth checking if last night's deploy went through that script. And separately, the index is rebuilt from Postgres, so worst case it can be safely discarded and regenerated.\n\nWant me to check which of those two job-model claims is actually true by looking at the atlas codebase?",
+  "cost_usd": 0.12764640000000002,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index ownership who is responsible on-call",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas support inbox is triaged by whoever is on call.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M17FKK8Z1Z4MQNMVBCFVDS1Q\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249994965710508,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999979862842034,\\\"rrf\\\":0.040078958495966696,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:23:08.344097Z\\\"},{\\\"content\\\":\\\"No personal data is written to the atlas search index.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M17FKK8SGH0PQ4H8THAGMP8K\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.918070092036102,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999979849661506,\\\"rrf\\\":0.0397107"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "harbour crew on-call rotation this week team contact reorg vacation coverage",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17FKKAQMTTHWT99YYZ3K74M\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.92499985688702,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994275480805,\\\"rrf\\\":0.03947726872105508,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:23:08.344147Z\\\"},{\\\"content\\\":\\\"Priya Raman is the tech lead of the harbour crew.\\\",\\\"entities\\\":[\\\"harbour-crew\\\",\\\"priya-raman\\\"],\\\"id\\\":\\\"01M17FKKAW0AJ7WPTEFZPST12H\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9241923244263173,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.99999685515239"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas background job queue request scoped nightly refresh contradiction",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"atlas keeps request logs for thirty days and then drops them.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M17FKJYM0BCBFN0Z93PQ01BF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249991903381745,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999967613526981,\\\"rrf\\\":0.037549705196764024,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:23:08.343815Z\\\"},{\\\"content\\\":\\\"atlas has no background job queue: everything is request scoped.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M17FKK43JR4N0AXHABKGEAZ9\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8300189611461278,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994263389377,\\\"rrf\\\":0.032786885"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "on-call this week name engineer atlas rotation schedule",
+        "space": "all",
+        "k": 15
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The on-call rotation for atlas is weekly and hands over on Tuesday mornings.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M17FKJYEF394GN1KD4QAFYYW\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249998615299573,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994461198293,\\\"rrf\\\":0.04036264282165922,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:23:08.34381Z\\\"},{\\\"content\\\":\\\"Alerts from atlas page the on-call rota through PagerDuty.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M17FKJY8TY803Z6GHFT2BVFH\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.901433811920543,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999996308489107,\\"
+    }
+  ]
+}

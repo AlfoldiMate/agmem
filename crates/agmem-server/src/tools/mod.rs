@@ -50,6 +50,12 @@ pub mod recall;
 pub mod reflect;
 pub mod remember;
 
+/// Not a tool: `recall`'s entity hop (see its module doc). Private because
+/// only `recall` may hop — `search_hybrid` also serves `forget`'s dry-run and
+/// `context`'s budgeted sections, where rows the query never matched must not
+/// widen the set.
+mod hop;
+
 use std::borrow::Cow;
 use std::sync::Arc;
 

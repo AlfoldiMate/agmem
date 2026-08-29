@@ -1,0 +1,37 @@
+{
+  "scenario": "multihop",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "cited": null,
+  "answered": false,
+  "bridged": true,
+  "misled": false,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.nVwmZJacu6",
+  "answer": "The atlas search index is owned by the **harbour crew** — that's who to reach out to.\n\nA bit of relevant context: it's rebuilt nightly from Postgres at 02:00 UTC, and since it's fully derived from Postgres, it can be safely discarded and regenerated if you need to force a rebuild rather than waiting for them.",
+  "cost_usd": 0.0678542,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index owner responsible",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"No personal data is written to the atlas search index.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M17FGESY6CCQCK5R65Q04Z2G\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249994895293405,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999979581173625,\\\"rrf\\\":0.040458982817523276,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:21:25.515656Z\\\"},{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17FGEVS47BAX0FAM4NRK68Z\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8967348258621338,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999979719099269"
+    }
+  ]
+}

@@ -21,7 +21,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::service::AgmemService;
-use crate::tools::{self, embed_query, invalid, provenance, store_error};
+use crate::tools::{self, embed_query, hop, invalid, provenance, store_error};
 
 /// How many hits a call that does not say gets back.
 const DEFAULT_K: u16 = 10;
@@ -259,9 +259,15 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             search.filters = filters;
             search.liveness = liveness;
             search.pool = pool;
-            repo::search_hybrid(service.db(), &search)
+            let mut candidates = repo::search_hybrid(service.db(), &search)
                 .await
-                .map_err(|error| store_error(&error))?
+                .map_err(|error| store_error(&error))?;
+            // 1b. Follow the hits' own entities one hop (§5.3 step 3b). The
+            //     row a chain question needs rarely matches the question's
+            //     words, and no agent makes the second, filtered call that
+            //     would fetch it — so this answer carries it instead.
+            hop::run(service, &spaces, &search.filters, liveness, &mut candidates).await;
+            candidates
         }
         None => {
             let mut lookup = Lookup::new(spaces.clone());

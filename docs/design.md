@@ -695,6 +695,15 @@ recall(q)
       -- same pair over episode_chunk; fuse all lists:
       LET $fused = search::rrf([$ft, $vs, $ft_ec, $vs_ec], 64, 60);
       -- then project the survivors by id, in the same request
+ 3b. one entity hop over the strongest hits (issue #27, tools/hop.rs):
+      seeds = entities of the top 3 memory candidates, ranked by how many
+              name each (cap 5; hubs — on ≥50% of a ≥8-candidate pool —
+              dropped); one filters-only lookup: entities CONTAINSANY seeds,
+              LIMIT 8, same kinds/tags/liveness — no embed, no KNN;
+      merged in Rust as one more RRF arm at half weight:
+              rrf += 0.5/(60+rank) — fills the tail, never displaces a match;
+      skipped when the caller passed `entities` (their own filter would be
+              violated) or when the seeds come up empty
  4. rescore in Rust (core::scoring):
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
       norm  = min–max over the pool: (rrf − min) / (max − min)
@@ -726,6 +735,20 @@ every other, which is `consolidate` and not a page. Three batches of wording
 work on `consolidate` (0/3 each, $1.08) said a tool that is never read cannot
 be reworded into being called — the answer an agent is already holding is the
 only place a pointer arrives in time.
+
+**The hop is the second call no agent makes, taken server-side** (issue #27,
+`docs/eval/multihop-gate/`). Chain questions fail on routing, not reach:
+agents answered the two-hop question 0/3 with every hop one
+`entities`-filtered call away, and in 19 read calls that filter was passed
+zero times — while every hit already carries its `entities` in the answer. So
+after fusion, `recall` follows the entities its top three memory candidates
+agree on with one indexed lookup and folds the rows in as a deliberately weak
+arm: `0.5/(60+rank)` sits under a fifteenth-place primary placing, so a
+hop-only row extends the tail of the page and never its head. The hop is off
+when the caller filters on entities themselves, and costs nothing when there
+is nothing to seed from. Only `recall` hops — `forget`'s dry-run and
+`context`'s budgeted sections share `search_hybrid`, where rows the query
+never matched must not widen the set.
 
 `norm` is **min–max, not max-only** (issue #34). RRF barely spreads —
 `1/(60 + rank)` differs by 3% between the first hit and the fourth — so

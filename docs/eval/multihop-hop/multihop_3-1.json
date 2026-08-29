@@ -1,0 +1,52 @@
+{
+  "scenario": "multihop_3",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 3,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.rLzdBwEHw1",
+  "answer": "The atlas search index is owned by the **harbour crew**, whose tech lead is Priya Raman — but Priya is on sabbatical until October, so **Ines Fabre** is standing in for her and is who you should actually talk to this week.\n\nRelated, in case it's relevant to the staleness: the on-call rotation for atlas hands over on Tuesday mornings, and a deploy that skips `bin/ship.sh` is a known way to leave the search index stale (it cost the team an afternoon of downtime before).",
+  "cost_usd": 0.092302,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index owner on-call responsible"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"No personal data is written to the atlas search index.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M17FHRT9YR549YK3QPXX501T\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996830969022,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999998732387609,\\\"rrf\\\":0.03995495055945876,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:22:08.516399Z\\\"},{\\\"content\\\":\\\"The atlas support inbox is triaged by whoever is on call.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M17FHRTE2JYTE9223ZH8VXGY\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9180176665197824,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999987336825148,\\\"rrf\\\":0.03957816"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "harbour crew on-call this week rotation who to contact"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Priya Raman is the tech lead of the harbour crew.\\\",\\\"entities\\\":[\\\"harbour-crew\\\",\\\"priya-raman\\\"],\\\"id\\\":\\\"01M17FHRW73HRRQENEM619P5W4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249995049006638,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999980196026554,\\\"rrf\\\":0.039938556067588324,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:22:08.516478Z\\\"},{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17FHRW2H3FCVTAZBRZZE78K\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.911355843706667,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999636642"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "harbour crew handoff out of office vacation covering"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17FHRW2H3FCVTAZBRZZE78K\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999975447145,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999901788581,\\\"rrf\\\":0.04071919619249075,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T19:22:08.516472Z\\\"},{\\\"content\\\":\\\"Priya Raman is the tech lead of the harbour crew.\\\",\\\"entities\\\":[\\\"harbour-crew\\\",\\\"priya-raman\\\"],\\\"id\\\":\\\"01M17FHRW73HRRQENEM619P5W4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9178662555792267,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999985188"
+    }
+  ]
+}

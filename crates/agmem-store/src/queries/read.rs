@@ -76,7 +76,7 @@ const FILTERABLE: &str = "id, space, kind, entities, tags, valid_from, invalid_a
 const MAX_TERMS: usize = 12;
 
 /// RRF's rank-smoothing constant: the `60` in `1 / (60 + rank)` (design §5.3).
-const RRF_K: usize = 60;
+pub(crate) const RRF_K: usize = 60;
 
 /// Ceiling on the candidate pool and on a direct lookup's limit.
 ///

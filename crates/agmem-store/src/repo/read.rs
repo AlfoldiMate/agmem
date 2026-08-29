@@ -41,6 +41,11 @@ pub const DEFAULT_POOL: usize = 64;
 /// values are clamped to it.
 pub const MAX_POOL: usize = queries::MAX_POOL;
 
+/// RRF's rank-smoothing constant: the `60` in every arm's `1 / (60 + rank)`.
+/// Exported so a caller composing an extra arm against the fused pool — the
+/// server's hop — shares the engine's arithmetic instead of re-deriving it.
+pub const RRF_K: usize = queries::RRF_K;
+
 /// The indexed narrowing a read applies before anything is scored.
 ///
 /// Within a field the values are alternatives (`entities CONTAINSANY`), across

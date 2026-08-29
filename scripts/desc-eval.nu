@@ -209,6 +209,32 @@ const REFLECT_SEED = [
 ]
 
 
+# A chain no single claim states: the atlas search index is owned by a crew,
+# and the crew is led by a person. The question names the index; the row
+# holding the person's name mentions neither the index nor atlas, so a ranked
+# page about atlas does not carry it. Answering means a second call keyed on
+# what the first one returned — which is exactly the traversal issue #27
+# proposes to move into the engine.
+#
+# The lighthouse pair is the same shape one hop off the question, so a run that
+# reaches for the nearest person rather than the right one is distinguishable
+# from one that traverses.
+const MULTIHOP_CHAIN = [
+    {content: "The atlas search index is owned by the harbour crew." kind: "fact" entities: ["atlas" "search-index" "harbour-crew"]}
+    {content: "Priya Raman is the tech lead of the harbour crew." kind: "fact" entities: ["harbour-crew" "priya-raman"]}
+    {content: "The atlas billing exports are owned by the lighthouse crew." kind: "fact" entities: ["atlas" "billing-exports" "lighthouse-crew"]}
+    {content: "Tomas Beck is the tech lead of the lighthouse crew." kind: "fact" entities: ["lighthouse-crew" "tomas-beck"]}
+]
+
+# The third hop, and it deliberately names neither the index nor the crew: the
+# only handle on it is "Priya Raman", which does not exist as a search term
+# until the second hop has produced it.
+const MULTIHOP_DEPUTY = {
+    content: "Priya Raman is on sabbatical until October and Ines Fabre is standing in for her."
+    kind: "fact"
+    entities: ["priya-raman" "ines-fabre"]
+}
+
 const SCENARIOS = [
     {
         name: "orient"
@@ -428,6 +454,44 @@ const SCENARIOS = [
         avoid: []
     }
     {
+        name: "multihop"
+        asks: "is a two-hop answer reachable when no single claim holds it?"
+        # The #27 gate, and the only question that unparks it: the entity graph
+        # is reserved in the schema and built *only if* multi-hop demand is
+        # demonstrated. What a graph would do inside one call — walk index →
+        # crew → person — the denormalized `entities` strings can also do, in
+        # two calls, if the agent makes the second one. So this measures the
+        # agent rather than the engine, and that is the point: a traversal the
+        # caller already performs is not one the server has to grow.
+        #
+        # The seed is `consolidate_large`'s hundred and twenty rows, because
+        # size is what makes the question real. A store one `recall` carries
+        # whole hands the agent both ends of the chain at once and measures
+        # nothing — the mistake the fifty-row `consolidate` seed made.
+        seed: ($CONSOLIDATE_SEED ++ $CONSOLIDATE_FILLER ++ $MULTIHOP_CHAIN)
+        turns: ["The atlas search index went stale overnight. Who is responsible for it — who should I be talking to?"]
+        want: ["recall" "context"]
+        avoid: []
+        # Surnames, not full names: "Priya" and "Priya Raman" are the same
+        # result, and the surname is what is unique in the store.
+        expect: {answer: "Raman", bridge: "harbour", decoy: "Beck"}
+    }
+    {
+        name: "multihop_3"
+        asks: "does a third hop, reachable only from the second, still land?"
+        # `multihop` with one row added and one clause added to the turn. The
+        # deputy row names nothing the question mentions and nothing the first
+        # call returns — only "Priya Raman", which the second call produces. A
+        # run that stops after two hops answers "Priya Raman", which is wrong
+        # and is not the same failure as finding nobody: `bridge` is that name,
+        # so the two are told apart.
+        seed: ($CONSOLIDATE_SEED ++ $CONSOLIDATE_FILLER ++ $MULTIHOP_CHAIN ++ [$MULTIHOP_DEPUTY])
+        turns: ["The atlas search index went stale overnight. Who is responsible for it, and who should I actually be talking to this week?"]
+        want: ["recall" "context"]
+        avoid: []
+        expect: {answer: "Fabre", bridge: "Raman", decoy: "Beck"}
+    }
+    {
         name: "restraint"
         asks: "does it leave memory alone when there is nothing to remember?"
         seed: []
@@ -518,6 +582,63 @@ def "main report" [...labels: string, --out: string = "docs/eval"] {
     | move label --before scenario
 }
 
+# What one `recall` actually returns for a scenario's store — no agent, no cost.
+#
+# The #27 gate turns on a fact about retrieval before it turns on anything
+# about agents: whether the row that completes a chain is reachable in one
+# call. `run-one` cannot answer that — it records what an agent did, not what
+# the store would have served — and asking an agent costs money. A scenario
+# whose bridge row comes back on the first call is not a multi-hop scenario,
+# and this is how that is found out for nothing.
+#
+#     nu scripts/desc-eval.nu probe multihop
+#     nu scripts/desc-eval.nu probe multihop --entities harbour-crew --k 10
+def "main probe" [
+    scenario: string                          # whose seed to load
+    --query: string = ""                      # the recall query; the scenario's first turn by default
+    --k: int = 50                             # how many hits to ask for
+    --entities: string = ""                   # comma-separated entity filter
+    --binary: string = "target/release/agmem" # the agmem to serve
+    --model-cache: string = ""                # FASTEMBED_CACHE_DIR
+] {
+    let binary = ($binary | path expand)
+    if not ($binary | path exists) {
+        error make {msg: $"no agmem at ($binary) — cargo build --release first"}
+    }
+    let found = ($SCENARIOS | where name == $scenario)
+    if ($found | is-empty) {
+        error make {msg: $"no scenario called ($scenario)"}
+    }
+    let scenario = ($found | get 0)
+    let cache = if ($model_cache | is-empty) { default-model-cache } else { $model_cache }
+    let data = (mktemp -d)
+    seed $binary $data $cache $scenario.seed {} | ignore
+
+    let query = if ($query | is-empty) { $scenario.turns | get 0 } else { $query }
+    let arguments = (
+        {k: $k}
+        | merge (if ($query | is-empty) { {} } else { {query: $query} })
+        | merge (
+            if ($entities | is-empty) {
+                {}
+            } else {
+                {entities: ($entities | split row "," | each {|name| $name | str trim})}
+            }
+        )
+    )
+    let answer = (call-tool $binary $data $cache "recall" $arguments)
+    print -e $"store: ($data)"
+    print -e $"query: (if ($query | is-empty) { '<filters only>' } else { $query })"
+    print -e $"hits: ($answer.hits | length) of ($answer.truncated?.matching_claims? | default ($answer.hits | length)) matching"
+    $answer.hits
+    | enumerate
+    | each {|hit| {
+        rank: ($hit.index + 1)
+        score: ($hit.item.score | math round --precision 3)
+        content: $hit.item.content
+    }}
+}
+
 # Pass rate and what was called, per scenario.
 def summarise [] {
     $in
@@ -550,6 +671,36 @@ def summarise [] {
                     null
                 } else {
                     $runs | where ($it.cited? | default false) | length
+                }
+            )
+            # Whether the multi-hop chain was walked, and whether the decoy was
+            # taken instead. Blank on every scenario that expects no particular
+            # answer, for the same reason `cited` is.
+            answered: (
+                if ($runs | all {|run| ($run | get -o answered) == null}) {
+                    null
+                } else {
+                    $runs | where ($it.answered? | default false) | length
+                }
+            )
+            misled: (
+                if ($runs | all {|run| ($run | get -o misled) == null}) {
+                    null
+                } else {
+                    $runs | where ($it.misled? | default false) | length
+                }
+            )
+            # Averaged: what one answer cost in read calls, not how many the
+            # batch made.
+            reads: (
+                if ($runs | all {|run| ($run | get -o reads) == null}) {
+                    null
+                } else {
+                    $runs
+                    | each {|run| $run | get -o reads}
+                    | compact
+                    | math avg
+                    | math round --precision 1
                 }
             )
             on_target: (
@@ -749,6 +900,44 @@ def run-one [
                 }
             }
         )
+        # Whether the chain was actually walked, read off the words the session
+        # ended on. Every other metric here counts calls, and a multi-hop
+        # question is only answered in the answer — so this is a substring test
+        # against a surname that appears nowhere else in the store, not a
+        # judgement. Null on a scenario that expects nothing.
+        answered: (
+            if ($scenario | get -o expect) == null {
+                null
+            } else {
+                ($result | get -o 0.result | default "")
+                | str contains --ignore-case $scenario.expect.answer
+            }
+        )
+        # How far it got when it did not get there. `bridge` is the hop before
+        # the answer, so "named the crew and stopped" and "found neither" are
+        # different results rather than one shared zero.
+        bridged: (
+            if ($scenario | get -o expect) == null {
+                null
+            } else {
+                ($result | get -o 0.result | default "")
+                | str contains --ignore-case $scenario.expect.bridge
+            }
+        )
+        # The same-shaped person one hop off the question. A run that answers
+        # with this one did not traverse, it took the nearest name.
+        misled: (
+            if ($scenario | get -o expect) == null {
+                null
+            } else {
+                ($result | get -o 0.result | default "")
+                | str contains --ignore-case $scenario.expect.decoy
+            }
+        )
+        # How many read calls it took. A traversal the agent performs in three
+        # calls costs differently from one it performs in one, and that
+        # difference is the whole argument for doing it in the engine.
+        reads: ($calls | where tool in ["recall" "context"] | length)
         # Whether everything this run closed was one of the planted rows. A
         # run that closed nothing is null, not true: `all` over an empty list
         # is vacuously true, and reporting a non-event as a success is the
@@ -935,6 +1124,54 @@ def seed [binary: string, data: string, cache: string, memories: list, overrides
     $stored.created? | default []
 }
 
+
+# One tool call against a store, over the same stdio wire a session uses.
+#
+# `seed` keeps its own copy of this handshake rather than calling it: that path
+# is load-bearing for every batch already recorded and its error handling is
+# specific to a write. This one reads.
+def call-tool [binary: string, data: string, cache: string, name: string, arguments: record] {
+    let wire = (
+        [
+            {
+                jsonrpc: "2.0"
+                id: 1
+                method: "initialize"
+                params: {
+                    protocolVersion: "2025-06-18"
+                    capabilities: {}
+                    clientInfo: {name: "desc-eval", version: "1"}
+                }
+            }
+            {jsonrpc: "2.0", method: "notifications/initialized"}
+            {
+                jsonrpc: "2.0"
+                id: 2
+                method: "tools/call"
+                params: {name: $name, arguments: $arguments}
+            }
+        ]
+        | each {|message| $message | to json --raw}
+        | str join "\n"
+    )
+    let spoken = (
+        $wire
+        | with-env (agmem-env $data $cache {}) { ^$binary --no-daemon | complete }
+    )
+    if $spoken.exit_code != 0 {
+        error make {msg: $"($name) failed: ($spoken.stderr)"}
+    }
+    let answer = (
+        $spoken.stdout
+        | lines
+        | each {|line| $line | from json}
+        | where ($it.id? | default 0) == 2
+    )
+    if ($answer | is-empty) or (($answer | get -o 0.error) != null) {
+        error make {msg: $"($name) was refused: ($spoken.stdout)"}
+    }
+    $answer | get -o 0.result.structuredContent | default {}
+}
 # Backdate the `fast` rows a scenario just seeded, so `stale_contexts` has
 # something to report.
 #

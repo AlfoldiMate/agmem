@@ -1,0 +1,46 @@
+{
+  "scenario": "multihop",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "context"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "cited": null,
+  "answered": false,
+  "bridged": true,
+  "misled": false,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.gVMhE2envy",
+  "answer": "The atlas search index is owned by the **harbour crew** — that's who you'd want to talk to.\n\nA couple of related notes from memory that might be useful context:\n- The index normally refreshes via a nightly job at 02:00 UTC.\n- There's a known failure mode: deploying atlas via a path that skips `bin/ship.sh` leaves the search index stale — that cost the team an afternoon of downtime once before, so it's worth checking if that's what happened here.\n- Since the index is rebuilt from Postgres, it can be safely discarded and regenerated if the harbour crew needs to force a rebuild.",
+  "cost_usd": 0.0787148,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index ownership who is responsible",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is rebuilt from Postgres, so it can always be discarded and regenerated.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M17DBPGFS2KVNCBG8GTP1HK8\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249993398724571,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999973594898287,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T18:43:52.816937Z\\\"},{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17DBPZNRTJYQ8R14BRGB1VT\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9041151828326064,\\\"signals\\\":{\\\"importance\\\":0"
+    },
+    {
+      "turn": 0,
+      "tool": "context",
+      "input": {
+        "query": "atlas search index ownership"
+      },
+      "answer": "[{\"type\":\"text\",\"text\":\"# Memory context (spaces: eval + user)\\n\\n## Instructions\\n- Billing questions about atlas go to the finance team rather than support. `01M17DBPXSFG78C42F8289DJAC`\\n- Postmortems for atlas are blameless and published internally within a week. `01M17DBPX7GNWS6XWFX7XXP6ZY`\\n- A security advisory affecting atlas is triaged within two working days. `01M17DBPTW48H1AQ7ZW8RXXTFG`\\n- A flag in atlas is deleted within a month of full rollout. `01M17DBPSQM2990NWXKN5FZRA3`\\n- Every write endpoint in atlas requires an idempotency key. `01M17DBPQ4J6T49HFVX2VNBW45`\\n- Never commit directly to atlas main; open a pull request even for a one-line change. `01M17DBPHMB01VMJMV452051XW`\\n-"
+    }
+  ]
+}

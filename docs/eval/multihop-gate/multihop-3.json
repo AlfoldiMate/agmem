@@ -1,0 +1,36 @@
+{
+  "scenario": "multihop",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "cited": null,
+  "answered": false,
+  "bridged": true,
+  "misled": false,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.gtN1rwVLDl",
+  "answer": "The atlas search index is owned by the **harbour crew** — that's who you should reach out to.\n\nA couple relevant details for context: atlas normally refreshes its search index via a nightly job at 02:00 UTC, and there's a known failure mode where a deploy that skips `bin/ship.sh` leaves the index stale (that cost the team an afternoon of downtime previously) — worth checking if that's what happened here.",
+  "cost_usd": 0.07072339999999999,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "who is responsible for the atlas search index"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is rebuilt from Postgres, so it can always be discarded and regenerated.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M17DC6JMCCYHWGY7YP1HKTB3\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249993613222857,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999974452891429,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T18:44:09.260894Z\\\"},{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17DC72XP7Z02J28705PHQJ4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8854906199364698,\\\"signals\\\":{\\\"importance\\\":0"
+    }
+  ]
+}

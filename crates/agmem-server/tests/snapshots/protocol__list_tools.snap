@@ -1516,6 +1516,13 @@ expression: "&tools.tools"
           "description": "The insight's id — newly minted, or the id of the claim that already\nsaid this.",
           "type": "string"
         },
+        "note": {
+          "description": "What to do about a write that did not happen, when there is something\nworth doing.\n\nIt appears when the insight was judged a duplicate of a claim that\n**carries no evidence of its own** — the conclusion is already stored,\nits provenance is not, and nothing here rewrites a stored claim. A\nno-op that leaves an uncited conclusion standing is not the same\noutcome as one that leaves a cited one standing, and only this says so.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "related": {
           "description": "Live claims near the insight, which it may be correcting.\n\nThese were **not** blocked and are not duplicates — they are here\nbecause a correction and the claim it corrects are near neighbours, and\nthis is the only moment the older one's id is in front of you. If one\nof them is what your insight replaces, send the insight again with\n`supersedes` set to its id. If it is merely related, ignore it.",
           "items": {

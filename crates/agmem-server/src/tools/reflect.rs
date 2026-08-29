@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use agmem_core::{Derivation, Kind, SpaceName, dedup};
+use agmem_core::{Derivation, Kind, MemoryId, SpaceName, dedup};
 use agmem_store::repo::{self, Batch, NewMemory};
 use rmcp::ErrorData;
 use schemars::JsonSchema;
@@ -99,6 +99,17 @@ pub struct ReflectResult {
     /// The id of the claim closed by a `supersedes` in this call.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub superseded: Option<String>,
+
+    /// What to do about a write that did not happen, when there is something
+    /// worth doing.
+    ///
+    /// It appears when the insight was judged a duplicate of a claim that
+    /// **carries no evidence of its own** — the conclusion is already stored,
+    /// its provenance is not, and nothing here rewrites a stored claim. A
+    /// no-op that leaves an uncited conclusion standing is not the same
+    /// outcome as one that leaves a cited one standing, and only this says so.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// A live claim near the insight that was just stored.
@@ -175,6 +186,7 @@ pub async fn run(
             .map_err(|error| store_error(&error))?;
         for neighbour in neighbours.into_iter().flatten() {
             if dedup::is_near_duplicate(neighbour.similarity) {
+                let note = uncited(service, &space, &neighbour.id).await;
                 return Ok(ReflectResult {
                     id: neighbour.id.to_string(),
                     created: false,
@@ -182,6 +194,7 @@ pub async fn run(
                     derived_from: Vec::new(),
                     related: Vec::new(),
                     superseded: None,
+                    note,
                 });
             }
             if dedup::is_correction_candidate(neighbour.similarity) {
@@ -195,6 +208,7 @@ pub async fn run(
     }
 
     // 4. One row, one transaction.
+    let space_written = space.clone();
     let outcome = repo::insert_batch(
         service.db(),
         Batch {
@@ -215,8 +229,14 @@ pub async fn run(
     // was no embedding to gate with — so nothing was written, and the citations
     // this call carried were not recorded against the row that already exists.
     let created = written.is_created();
+    let id = written.into_id();
+    let note = if created {
+        None
+    } else {
+        uncited(service, &space_written, &id).await
+    };
     Ok(ReflectResult {
-        id: written.into_id().to_string(),
+        id: id.to_string(),
         created,
         content: insight,
         derived_from: if created {
@@ -226,7 +246,37 @@ pub async fn run(
         },
         related: if created { related } else { Vec::new() },
         superseded: outcome.superseded.first().map(ToString::to_string),
+        note,
     })
+}
+
+/// The move left open when an insight was not written, or `None` when there is
+/// none.
+///
+/// The question is only ever about the claim that blocked it: if that claim
+/// already carries citations, a duplicate really is a no-op and there is
+/// nothing to say. If it carries none, the conclusion is stored *without its
+/// provenance* and the only way to attach them is to supersede it — which is
+/// what the answer has to name, because `created: false` on its own reads as
+/// "already handled" and the evidence quietly goes nowhere (measured 2 runs
+/// out of 3 at #26).
+///
+/// A store that will not answer is not worth failing the write over: the row
+/// was just reported by the store, so a miss here means something odd
+/// happened, and the caller still needs its id back.
+async fn uncited(service: &AgmemService, space: &SpaceName, id: &MemoryId) -> Option<String> {
+    let chain = repo::history_chain(service.db(), space, id).await.ok()?;
+    let stored = chain.into_iter().find(|link| link.id == *id)?;
+    if !stored.derived_from.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Nothing was written: memory:{id} already says this, and it carries no \
+         evidence of its own. Send this insight again with `supersedes` set to \
+         that id to store the same conclusion with its citations attached — a \
+         stored claim is never rewritten, so superseding it is the only way to \
+         give it provenance."
+    ))
 }
 
 /// Every citation as the store resolved it, in the order they were sent.

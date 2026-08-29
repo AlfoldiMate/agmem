@@ -597,6 +597,26 @@ def run-one [
                 | any {|memory| "supersedes" in ($memory | columns)}
             }
         )
+        # Whether an insight was actually *stored* with its evidence, rather
+        # than merely attempted. `pass` counts the call; this counts the write,
+        # and #26 measured the two differing 3/3 against 1/3 — a conclusion the
+        # agent had already written through `remember` earlier in the session
+        # blocks the cited one at the near-dup gate, and `created: false` reads
+        # as "already handled". `derived_from` is required and non-empty on
+        # every accepted `reflect`, so a create is a citation.
+        #
+        # The recorded answer is the tool result as JSON text and its quotes
+        # arrive backslash-escaped, so the backslashes come out before matching
+        # rather than the match being written to expect one depth of escaping.
+        cited: (
+            $calls
+            | where tool == "reflect"
+            | any {|call|
+                $call.answer
+                | str replace --all "\\" ""
+                | str contains (["\"created\"" "true"] | str join ":")
+            }
+        )
         # Whether agmem was there at all. Without it, a server that failed to
         # start reads as an agent that chose not to call anything — which is a
         # pass on `restraint` and a failure everywhere else, both wrong.

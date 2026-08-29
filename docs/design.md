@@ -387,7 +387,14 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // → { id, created, content,
 //     derived_from: ["memory:<id>" | "episode:<id>"],  // empty when created is false
 //     related: [{ id, content, similarity }],
-//     superseded? }
+//     superseded?, note? }
+// `note` appears only when the near-dup gate blocked the insight *and* the
+// claim already holding that content carries no `derived_from`: the conclusion
+// is stored without its provenance, and a `supersedes` is the only way to
+// attach it, since nothing here rewrites a stored claim. Measured at #26 —
+// through the ritual the tool was called 3/3, and the citation still landed
+// only 1/3, because two runs had already written the conclusion through
+// `remember` earlier in the session and read `created: false` as "handled".
 // Citations resolve in the write space ∪ `user`, because an insight about the
 // project is often drawn partly from what is known about the person. A bare
 // ULID is resolved by the store (memory first, then episode); a prefix that

@@ -1,0 +1,101 @@
+{
+  "scenario": "ritual_reflect",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember",
+    "reflect"
+  ],
+  "calls": 5,
+  "superseded": false,
+  "cited": true,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.AZa8D1jPDx",
+  "answer": "Checkpoint complete.\n\n- **Saved:** the root-cause insight for the atlas release-build cancellations, now stored as a proper `reflect` lesson (id `01M176YGCQE79S0VWME5MYCJ5R`) with citations to the four underlying facts (cancellation dates, 30-min timeout, cold-cache-on-every-run, 18-min cache cost) — so a future session can check the evidence, not just trust the conclusion.\n- **Corrected:** the earlier plain `remember`-stored version of this same lesson (id `01M176WVSPCW1FPGYTVJK71CGQ`) was superseded, since it stated the same conclusion but without provenance links.\n- **Left out:** the four individual underlying facts (cancellation dates, timeout value, cold-cache behavior, 18-min cost) — already durably stored from before this session, unchanged, nothing to add. Also left out anything about this specific conversation turn (e.g. \"user asked about the build again\") since that's scratch, not durable.",
+  "cost_usd": 0.20537940000000002,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas release build cancelled",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M176VVZY4QDXY2FEN2SGVP2C\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249992568844956,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999970275379826,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:50:22.828482Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M176VVZSPVYFGP19ACP3TH1A\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476663251719956,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999970264278"
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The atlas release build keeps getting cancelled by CI (2026-08-11, 2026-08-19, 2026-08-29) because it starts every run with an empty cargo registry cache, which adds ~18 minutes, leaving almost no margin under the pipeline's 30-minute hard cancellation timeout; any minor slowdown pushes the build over and it gets killed. Fix: add cargo registry/target caching keyed on Cargo.lock to the release build job rather than just raising the timeout.",
+            "kind": "lesson",
+            "entities": [
+              "atlas"
+            ],
+            "tags": [
+              "ci"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M176WVSPCW1FPGYTVJK71CGQ\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M176VVZY4QDXY2FEN2SGVP2C\\\",\\\"of\\\":0,\\\"similarity\\\":0.9079651071962905},{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M176VVZCMERH0ARPB6CC0SFH\\\",\\\"of\\\":0,\\\"similarity\\\":0.9038798849260534},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"id\\\":\\\"01M176VVZSPVYFGP19ACP3TH1A\\\",\\\"of\\\":0,\\\"similarity\\\":0.9021287958678947},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas"
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "atlas release build cancelled because empty cargo cache leaves no margin under 30 minute timeout",
+        "space": "all",
+        "include_invalidated": true
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build keeps getting cancelled by CI (2026-08-11, 2026-08-19, 2026-08-29) because it starts every run with an empty cargo registry cache, which adds ~18 minutes, leaving almost no margin under the pipeline's 30-minute hard cancellation timeout; any minor slowdown pushes the build over and it gets killed. Fix: add cargo registry/target caching keyed on Cargo.lock to the release build job rather than just raising the timeout.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M176WVSPCW1FPGYTVJK71CGQ\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.9624995756763004,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"retention\\\":0.999998302705202,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},"
+    },
+    {
+      "turn": 1,
+      "tool": "reflect",
+      "input": {
+        "insight": "The atlas release build keeps getting cancelled by CI (2026-08-11, 2026-08-19, 2026-08-29) because it starts every run with an empty cargo registry cache, which adds ~18 minutes, leaving almost no margin under the pipeline's 30-minute hard cancellation timeout; any minor slowdown pushes the build over and it gets killed. Fix: add cargo registry/target caching keyed on Cargo.lock to the release build job rather than just raising the timeout.",
+        "derived_from": [
+          "01M176VVZY4QDXY2FEN2SGVP2C",
+          "01M176VVZSPVYFGP19ACP3TH1A",
+          "01M176VVZCMERH0ARPB6CC0SFH",
+          "01M176VVZNPAY2N55G5DKBR7KD"
+        ],
+        "supersedes": "01M176WVSPCW1FPGYTVJK71CGQ",
+        "entities": [
+          "atlas"
+        ],
+        "tags": [
+          "ci"
+        ]
+      },
+      "answer": "\"{\\\"content\\\":\\\"The atlas release build keeps getting cancelled by CI (2026-08-11, 2026-08-19, 2026-08-29) because it starts every run with an empty cargo registry cache, which adds ~18 minutes, leaving almost no margin under the pipeline's 30-minute hard cancellation timeout; any minor slowdown pushes the build over and it gets killed. Fix: add cargo registry/target caching keyed on Cargo.lock to the release build job rather than just raising the timeout.\\\",\\\"created\\\":false,\\\"derived_from\\\":[],\\\"id\\\":\\\"01M176WVSPCW1FPGYTVJK71CGQ\\\",\\\"note\\\":\\\"Nothing was written: memory:01M176WVSPCW1FPGYTVJK71CGQ already says this, and it carries no evidence of its own. Send this insight again with `supersed"
+    },
+    {
+      "turn": 1,
+      "tool": "reflect",
+      "input": {
+        "insight": "Atlas release-build cancellations (2026-08-11, 2026-08-19, 2026-08-29) trace to one root cause: the job always starts with a cold cargo registry cache (~+18 min), which eats most of the pipeline's 30-minute hard timeout and leaves no margin for normal variance. The durable fix is cargo registry/target caching keyed on Cargo.lock in the release job, not a longer timeout.",
+        "derived_from": [
+          "01M176VVZY4QDXY2FEN2SGVP2C",
+          "01M176VVZSPVYFGP19ACP3TH1A",
+          "01M176VVZCMERH0ARPB6CC0SFH",
+          "01M176VVZNPAY2N55G5DKBR7KD"
+        ],
+        "supersedes": "01M176WVSPCW1FPGYTVJK71CGQ",
+        "entities": [
+          "atlas"
+        ],
+        "tags": [
+          "ci"
+        ]
+      },
+      "answer": "\"{\\\"content\\\":\\\"Atlas release-build cancellations (2026-08-11, 2026-08-19, 2026-08-29) trace to one root cause: the job always starts with a cold cargo registry cache (~+18 min), which eats most of the pipeline's 30-minute hard timeout and leaves no margin for normal variance. The durable fix is cargo registry/target caching keyed on Cargo.lock in the release job, not a longer timeout.\\\",\\\"created\\\":true,\\\"derived_from\\\":[\\\"memory:01M176VVZY4QDXY2FEN2SGVP2C\\\",\\\"memory:01M176VVZSPVYFGP19ACP3TH1A\\\",\\\"memory:01M176VVZCMERH0ARPB6CC0SFH\\\",\\\"memory:01M176VVZNPAY2N55G5DKBR7KD\\\"],\\\"id\\\":\\\"01M176YGCQE79S0VWME5MYCJ5R\\\",\\\"related\\\":[],\\\"superseded\\\":\\\"01M176WVSPCW1FPGYTVJK71CGQ\\\"}\""
+    }
+  ]
+}

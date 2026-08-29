@@ -410,6 +410,14 @@ session has to take on faith.
   "related": [] }
 ```
 
+If the same conclusion is already stored — because you wrote it with `remember`
+earlier in the session, say — the write is blocked as a duplicate and `note`
+says what that cost: the claim is there, its evidence is not, and a
+`supersedes` is the only way to attach it. Nothing here rewrites a stored
+claim, so a no-op that leaves an uncited conclusion standing is a different
+outcome from one that leaves a cited one standing, and the answer says which
+you got.
+
 It is stored as a `lesson` unless you say otherwise, so it appears in the
 Lessons section of `context` and fades slowly. `inspect` renders the citations
 as refs it takes as they stand — one call per piece of evidence, each with its

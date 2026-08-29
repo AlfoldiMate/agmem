@@ -2395,9 +2395,95 @@ async fn the_same_insight_twice_is_reported_rather_than_stored_again() {
         "nothing was written, so nothing was cited: {again}"
     );
     assert_eq!(
+        again["note"],
+        Value::Null,
+        "the claim that blocked it carries its own evidence, so this duplicate \
+         really is a no-op and there is nothing to advise: {again}"
+    );
+    assert_eq!(
         agmem.memories().await.len(),
         2,
         "the store holds the evidence and one insight"
     );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_insight_blocked_by_an_uncited_claim_is_told_how_to_cite_it() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let evidence = agmem
+        .remember(json!({ "memories": [{ "content": "python scripts here are throwaway" }] }))
+        .await["created"][0]
+        .as_str()
+        .expect("the evidence id")
+        .to_owned();
+
+    // The conclusion as an agent actually writes it mid-session: through
+    // `remember`, with nothing behind it.
+    let uncited = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "rust is the language this project reaches for",
+                "kind": "lesson"
+            }]
+        }))
+        .await["created"][0]
+        .as_str()
+        .expect("the lesson id")
+        .to_owned();
+
+    // The same conclusion at checkpoint, now carrying its evidence. The gate
+    // blocks it, and `created: false` on its own would read as "already
+    // handled" while the provenance goes nowhere (2 of 3 measured runs, #26).
+    let blocked = agmem
+        .reflect(json!({
+            "insight": "rust is what this project reaches for, whatever the task",
+            "derived_from": [evidence.clone()]
+        }))
+        .await;
+    assert_eq!(blocked["created"], json!(false), "{blocked}");
+    assert_eq!(blocked["id"], json!(uncited), "{blocked}");
+    assert_eq!(blocked["derived_from"], json!([]), "{blocked}");
+    let note = blocked["note"]
+        .as_str()
+        .expect("a blocked insight carries the move that is left");
+    assert!(
+        note.contains(&uncited) && note.contains("supersedes"),
+        "the note has to name the id and the verb, not just report a no-op: {note}"
+    );
+
+    // Doing what it says.
+    let cited = agmem
+        .reflect(json!({
+            "insight": "rust is what this project reaches for, whatever the task",
+            "derived_from": [evidence.clone()],
+            "supersedes": uncited.clone()
+        }))
+        .await;
+    assert_eq!(cited["created"], json!(true), "{cited}");
+    assert_eq!(
+        cited["derived_from"],
+        json!([format!("memory:{evidence}")]),
+        "{cited}"
+    );
+    assert_eq!(cited["superseded"], json!(uncited), "{cited}");
+    assert_eq!(
+        cited["note"],
+        Value::Null,
+        "a write that happened has nothing to advise: {cited}"
+    );
+
+    // The store agrees: one live cited conclusion, the uncited one closed.
+    let stored = agmem.memories().await;
+    let old = stored
+        .iter()
+        .find(|memory| memory.id.as_str() == uncited)
+        .expect("the uncited claim is still readable");
+    assert!(!old.is_live() && old.derived_from.is_empty(), "{old:?}");
+    let new = stored
+        .iter()
+        .find(|memory| memory.id.as_str() == cited["id"].as_str().expect("id"))
+        .expect("the cited claim");
+    assert!(new.is_live() && new.derived_from.len() == 1, "{new:?}");
     agmem.shutdown().await;
 }

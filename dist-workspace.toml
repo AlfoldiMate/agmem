@@ -1,0 +1,32 @@
+# Config for `dist` (cargo-dist) — https://axodotdev.github.io/cargo-dist
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "homebrew"]
+# A GitHub repo to push Homebrew formulas to
+tap = "AlfoldiMate/homebrew-tap"
+# Homebrew formula name: users install `agmem`, not `agmem-server`
+formula = "agmem"
+# Publish jobs to run in CI
+publish-jobs = ["homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# Features to pass to cargo build
+features = ["static"]
+# Whether to install an updater program
+install-updater = false
+# Whether to enable GitHub Attestations
+github-attestations = true
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+
+[dist.github-custom-runners]
+# Native arm runner: ort ships no easy cross toolchain for aarch64-linux.
+aarch64-unknown-linux-gnu = "ubuntu-24.04-arm"

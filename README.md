@@ -15,8 +15,22 @@ Seven tools — `remember`, `recall`, `context`, `forget`, `inspect`,
 
 ## Install
 
-Requires Rust 1.89+. The crate is `agmem-server`; the binary it installs is
-`agmem`.
+Prebuilt binaries cover macOS and Linux, arm64 and x86_64, and carry both
+embedders — the default ONNX one and the pure-Rust `--embedder static`
+fallback:
+
+```sh
+brew install AlfoldiMate/tap/agmem
+```
+
+or, without Homebrew:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AlfoldiMate/agmem/releases/latest/download/agmem-server-installer.sh | sh
+```
+
+Building from source instead requires Rust 1.89+. The crate is
+`agmem-server`; the binary it installs is `agmem`.
 
 ```sh
 cargo install --git https://github.com/AlfoldiMate/agmem agmem-server

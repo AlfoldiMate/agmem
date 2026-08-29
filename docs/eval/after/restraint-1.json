@@ -1,0 +1,13 @@
+{
+  "scenario": "restraint",
+  "run": 1,
+  "pass": true,
+  "tools": [],
+  "calls": 0,
+  "superseded": false,
+  "served": true,
+  "answer": "Paris",
+  "cost_usd": 0.0337436,
+  "turns": 1,
+  "session": []
+}

@@ -1,0 +1,13 @@
+{
+  "scenario": "correct",
+  "run": 3,
+  "pass": false,
+  "tools": [],
+  "calls": 0,
+  "superseded": false,
+  "served": true,
+  "answer": "Noted — I'll use `ruff format` for this project going forward and won't suggest black.",
+  "cost_usd": 0.0652878,
+  "turns": 4,
+  "session": []
+}

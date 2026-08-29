@@ -253,8 +253,21 @@ memories with retention below ~0.05 are closed with
 
 Every tool description is written as an *extraction contract* — it tells the
 model when to call, what good input looks like, and what it must distill
-first. Descriptions are overridable via env (`AGMEM_TOOL_DESC_<TOOL>`), the
-qdrant-mcp trick for steering per-deployment behavior without code changes.
+first. At #23 they were measured against real headless sessions
+(`docs/tool-descriptions.md` — numbers, trace, harness), and the finding was
+that a description carries the read path and not the write path: `recall` is
+called unprompted, `remember` is not, and rewording `remember` to name its
+trigger changed nothing because the host's own memory instructions get there
+first. Write descriptions as contracts; do not expect one to win an argument
+with the client's system prompt.
+
+Descriptions are overridable via env (`AGMEM_TOOL_DESC_<TOOL>`), the qdrant-mcp
+trick for steering per-deployment behavior without code changes — the whole
+description, replaced at router build time, per server. A variable naming
+something that is not a tool stops startup rather than being ignored, and the
+override travels in the daemon handshake with `space`: the daemon belongs to
+whichever session started it, so wording that stayed behind would be that
+session's wording for every project sharing the store.
 
 | Tool | Annotations | Purpose |
 |---|---|---|
@@ -784,10 +797,39 @@ Each phase is releasable; later phases only add.
 4. **Will agents actually call it?** The whole system rides on tool
    descriptions + prompts out-signaling Claude Code's built-in auto memory.
    Phase 2's rituals and description-tuning are first-class work, not polish.
-5. Open: exact wording of tool descriptions (deserves its own iteration);
-   whether `user` space writes need an explicit `space: "user"` (current
-   answer: yes — cross-project writes should be deliberate).
-6. Settled at #16: **`recall` unions episodes by default**, with no
+   **Measured at #23** and the answer splits in two: reading is reflexive
+   (`recall` called 3/3 before answering, and correctly *not* called 3/3 on a
+   question memory has nothing to say about), writing does not happen at all
+   (`remember` 0/3 on a stated convention, every session replying that it had
+   saved it). See item 5.
+5. Settled at #23, against the hypothesis: **the write path is not a wording
+   problem.** `remember` was reworded to open with its trigger, the way the two
+   tools that *were* called do, and measured again over 12 more sessions: no
+   change, in either direction. Tracing every tool call rather than agmem's
+   showed why — the agent did save the convention, with `Write`, into Claude
+   Code's own auto-memory directory, which the client names in the system
+   prompt before any tool description is read. Turning that off
+   (`autoMemoryEnabled: false`) takes both `store` and `correct` to 3/3 — and
+   so does the *old* wording under the same conditions, served through
+   `AGMEM_TOOL_DESC_*`. The description was never being rejected; it was never
+   being read against a live choice. So the write path needs a mechanism (§3.3
+   prompts as rituals, issue #22) rather than better words, and the reworded
+   text ships on the §3.1 contract ("say when to call") rather than on
+   evidence. `docs/tool-descriptions.md` carries the numbers, the trace and the
+   harness (`scripts/desc-eval.nu`) — any future wording change goes through it
+   first.
+6. Open, found at #23: **a correction is stored as a new claim.** In 6 of 6
+   isolated runs, told that a seeded fact no longer holds, the agent called
+   `remember` with a fresh memory and never `recall`ed for the id or set
+   `supersedes` — leaving both claims live at once, which is the state the
+   chain exists to prevent. `remember` asks for the right thing in as many
+   words, so this is the correction path hitting the same wall the write path
+   did. **Issue #38**: have `remember` return contradiction candidates the way
+   it already returns near-duplicates, so the old id is handed over rather than
+   looked up.
+7. Still open: whether `user` space writes need an explicit `space: "user"`
+   (current answer: yes — cross-project writes should be deliberate).
+8. Settled at #16: **`recall` unions episodes by default**, with no
    `include_episodes` flag. The §5.3 flow already fuses `$ft_ec`/`$vs_ec` into
    the same pool, distillation is lossy by design, and a chunk that outranks
    every memory is exactly the case the verbatim copy exists for. `kind:

@@ -47,6 +47,18 @@ pub mod remember;
 use std::borrow::Cow;
 use std::sync::Arc;
 
+/// Every tool agmem serves, in the order design §3.1 tables them.
+///
+/// The `#[tool]` attributes in [`crate::service`] are the definition; this is
+/// the same list in a form other code can read, and the test below fails if
+/// the two ever drift. It exists because a description override names a tool
+/// by string (`AGMEM_TOOL_DESC_<TOOL>`), and a name that matches nothing has
+/// to be refused rather than quietly dropped.
+///
+/// `list_tools` does **not** report this order — rmcp's `ToolRouter::list_all`
+/// sorts by name.
+pub const NAMES: [&str; 5] = ["remember", "recall", "context", "forget", "inspect"];
+
 use agmem_core::{Source, SpaceName};
 use agmem_store::{StoreError, repo};
 use rmcp::ErrorData;

@@ -1,0 +1,21 @@
+{
+  "scenario": "orient",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "answer": "I don't have enough context to answer this confidently. The working directory here is empty (no git repo, no \"atlas\" project files) — there's no `bin/ship.sh` or any deploy tooling I can actually see.\n\nI do have a memory claiming \"atlas is deployed via `bin/ship.sh`,\" but I can't verify that against any real files, and it's tagged from an `eval` space rather than something you told me directly — so I'm treating it as unverified rather than acting on it.\n\nCould you tell me:\n- Which \"atlas\" you mean (a specific repo/project, MongoDB Atlas, HashiCorp, etc.)?\n- Where its code lives, if it's not in this directory?\n\nOnce I can see the actual repo (deploy scripts, CI config, README), I can give you a real answer instead of guessing from an unverified memory.",
+  "cost_usd": 0.0759648,
+  "turns": 5,
+  "session": [
+    {
+      "tool": "recall",
+      "input": {
+        "query": "deploy atlas"
+      }
+    }
+  ]
+}

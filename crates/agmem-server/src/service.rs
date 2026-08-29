@@ -9,12 +9,14 @@
 //! stdout is the MCP wire. [`serve_stdio`] is the only thing in agmem allowed
 //! to write there, and everything else logs to stderr.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use agmem_embed::Embedder;
 use agmem_store::db::Db;
 use rmcp::{
     ErrorData, Json, ServerHandler, ServiceExt,
+    handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Implementation, ServerCapabilities, ServerInfo},
     service::ServerInitializeError,
@@ -56,6 +58,11 @@ pub struct AgmemService {
     /// conversation: the daemon builds one service per connection, so a scope
     /// one agent confirmed can never authorise another agent's delete.
     pending_forget: Pending,
+    /// The routes this session serves, with `config.tool_desc` already
+    /// applied. Held as a field rather than rebuilt per request — which is
+    /// what a bare `#[tool_handler]` does — so the surface is decided once, at
+    /// the same moment as the rest of the configuration.
+    tool_router: ToolRouter<Self>,
 }
 
 impl AgmemService {
@@ -64,8 +71,9 @@ impl AgmemService {
         Self {
             db,
             embedder,
-            config,
             pending_forget: Pending::default(),
+            tool_router: described(Self::tool_router(), &config),
+            config,
         }
     }
 
@@ -90,14 +98,45 @@ impl AgmemService {
     }
 }
 
+/// Serve this deployment's wording instead of agmem's, where it has any.
+///
+/// Descriptions are the steering lever design §3.1 keeps for the operator:
+/// whether an agent reaches for memory at all is decided by this text and
+/// nothing else (§9 risk 4), and a deployment that finds better words should
+/// not have to wait for a release to use them. `Config` already refused any
+/// name that is not a tool, so a miss here is unreachable rather than
+/// tolerated — it is logged and skipped, because an assertion in the middle of
+/// startup would trade a reworded tool for no tools at all.
+fn described(mut router: ToolRouter<AgmemService>, config: &Config) -> ToolRouter<AgmemService> {
+    for tool in config.tool_desc.tools() {
+        let Some(text) = config.tool_desc.get(tool) else {
+            continue;
+        };
+        match router.map.get_mut(tool) {
+            Some(route) => {
+                route.attr.description = Some(Cow::Owned(text.to_owned()));
+                tracing::info!(
+                    tool,
+                    chars = text.len(),
+                    "serving an overridden description"
+                );
+            }
+            None => tracing::warn!(tool, "no such route; the override was dropped"),
+        }
+    }
+    router
+}
+
 /// The tools, and only the tools.
 ///
 /// Every `#[tool]` in this block becomes a route on the `tool_router()` the
 /// macro generates, which [`ServerHandler`] below dispatches through. Each body
 /// is one call into [`crate::tools`]; the `description` beside it is not a
 /// comment but the tool's text on the wire — the extraction contract the model
-/// reads before deciding to call. They are declared in the order design §3.1
-/// tables them, which is also the order `list_tools` reports.
+/// reads before deciding to call, and what a deployment replaces through
+/// `AGMEM_TOOL_DESC_<TOOL>` (see [`described`]). They are declared in the
+/// order design §3.1 tables them; `list_tools` reports them sorted by name,
+/// because that is what rmcp's `ToolRouter::list_all` does.
 #[tool_router]
 impl AgmemService {
     /// The write verb (design §5.2). `description` below is the extraction
@@ -106,17 +145,22 @@ impl AgmemService {
     /// one wall the model has to re-segment.
     #[tool(
         name = "remember",
-        description = "Store distilled memories, and optionally the verbatim text they came \
-from, so a future session does not have to rediscover them.\n\n\
+        description = "Store what this session learned — the distilled claims, and optionally the \
+verbatim text they came from — so the next session starts with it instead of working it out \
+again.\n\n\
+Call it as soon as something durable is said, unprompted and without waiting for the end of the \
+session: a preference or a standing instruction (\"always use X here\"), a decision and the \
+reason behind it, a convention, a constraint, a lesson from something that failed. Nothing you \
+say persists — an answer that ends \"noted\" or \"I'll remember that\" without a call to this \
+tool is a promise the next session cannot keep.\n\n\
 Distil before you call: one atomic, self-contained claim per entry, in the third person, \
 understandable with no conversation around it — \"the user prefers Rust over Python for CLI \
-tools\", not \"he said he likes it better\". Store what a later session would otherwise have to \
-work out again: a preference, a decision and its reason, a convention, a lesson from something \
-that failed. Do not store what the code or the ticket already records, or what only matters to \
-this turn.\n\n\
-Nothing here is ever rewritten. When a stored claim turns out to be wrong, send the correction \
-with `supersedes` set to the old id instead of storing a contradiction: the old claim stays \
-readable and dated, and only one of them is live.\n\n\
+tools\", not \"he said he likes it better\". Do not store what the code or the ticket already \
+records, or what only matters to this turn.\n\n\
+Nothing here is ever rewritten. When something already stored turns out to be wrong, `recall` \
+the claim it replaces and send the correction with `supersedes` set to that id, rather than \
+storing a contradiction: the old claim stays readable and dated, and only one of them is \
+live.\n\n\
 Returns a diff rather than an acknowledgement — what was created, what was already stored (with \
 how close a match, so you can decide between a no-op and a correction), what was closed, and the \
 episode's id.",
@@ -141,9 +185,11 @@ wording is matched literally and the meaning semantically, so a question works b
 keywords. Drop `query` entirely to list what `entities`, `tags` or `kinds` select on their own.\n\n\
 Hits come back ranked by how well they matched, how well they have held up since they were last \
 used, and how important the storing agent said they were — each of those is in `signals`, so a \
-claim that only surfaced because it never decays is visible as such. Nothing is hidden: a claim \
-that was corrected is absent unless you ask with `as_of` or `include_invalidated`, which is how \
-you find out what was believed at some earlier point.",
+claim that only surfaced because it never decays is visible as such. Every hit also carries the \
+`source` it was distilled from, which `inspect` takes as it stands — a claim worth acting on is \
+one to check, not one to hedge around. Nothing is hidden: a claim that was corrected is absent \
+unless you ask with `as_of` or `include_invalidated`, which is how you find out what was \
+believed at some earlier point.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -255,7 +301,10 @@ which is what lets you tell a belief that changed from a belief that was always 
     }
 }
 
-#[tool_handler]
+// The router comes from the field, not from `Self::tool_router()`. The
+// default expression rebuilds the routes on every request, which would serve
+// the built-in descriptions and silently discard every override.
+#[tool_handler(router = self.tool_router)]
 impl ServerHandler for AgmemService {
     fn get_info(&self) -> ServerInfo {
         // Writing `get_info` by hand replaces the one `#[tool_handler]` would
@@ -291,4 +340,80 @@ pub async fn serve_stdio(service: AgmemService) -> anyhow::Result<()> {
     let reason = running.waiting().await?;
     tracing::info!(?reason, "agmem stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser as _;
+
+    use super::*;
+    use crate::config::{Cli, ToolDescriptions};
+    use crate::tools::NAMES;
+
+    fn config(tool_desc: ToolDescriptions) -> Config {
+        let mut config = Cli::try_parse_from(["agmem", "--data", "/tmp/agmem-test"])
+            .expect("parse")
+            .resolve()
+            .expect("resolve");
+        config.tool_desc = tool_desc;
+        config
+    }
+
+    #[test]
+    fn the_name_list_is_the_router() {
+        let mut routed: Vec<_> = AgmemService::tool_router().list_all();
+        routed.sort_by(|left, right| left.name.cmp(&right.name));
+        let mut declared = NAMES;
+        declared.sort_unstable();
+
+        assert_eq!(
+            routed.iter().map(|tool| &*tool.name).collect::<Vec<_>>(),
+            declared,
+            "tools::NAMES is what an override is validated against; a tool \
+             renamed in the #[tool] attribute has to be renamed there too"
+        );
+    }
+
+    #[test]
+    fn an_override_replaces_one_description_and_leaves_the_rest() {
+        let built_in = AgmemService::tool_router();
+        let overridden = described(
+            AgmemService::tool_router(),
+            &config(ToolDescriptions::from_iter([(
+                "recall",
+                "Ask the store first.",
+            )])),
+        );
+
+        assert_eq!(
+            overridden
+                .get("recall")
+                .expect("recall is routed")
+                .description,
+            Some(Cow::Borrowed("Ask the store first.")),
+            "the override is served whole, not spliced into the built-in"
+        );
+        for tool in NAMES.iter().filter(|name| **name != "recall") {
+            assert_eq!(
+                overridden.get(tool).expect("routed").description,
+                built_in.get(tool).expect("routed").description,
+                "{tool} was not named, so it keeps agmem's wording"
+            );
+        }
+    }
+
+    #[test]
+    fn no_overrides_change_nothing() {
+        let built_in = AgmemService::tool_router();
+        let untouched = described(
+            AgmemService::tool_router(),
+            &config(ToolDescriptions::default()),
+        );
+        for tool in NAMES {
+            assert_eq!(
+                untouched.get(tool).expect("routed").description,
+                built_in.get(tool).expect("routed").description
+            );
+        }
+    }
 }

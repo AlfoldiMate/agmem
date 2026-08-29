@@ -1,0 +1,35 @@
+{
+  "scenario": "correct",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "answer": "Noted — I've stored that you've switched to `ruff format` and black is no longer used, so I'll rely on ruff for any future formatting-related work.",
+  "cost_usd": 0.0407758,
+  "turns": 3,
+  "session": [
+    {
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has migrated their code formatting workflow off black and now uses ruff format exclusively; black is uninstalled from their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "tooling",
+              "formatting"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

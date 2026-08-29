@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use agmem_core::{MemoryRecord, Source, SpaceName};
 use agmem_embed::{EmbedError, Embedder, NoopEmbedder};
-use agmem_server::config::Cli;
+use agmem_server::config::{Cli, ToolDescriptions};
 use agmem_server::service::AgmemService;
 use agmem_store::db::Db;
 use agmem_store::migrate;
@@ -46,8 +46,19 @@ impl Harness {
     /// for the unit type, and `serve` does not return until initialize has been
     /// answered — so anything the client says afterwards is post-handshake.
     async fn start(embedder: Arc<dyn Embedder>) -> Self {
+        Self::start_with(embedder, ToolDescriptions::default()).await
+    }
+
+    /// The same, serving `tool_desc` instead of agmem's own wording.
+    ///
+    /// The overrides are set on the resolved config rather than left to
+    /// `AGMEM_TOOL_DESC_*`: `Cli::resolve` reads the real environment, and a
+    /// developer who has one of those exported would otherwise fail the
+    /// `list_tools` snapshot with a diff that has nothing to do with their
+    /// change.
+    async fn start_with(embedder: Arc<dyn Embedder>, tool_desc: ToolDescriptions) -> Self {
         let data = tempfile::tempdir().expect("tempdir");
-        let config = Cli::try_parse_from([
+        let mut config = Cli::try_parse_from([
             "agmem",
             "--db",
             "mem://",
@@ -61,6 +72,7 @@ impl Harness {
         .expect("parse")
         .resolve()
         .expect("resolve");
+        config.tool_desc = tool_desc;
         let db = agmem_store::db::connect(&config.db_url)
             .await
             .expect("connect mem://");
@@ -323,6 +335,88 @@ async fn list_tools_matches_the_recorded_surface() {
     assert!(
         tools.next_cursor.is_none(),
         "the whole surface fits one page"
+    );
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_override_is_what_the_agent_reads() {
+    let built_in = {
+        let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+        let tools = agmem.client.list_tools(None).await.expect("list_tools");
+        agmem.shutdown().await;
+        tools.tools
+    };
+
+    let agmem = Harness::start_with(
+        Arc::new(NoopEmbedder),
+        ToolDescriptions::from_iter([("recall", "Ask the store before you answer.")]),
+    )
+    .await;
+    let tools = agmem.client.list_tools(None).await.expect("list_tools");
+
+    let described = |tools: &[rmcp::model::Tool], name: &str| {
+        tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .unwrap_or_else(|| panic!("{name} is routed"))
+            .description
+            .clone()
+            .map(String::from)
+    };
+
+    assert_eq!(
+        described(&tools.tools, "recall").as_deref(),
+        Some("Ask the store before you answer."),
+        "the override reaches list_tools whole — this is the deployment's \
+         steering lever, so a splice or a fallback would be a silent failure"
+    );
+    for name in ["remember", "context", "forget", "inspect"] {
+        assert_eq!(
+            described(&tools.tools, name),
+            described(&built_in, name),
+            "{name} was not overridden and must still read as it was written"
+        );
+    }
+    assert_eq!(
+        tools.tools.len(),
+        built_in.len(),
+        "an override rewords a tool; it never adds or removes one"
+    );
+
+    // Overriding the description does not touch the schema or the annotations
+    // the same route carries — the two halves of the contract are independent.
+    let overridden = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name == "recall")
+        .expect("recall");
+    let original = built_in
+        .iter()
+        .find(|tool| tool.name == "recall")
+        .expect("recall");
+    assert_eq!(overridden.input_schema, original.input_schema);
+    assert_eq!(overridden.annotations, original.annotations);
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_overridden_tool_still_runs() {
+    let agmem = Harness::start_with(
+        Arc::new(NoopEmbedder),
+        ToolDescriptions::from_iter([("remember", "Write it down.")]),
+    )
+    .await;
+
+    let written = agmem
+        .remember(json!({ "memories": [{ "content": "The override changes the words, not the route." }] }))
+        .await;
+    assert_eq!(
+        written["created"].as_array().expect("created").len(),
+        1,
+        "the route behind a reworded description is the same route: {written}"
     );
 
     agmem.shutdown().await;

@@ -1,0 +1,48 @@
+{
+  "scenario": "correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "answer": "Noted — I'll use `ruff format` for any Python formatting going forward, not black.",
+  "cost_usd": 0.04162980000000001,
+  "turns": 3,
+  "session": [
+    {
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format exclusively.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "tooling",
+              "python",
+              "formatting"
+            ]
+          },
+          {
+            "content": "Black is uninstalled in the user's environment; ruff format should be used instead for any formatting tasks.",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "tooling",
+              "python",
+              "formatting"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

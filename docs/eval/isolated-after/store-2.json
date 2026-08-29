@@ -1,0 +1,48 @@
+{
+  "scenario": "store",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "answer": "Got it — stored as a standing convention: library crates use `thiserror`, binaries use `anyhow`, never swapped. I'll apply this in future work on this codebase.",
+  "cost_usd": 0.043340000000000004,
+  "turns": 3,
+  "session": [
+    {
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this codebase, library crates must use the thiserror crate for their error types, and binary crates must use the anyhow crate for error handling; using anyhow in libraries or thiserror in binaries is disallowed.",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ],
+            "entities": [
+              "project"
+            ]
+          },
+          {
+            "content": "Mixing up thiserror and anyhow (i.e. using anyhow in a library crate or thiserror in a binary crate) has caused real problems twice in this codebase.",
+            "kind": "lesson",
+            "decay_class": "slow",
+            "tags": [
+              "rust",
+              "error-handling"
+            ],
+            "entities": [
+              "project"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

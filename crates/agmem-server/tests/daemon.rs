@@ -11,7 +11,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use agmem_server::config::{Cli, Config};
+use agmem_server::config::{Cli, Config, ToolDescriptions};
 use agmem_server::daemon::{self, Handshake};
 use clap::Parser as _;
 use rmcp::model::{CallToolRequestParams, ProtocolVersion};
@@ -72,17 +72,32 @@ impl Shared {
 
     /// The line a session sends before MCP starts.
     fn handshake(&self, space: &str) -> Vec<u8> {
-        let mut line = serde_json::to_vec(&Handshake::new(&config(self.data.path(), space)))
-            .expect("serialize the handshake");
+        self.handshake_with(space, ToolDescriptions::default())
+    }
+
+    /// The same, from a session that reworded some of its tools.
+    fn handshake_with(&self, space: &str, tool_desc: ToolDescriptions) -> Vec<u8> {
+        let mut cfg = config(self.data.path(), space);
+        cfg.tool_desc = tool_desc;
+        let mut line = serde_json::to_vec(&Handshake::new(&cfg)).expect("serialize the handshake");
         line.push(b'\n');
         line
     }
 
     /// A session attached as a real MCP client, past initialize.
     async fn attach(&self, space: &str) -> RunningService<RoleClient, ()> {
+        self.attach_with(space, ToolDescriptions::default()).await
+    }
+
+    /// The same, asking the daemon to serve this project's own wording.
+    async fn attach_with(
+        &self,
+        space: &str,
+        tool_desc: ToolDescriptions,
+    ) -> RunningService<RoleClient, ()> {
         let (read, mut write) = self.connect().await.into_split();
         write
-            .write_all(&self.handshake(space))
+            .write_all(&self.handshake_with(space, tool_desc))
             .await
             .expect("send the handshake");
         ().serve((read, write)).await.expect("initialize")
@@ -215,6 +230,44 @@ async fn a_session_expecting_another_store_is_refused() {
         bytes, 0,
         "a daemon that cannot serve what was asked for closes, rather than \
          serving something else: {reply:?}"
+    );
+}
+
+#[tokio::test]
+async fn each_session_reads_its_own_projects_wording() {
+    let shared = Shared::start().await;
+    let reworded = shared
+        .attach_with(
+            "opinionated",
+            ToolDescriptions::from_iter([("recall", "Ask the store before you answer.")]),
+        )
+        .await;
+    let plain = shared.attach("as-shipped").await;
+
+    let described = |tools: rmcp::model::ListToolsResult, name: &str| {
+        tools
+            .tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .unwrap_or_else(|| panic!("{name} is routed"))
+            .description
+            .clone()
+            .map(String::from)
+    };
+    let from_reworded = reworded.list_tools(None).await.expect("list_tools");
+    let from_plain = plain.list_tools(None).await.expect("list_tools");
+
+    assert_eq!(
+        described(from_reworded, "recall").as_deref(),
+        Some("Ask the store before you answer."),
+        "the daemon serves the description the session asked for"
+    );
+    assert_ne!(
+        described(from_plain, "recall").as_deref(),
+        Some("Ask the store before you answer."),
+        "and not to the project next door — the daemon is started by whichever \
+         session got there first, so wording that did not travel would be that \
+         one's wording for everybody"
     );
 }
 

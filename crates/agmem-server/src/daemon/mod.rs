@@ -32,7 +32,7 @@ use agmem_core::SpaceName;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Config, EmbedderKind};
+use crate::config::{Config, EmbedderKind, ToolDescriptions};
 
 /// The socket the daemon listens on, inside the data dir.
 pub const SOCKET_FILE: &str = "agmem.sock";
@@ -47,7 +47,11 @@ pub const DAEMON_LOG_FILE: &str = "daemon.log";
 
 /// Bumped whenever the handshake or the socket's meaning changes. A session
 /// that meets a daemon it does not recognise refuses rather than guesses.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// v2 added `tool_desc`. A v1 daemon deserialises the extra field happily and
+/// then serves its own descriptions, so the bump is the only thing that turns
+/// "your override was ignored" into a message someone can read.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// The longest socket path a `sockaddr_un` can hold. macOS allows 104 bytes
 /// including the terminator and Linux 108; the smaller number travels.
@@ -92,8 +96,12 @@ pub fn spawn_lock_path(data_dir: &Path) -> PathBuf {
 /// `db_url` and `embedder` are not *applied*, they are **checked**: a session
 /// asking for a different store or a different model than the running daemon
 /// holds is a misconfiguration, and quietly serving the wrong one is worse
-/// than refusing. `space`, `pool` and `max_k` are applied — they are what
-/// differs legitimately between two projects sharing a store.
+/// than refusing. `space`, `pool`, `max_k` and `tool_desc` are applied — they
+/// are what differs legitimately between two projects sharing a store.
+///
+/// `tool_desc` has to travel for the override to work at all: the daemon is
+/// started by whichever session got there first, so without this every later
+/// project would silently inherit that one's wording along with its store.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Handshake {
     /// [`PROTOCOL_VERSION`] of the session that opened the connection.
@@ -108,6 +116,9 @@ pub struct Handshake {
     pub pool: u16,
     /// Ceiling on `k` for this connection.
     pub max_k: u16,
+    /// The tool descriptions this project wants served, if it replaced any.
+    #[serde(default)]
+    pub tool_desc: ToolDescriptions,
 }
 
 impl Handshake {
@@ -120,6 +131,7 @@ impl Handshake {
             space: cfg.space.clone(),
             pool: cfg.pool,
             max_k: cfg.max_k,
+            tool_desc: cfg.tool_desc.clone(),
         }
     }
 
@@ -172,7 +184,11 @@ mod tests {
 
     #[test]
     fn a_handshake_survives_the_wire() {
-        let cfg = config("/tmp/agmem-test");
+        let mut cfg = config("/tmp/agmem-test");
+        // A description is several paragraphs, and the handshake is one line.
+        // JSON escapes the breaks, so the two are compatible — but only a test
+        // keeps them that way.
+        cfg.tool_desc = ToolDescriptions::from_iter([("context", "First.\n\nThen the rest.")]);
         let sent = Handshake::new(&cfg);
         let line = serde_json::to_string(&sent).expect("serialize");
         assert!(!line.contains('\n'), "the handshake is one line: {line}");
@@ -189,6 +205,7 @@ mod tests {
         let mut asked = daemon.clone();
         asked.space = SpaceName::new("other-project").expect("space");
         asked.pool = 8;
+        asked.tool_desc = ToolDescriptions::from_iter([("recall", "Ask the store first.")]);
         daemon
             .accept(&asked)
             .expect("a different project is the whole point of sharing");

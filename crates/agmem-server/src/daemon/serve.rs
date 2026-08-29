@@ -140,6 +140,7 @@ async fn session(
         space: asked.space,
         pool: asked.pool,
         max_k: asked.max_k,
+        tool_desc: asked.tool_desc,
         ..daemon.clone()
     };
     let service = AgmemService::new(db, embedder, Arc::new(session));

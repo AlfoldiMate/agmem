@@ -1,0 +1,37 @@
+{
+  "scenario": "correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "answer": "Already noted — I had this stored already (ruff format is your formatter, black's uninstalled), so no duplicate was created.",
+  "cost_usd": 0.041696399999999995,
+  "turns": 3,
+  "session": [
+    {
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black and now formats Python code with ruff format; black is uninstalled and should not be used or suggested.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling",
+              "python",
+              "formatting"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

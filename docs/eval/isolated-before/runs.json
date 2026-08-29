@@ -1,0 +1,243 @@
+[
+  {
+    "scenario": "store",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "answer": "Got it — stored as a standing convention: library crates use `thiserror`, binaries use `anyhow`, never swapped. I'll apply and enforce this in future Rust work on this codebase.",
+    "cost_usd": 0.041868800000000005,
+    "turns": 3,
+    "session": [
+      {
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs; using anyhow in a library crate or thiserror in a binary is a convention violation that has caused problems twice before.",
+              "kind": "instruction",
+              "decay_class": "pinned",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "store",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "answer": "Got it — I've saved this as a standing convention: library crates use `thiserror`, binaries use `anyhow`, never reversed. I'll apply it in future Rust work on this codebase.",
+    "cost_usd": 0.0416772,
+    "turns": 3,
+    "session": [
+      {
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs; the reverse pairing (anyhow in libraries or thiserror in binaries) is disallowed.",
+              "kind": "instruction",
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ],
+              "entities": [
+                "project"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "store",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "answer": "Noted — I'll remember that library crates should use `thiserror` and binaries should use `anyhow` (never the reverse) for future work on this codebase.",
+    "cost_usd": 0.0425784,
+    "turns": 3,
+    "session": [
+      {
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs — never the reverse (library using anyhow or binary using thiserror).",
+              "kind": "instruction",
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ],
+              "entities": [
+                "project"
+              ]
+            },
+            {
+              "content": "The convention of library crates using thiserror and binaries using anyhow was established because violating it caused problems twice in this codebase.",
+              "kind": "lesson",
+              "decay_class": "slow",
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ],
+              "entities": [
+                "project"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "correct",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "answer": "Already noted — I had this stored from before (95% match on an existing memory). Good to go for later, I'll use `ruff format` instead of `black` going forward.",
+    "cost_usd": 0.04086940000000001,
+    "turns": 3,
+    "session": [
+      {
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has moved off black for Python code formatting and now uses ruff format exclusively; black is uninstalled in their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "tooling",
+                "python",
+                "formatting"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "correct",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "answer": "Noted — I'll use `ruff format` for any Python formatting going forward, not black.",
+    "cost_usd": 0.04162980000000001,
+    "turns": 3,
+    "session": [
+      {
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has moved off black for Python code formatting and now uses ruff format exclusively.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "tooling",
+                "python",
+                "formatting"
+              ]
+            },
+            {
+              "content": "Black is uninstalled in the user's environment; ruff format should be used instead for any formatting tasks.",
+              "kind": "instruction",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "tooling",
+                "python",
+                "formatting"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "correct",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "answer": "Noted — I've stored that you've switched to `ruff format` and black is no longer used, so I'll rely on ruff for any future formatting-related work.",
+    "cost_usd": 0.0407758,
+    "turns": 3,
+    "session": [
+      {
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has migrated their code formatting workflow off black and now uses ruff format exclusively; black is uninstalled from their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "tooling",
+                "formatting"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

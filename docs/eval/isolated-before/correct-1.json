@@ -1,0 +1,36 @@
+{
+  "scenario": "correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "answer": "Already noted — I had this stored from before (95% match on an existing memory). Good to go for later, I'll use `ruff format` instead of `black` going forward.",
+  "cost_usd": 0.04086940000000001,
+  "turns": 3,
+  "session": [
+    {
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format exclusively; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "tooling",
+              "python",
+              "formatting"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

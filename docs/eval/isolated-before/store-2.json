@@ -1,0 +1,36 @@
+{
+  "scenario": "store",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "answer": "Got it — I've saved this as a standing convention: library crates use `thiserror`, binaries use `anyhow`, never reversed. I'll apply it in future Rust work on this codebase.",
+  "cost_usd": 0.0416772,
+  "turns": 3,
+  "session": [
+    {
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs; the reverse pairing (anyhow in libraries or thiserror in binaries) is disallowed.",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ],
+            "entities": [
+              "project"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

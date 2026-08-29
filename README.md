@@ -244,6 +244,7 @@ included), or `stats` for per-space counts.
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed`, or `none` for BM25-only |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
+| `AGMEM_TOOL_DESC_<TOOL>` | agmem's own wording | Replace one tool's description — see below |
 | `--log` / `AGMEM_LOG`, `--log-file` / `AGMEM_LOG_FILE` | agmem at `info`, its dependencies at `warn`, stderr | Telemetry |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process; one session at a time |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it |
@@ -251,6 +252,34 @@ included), or `stats` for per-space counts.
 
 stdout is the MCP wire: all logging goes to stderr or `--log-file`, never
 stdout.
+
+### Rewording a tool
+
+A tool description is most of what decides whether an agent reaches for memory,
+and what counts as good wording depends on the model, the client and the work.
+`AGMEM_TOOL_DESC_<TOOL>` replaces one outright — `REMEMBER`, `RECALL`,
+`CONTEXT`, `FORGET`, `INSPECT`, per server, no rebuild:
+
+```jsonc
+{ "mcpServers": { "agmem": {
+    "command": "agmem",
+    "env": {
+      "AGMEM_SPACE": "myproject",
+      "AGMEM_TOOL_DESC_RECALL": "Search what earlier sessions stored. Call it before answering anything about this project's history."
+    }
+} } }
+```
+
+The override is the whole description, not an addition, so what the agent reads
+is exactly what you wrote. A variable naming something that is not one of the
+five tools stops the server with a message rather than being ignored — a typo
+here is invisible otherwise. `agmem --doctor` and the startup log both report
+which tools a run is rewording, and each project keeps its own wording even
+when several share one daemon.
+
+`docs/tool-descriptions.md` has the measured effect of the built-in wording, and
+the harness (`scripts/desc-eval.nu`) that measures it, if you want to check
+your own.
 
 ## Verify the loop
 
@@ -287,6 +316,7 @@ is signed off against (run 2026-08-28 against a fresh data dir, all passing):
 ## Docs
 
 - `docs/design.md` — architecture, schema, tool contracts, flows
+- `docs/tool-descriptions.md` — what the tool descriptions say, measured
 - `docs/idea.md` — the research this is built on
 
 License: MIT OR Apache-2.0

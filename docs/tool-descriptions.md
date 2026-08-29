@@ -331,6 +331,34 @@ too late.
   reason that is known is that it was measured. Any future wording change goes
   through `scripts/desc-eval.nu` first.
 
+## Re-measured once retrieval worked (`docs/eval/knn-fixed/`)
+
+Every number above the previous section was taken while retrieval was broken
+in two independent ways — [#39](https://github.com/AlfoldiMate/agmem/issues/39)
+emptied the fulltext arm for any question carrying a word the claim did not,
+and [#40](https://github.com/AlfoldiMate/agmem/issues/40) had the vector arm
+come back short on *every* recall a process served. So the correction result
+had a standing excuse: perhaps the agent did look, and was told nothing.
+
+With both fixed, `--isolated --only correct`, 3 runs:
+
+| | runs | `remember` called | `supersedes` set | tool calls per run |
+|---|---|---|---|---|
+| `correct` | 3 | 3/3 | **0/3** | 1.00 |
+
+**The excuse is gone and the number did not move.** One call per run is the
+whole finding: the agent never called `recall` at all, so retrieval never got
+the chance to fail it. It writes the new claim, leaves the old one live, and
+has no id to supersede with because it never asked for one.
+
+That settles what [#38](https://github.com/AlfoldiMate/agmem/issues/38) is
+for. A description cannot fix it — #23 established that over 12 sessions — and
+the ritual already fixes it when somebody runs the ritual (`ritual_correct`,
+3/3). What is left is the path where nobody does, and on that path the only
+moment agmem is in the conversation at all is the `remember` call itself. So
+the id has to come back *from that call*, the way a near-duplicate's already
+does: the agent cannot look up what it does not know to look for.
+
 ## Overriding a description
 
 `AGMEM_TOOL_DESC_<TOOL>` replaces one outright, per server, no rebuild —

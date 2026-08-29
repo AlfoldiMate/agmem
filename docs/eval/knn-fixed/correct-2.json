@@ -1,0 +1,39 @@
+{
+  "scenario": "correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.PPjveM1Jce",
+  "answer": "Already noted — this preference was stored previously (a near-duplicate match came back), so no new entry was needed. I'll use `ruff format` for any formatting in this session.",
+  "cost_usd": 0.0415408,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black and formats Python code with ruff format instead; black is uninstalled from their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling",
+              "python"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"id\\\":\\\"01M16GMF45PT2HBB0FV5TSARHX\\\",\\\"of\\\":0,\\\"similarity\\\":0.9596382569296662}],\\\"episode\\\":null,\\\"superseded\\\":[]}\""
+    }
+  ]
+}

@@ -168,7 +168,17 @@ def summarise [] {
             scenario: $scenario
             runs: ($runs | length)
             passed: ($runs | where pass | length)
-            served: ($runs | where ($it.served? | default true) | length)
+            # Blank rather than a number for a batch recorded before `served`
+            # existed: a default of `true` here would report an unverified run
+            # as a verified one, which is the failure this column exists to
+            # catch.
+            served: (
+                if ($runs | all {|run| ($run | get -o served) == null}) {
+                    null
+                } else {
+                    $runs | where ($it.served? | default false) | length
+                }
+            )
             calls: ($runs | get calls | math avg | math round --precision 1)
             tools: ($runs | get tools | flatten | uniq | sort | str join ",")
             superseded: ($runs | where superseded | length)

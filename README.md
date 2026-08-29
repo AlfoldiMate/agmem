@@ -350,11 +350,13 @@ included), or `stats` for per-space counts.
 **`consolidate`** — what needs tidying up, and nothing done about it. Three
 lists: `near_duplicates` (groups of live claims saying the same thing, each
 group one `remember(supersedes:)` call away from merged), `contradictions`
-(pairs about one subject that are close without being the same) and
-`stale_contexts` (notes filed `fast` that recall has kept alive far past the
-twenty-day horizon their class implies). Every candidate carries its full text,
-not just its id — there is no server-side LLM here, so the decision is the
-agent's, and an id and a number are not something to decide on.
+(pairs naming one subject, offered so you can decide which is true — the same
+pair may also appear under `near_duplicates`, because a cosine carries the
+subject and not the polarity) and `stale_contexts` (notes filed `fast` that
+recall has kept alive far past the twenty-day horizon their class implies).
+Every candidate carries its full text, not just its id — there is no
+server-side LLM here, so the decision is the agent's, and an id and a number
+are not something to decide on.
 
 ```json
 { "spaces": ["myproject"],
@@ -484,6 +486,19 @@ over raw JSON-RPC, all passing:
 9. `forget` by query without a dry run → refused, naming the two-step. The same
    call with `dry_run: true` → one match; sent again unchanged → invalidated.
 10. `prompts/list` → `recall_first` and `checkpoint`.
+11. `consolidate`, on a store seeded into all three states it reports — one
+    deploy fact written three ways in a single call (the gate never compares
+    two entries of one batch, so all three go live), two test-runner claims
+    that disagree, and a `fast` note backdated 40 days against its 20-day
+    horizon with the `surreal` CLI, because nothing in the tool surface can
+    write that state. Answer: one five-member cluster, `min_similarity` 0.878
+    against `max_similarity` 0.95 — it chained through the shared subject, and
+    says so; 15 contradiction candidates, every pair of the six claims naming
+    `atlas`, with the genuine disagreement second at 0.948 behind a pair of
+    duplicates at 0.950; and one stale context, idle 40.0 days with
+    `expires_in_days` 19.9 at `access_count` 8. Ranking that list by cosine
+    puts duplicates above disagreements, which is the open half of this — see
+    the ledger.
 
 ## Troubleshooting
 

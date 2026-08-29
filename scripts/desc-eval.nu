@@ -114,6 +114,56 @@ const SCENARIOS = [
         avoid: []
     }
     {
+        name: "consolidate"
+        asks: "when a user asks for the thing this tool does, is the tool found?"
+        # Three ways of saying one thing, written in one call: the gate never
+        # compares two entries of the same batch, so all three land live —
+        # exactly the state `near_duplicates` exists to report and the write
+        # path cannot prevent. The coffee note is there to be left alone.
+        seed: [
+            {
+                content: "Project atlas is deployed by running bin/ship.sh from the repository root."
+                kind: "fact"
+                entities: ["atlas"]
+                tags: ["deploy"]
+            }
+            {
+                content: "To ship atlas you run the bin/ship.sh script at the top of the repo."
+                kind: "fact"
+                entities: ["atlas"]
+                tags: ["deploy"]
+            }
+            {
+                content: "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone."
+                kind: "fact"
+                entities: ["atlas"]
+                tags: ["deploy"]
+            }
+            {
+                content: "The office coffee machine is descaled on the first Monday of the month."
+                kind: "fact"
+                entities: ["office"]
+            }
+            {
+                content: "The branch under review is spike/consolidate."
+                kind: "fact"
+                entities: ["atlas"]
+                decay_class: "fast"
+            }
+        ]
+        # Working context that recall kept alive past its class: 40 days idle
+        # against a 20-day horizon, strength 3 so the startup sweep has not
+        # reached it either. Nothing in the tool surface can write this state.
+        stale: {days: 40, strength: 3.0, accesses: 8}
+        # Unlike every scenario but the rituals, this turn names memory. There
+        # is no way to ask for maintenance without it, so what this measures is
+        # narrower and still the question that matters: a user asking for
+        # exactly what the tool does, in their own words, never naming a tool.
+        turns: ["Before I hand this project over — go through what you have stored about atlas and tell me what is duplicated or out of date. Do not change anything yet."]
+        want: ["consolidate"]
+        avoid: ["forget"]
+    }
+    {
         name: "restraint"
         asks: "does it leave memory alone when there is nothing to remember?"
         seed: []
@@ -247,6 +297,9 @@ def run-one [
 
     if ($scenario.seed | is-not-empty) {
         seed $binary $data $cache $scenario.seed $overrides
+    }
+    if "stale" in ($scenario | columns) {
+        age $data $scenario.stale
     }
 
     let config = ($cwd | path join "mcp.json")
@@ -464,6 +517,32 @@ def seed [binary: string, data: string, cache: string, memories: list, overrides
     )
     if ($answer | is-empty) or (($answer | get -o 0.error) != null) {
         error make {msg: $"the store refused the seed: ($seeded.stdout)"}
+    }
+}
+
+# Backdate the `fast` rows a scenario just seeded, so `stale_contexts` has
+# something to report.
+#
+# `last_accessed`, `strength` and `access_count` are the engine's to write:
+# nothing in the tool surface can produce a row that has been idle for weeks,
+# which is the only state that list reports. The `surreal` CLI opens agmem's
+# own surrealkv store directly — same engine, same schema, no test-only door
+# cut into the binary for it.
+#
+# `strength` decides whether the row is *also* expired: the startup sweep
+# scales the horizon by it, so a row at strength 3 survives 60 days where the
+# unscaled horizon is 20. Idle between the two is the state `consolidate`
+# exists to notice and the sweep deliberately does not.
+def age [data: string, stale: record] {
+    let aged = (
+        $"UPDATE memory SET last_accessed = time::now\(\) - duration::from_secs\(($stale.days * 86400)),
+                            strength = ($stale.strength), access_count = ($stale.accesses)
+          WHERE decay_class = 'fast';"
+        | ^surreal sql --endpoint $"surrealkv://($data)/agmem.db" --ns agmem --db main --hide-welcome
+        | complete
+    )
+    if $aged.exit_code != 0 {
+        error make {msg: $"aging the seeded rows failed — is the surreal CLI installed? ($aged.stderr)"}
     }
 }
 

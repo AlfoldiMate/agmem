@@ -277,10 +277,9 @@ struct AngleEmbedder;
 /// Where each marker word sits, in degrees on the first two axes.
 ///
 /// 20° apart is cosine 0.94 — a cluster, and still under the 0.95 write gate,
-/// so a pair can actually be stored in the state `consolidate` exists to find.
-/// 30° is 0.87, the contradiction band. 40° is 0.77, which is neither: two
-/// claims 20° either side of a third form one chained cluster whose ends do
-/// not resemble each other, and that is what `min_similarity` reports.
+/// 30° is 0.87: a contradiction candidate and not a cluster. 40° is 0.77, and
+/// two claims 20° either side of a third form one chained cluster whose ends
+/// do not resemble each other, which is what `min_similarity` reports.
 const ANGLES: [(&str, f64); 4] = [
     ("black", 0.0),
     ("blackfmt", 20.0),
@@ -1952,11 +1951,20 @@ async fn consolidate_clusters_near_duplicates_and_says_how_loose_the_group_is() 
     assert_eq!(clusters.len(), 1, "{found:#}");
 
     let members = clusters[0]["members"].as_array().expect("an array");
-    assert_eq!(members.len(), 3, "the orthogonal note joins nothing: {found:#}");
+    assert_eq!(
+        members.len(),
+        3,
+        "the orthogonal note joins nothing: {found:#}"
+    );
     for member in members {
-        let content = member["content"].as_str().expect("every member is readable");
+        let content = member["content"]
+            .as_str()
+            .expect("every member is readable");
         assert!(content.contains("python"), "{content}");
-        assert!(member["id"].as_str().is_some(), "and addressable: {member:#}");
+        assert!(
+            member["id"].as_str().is_some(),
+            "and addressable: {member:#}"
+        );
     }
 
     let min = clusters[0]["min_similarity"].as_f64().expect("a number");
@@ -2030,6 +2038,43 @@ async fn consolidate_pairs_claims_about_one_subject_that_may_disagree() {
 }
 
 #[tokio::test]
+async fn consolidate_offers_one_close_pair_as_both_a_merge_and_a_disagreement() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the user formats python with black", "entities": ["python"] },
+                { "content": "python here is formatted by blackfmt", "entities": ["python"] },
+            ]
+        }))
+        .await;
+
+    // 20° apart is 0.94, over the clustering bar — and that is exactly where a
+    // real contradiction lands. Measured against BGE-small, seven contradicting
+    // pairs scored 0.919 to 0.974, while the one pair that did *not* contradict
+    // scored 0.898. So the two lists overlap, and one pair has to be able to
+    // appear in both: which of those two readings applies is the caller.
+    let found = agmem.consolidate(json!({})).await;
+    let clusters = found["near_duplicates"].as_array().expect("an array");
+    assert_eq!(clusters.len(), 1, "{found:#}");
+
+    let pairs = found["contradictions"].as_array().expect("an array");
+    assert_eq!(pairs.len(), 1, "{found:#}");
+    let similarity = pairs[0]["similarity"].as_f64().expect("a number");
+    assert!(
+        similarity > 0.93,
+        "the same pair, reported over the cluster bar: {similarity}"
+    );
+    let shared = pairs[0]["shared_entities"].as_array().expect("an array");
+    assert_eq!(shared.len(), 1, "{found:#}");
+    assert_eq!(
+        shared[0].as_str().expect("a subject").to_lowercase(),
+        "python",
+        "the shared subject is what keeps this list from copying the other"
+    );
+}
+
+#[tokio::test]
 async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
     // No embedder at all: the stale arm is the one finding that needs no
     // vectors, and it has to keep working in BM25-only mode.
@@ -2083,7 +2128,10 @@ async fn consolidate_on_an_empty_store_answers_empty_rather_than_failing() {
     assert_eq!(found["contradictions"], json!([]));
     assert_eq!(found["stale_contexts"], json!([]));
     assert_eq!(found["spaces"], json!(["default"]));
-    assert_eq!(found["scanned"], json!([{ "space": "default", "compared": 0, "truncated": false }]));
+    assert_eq!(
+        found["scanned"],
+        json!([{ "space": "default", "compared": 0, "truncated": false }])
+    );
     assert!(
         found.get("note").is_none(),
         "nothing limited this answer: {found:#}"
@@ -2118,10 +2166,7 @@ async fn consolidate_stays_in_the_current_space_unless_asked_otherwise() {
     let asked = agmem.consolidate(json!({ "space": "user" })).await;
     assert_eq!(asked["spaces"], json!(["user"]));
     assert_eq!(
-        asked["near_duplicates"]
-            .as_array()
-            .expect("an array")
-            .len(),
+        asked["near_duplicates"].as_array().expect("an array").len(),
         1,
         "{asked:#}"
     );

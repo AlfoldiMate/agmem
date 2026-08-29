@@ -1,0 +1,51 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.EkP6JXimwy",
+  "answer": "I checked the file-based memory index (empty — no atlas entries there) and the agmem store. All atlas-related memories live in an `eval` space (not `current`/`user`), and all four were written within the same second (2026-08-29 12:21:19), which itself is a flag — they look like they were dumped in one batch rather than accumulated over real sessions.\n\n**Duplicated:**\n- `\"To ship atlas you run the bin/ship.sh script at the top of the repo.\"` (01M16QF7FBBHZH7QMTC8MNH051)\n- `\"Project atlas is deployed by running bin/ship.sh from the repository root.\"` (01M16QF7F0W7ZXTZMT0K1YK06B)\n\nThese are the same claim reworded — no reason to keep both.\n\n**Overlapping but not identical:**\n- `\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"` (01M16QF7FF66TGE9YK471Y5RNJ)\n\nSame core fact as the two above, plus one extra detail (the `make deploy` target was retired). None of these three reference or `supersede` each other, so right now there are three separate \"live\" claims about the same deploy step instead of one consolidated one.\n\n**Possibly mistagged, not actually about atlas:**\n- `\"The branch under review is spike/consolidate.\"` (01M16QF7FXPQ2W72Q03SSTFXS1) — tagged with entity `atlas` but doesn't mention it, and reads like ephemeral session state (which branch was being reviewed) rather than a durable fact worth keeping.\n\n**Not out of date per se** — there's no dated contradiction here (e.g., nothing saying atlas *used to* deploy via `make deploy` directly), so I can't confirm the `make deploy` line is legitimately historical versus just extra detail someone tacked on. Worth confirming with you before I decide which version to keep as canonical.\n\nI haven't changed or deleted anything. Want me to consolidate the three deploy facts into one (keeping the `make deploy` detail) and drop the mistagged branch fact?",
+  "cost_usd": 0.1022388,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QF7FBBHZH7QMTC8MNH051\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.866481899846189,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275993847562,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T12:21:19.9676Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QF7F0W7ZXTZMT0K1YK06B\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664818997573627,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275990294508,\\\"rr"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas deploy ship",
+        "space": "current",
+        "k": 20
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QF7FF66TGE9YK471Y5RNJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249998427356542,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999993709426168,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T12:21:19.967608Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QF7F0W7ZXTZMT0K1YK06B\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8979400239413841,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "space": "user",
+        "k": 20
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"user\\\"]}\""
+    }
+  ]
+}

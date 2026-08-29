@@ -795,12 +795,18 @@ rather than details:
   `core::dedup::Unit` is exact instead of approximate, and cheaper. It is
   O(n²), which is what bounds a pass at `MAX_POOL` rows and puts `truncated`
   in the answer.
-- **The two similarity bands partition.** `[0.75, 0.90)` is a contradiction
-  candidate and `≥ 0.90` is a cluster edge — the write path's
-  `is_correction_candidate` stops at 0.95 instead, and deliberately: there,
-  0.95 is the gate deciding what to *block*. Here nothing is blocked, so the
-  question is only which of two lists a pair belongs in, and no pair may be in
-  both.
+- **The two similarity bands overlap, because an embedder cannot tell a claim
+  from its negation.** `≥ 0.90` is a cluster edge; a contradiction candidate is
+  `≥ 0.75` *and* shares an entity, with no ceiling. The band originally stopped
+  at 0.90 so that the two lists would partition, and measurement says that is
+  backwards (2026-08-29, BGE-small, `scripts/band-probe.nu`): seven
+  contradicting pairs an agent would plausibly hold at once score
+  **0.919–0.974**, three of them above the 0.95 write gate, while the control
+  pair — one subject, no disagreement — scores **0.898**. A cosine carries the
+  subject, not the polarity, so a partitioned band reported the pairs that
+  agree and hid every pair that disagrees. What separates the two lists is the
+  question each answers — "could one of these be deleted" against "which of
+  these is true" — and the shared entity, which a cluster does not require.
 - **A cluster is a transitive closure, and reports its weakest pair.** One
   group is one `remember(supersedes: …)` call; pairwise candidates would make
   the agent reconcile N overlapping merges for one three-way duplicate. The

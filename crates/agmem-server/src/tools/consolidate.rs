@@ -81,7 +81,9 @@ pub struct ConsolidateResult {
     pub near_duplicates: Vec<Cluster>,
 
     /// Pairs of live claims about one subject that may disagree. Nothing here
-    /// judges that they do — read both and decide.
+    /// judges that they do — read both and decide, and expect to find some of
+    /// these in `near_duplicates` too: an embedding cannot tell a claim from
+    /// its own negation, so the two lists overlap by design.
     pub contradictions: Vec<Contradiction>,
 
     /// Short-lived notes that recall has kept alive past the point their class
@@ -131,7 +133,8 @@ pub struct Cluster {
     pub max_similarity: f64,
 }
 
-/// Two live claims about one subject, close but not the same.
+/// Two live claims naming one subject, offered so the caller can decide which
+/// of them is true.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Contradiction {
     /// The space they are in.
@@ -146,8 +149,10 @@ pub struct Contradiction {
     /// The other one, with its text.
     pub b: MemoryView,
 
-    /// How close they are: high enough to be one subject, below the clustering
-    /// bar, which is where a disagreement lives rather than a restatement.
+    /// How close they are. High is not evidence of agreement: measured with
+    /// this embedder, real contradictions score 0.92–0.97 — above the
+    /// clustering bar — because the vector carries the subject, not the
+    /// polarity. Read both claims.
     pub similarity: f64,
 }
 
@@ -265,7 +270,12 @@ fn compare(space: &SpaceName, rows: Vec<Embedded>) -> Found {
 
             if dedup::is_cluster_candidate(score) {
                 groups.join(left, right);
-            } else if dedup::is_contradiction_candidate(score) {
+            }
+            // Not an `else`: the bands overlap on purpose. A pair above the
+            // clustering bar is the *likeliest* disagreement, not the least
+            // likely one, and partitioning here is what kept every real
+            // contradiction out of this list (`dedup::is_contradiction_candidate`).
+            if dedup::is_contradiction_candidate(score) {
                 let shared = shared_entities(&rows[left].memory, &rows[right].memory);
                 if !shared.is_empty() {
                     contradictions.push(Contradiction {
@@ -390,7 +400,8 @@ fn note(service: &AgmemService, truncated: bool) -> Option<String> {
 
 /// Descending order over similarities, which are never NaN here but are `f64`.
 fn rank(left: f64, right: f64) -> std::cmp::Ordering {
-    left.partial_cmp(&right).unwrap_or(std::cmp::Ordering::Equal)
+    left.partial_cmp(&right)
+        .unwrap_or(std::cmp::Ordering::Equal)
 }
 
 /// Disjoint-set union over row indices: what turns a list of close pairs into

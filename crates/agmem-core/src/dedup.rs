@@ -90,18 +90,27 @@ pub fn is_cluster_candidate(similarity: f64) -> bool {
     similarity >= CLUSTER_THRESHOLD
 }
 
-/// Whether two live memories are close enough to be about one subject and far
-/// enough apart to disagree about it.
+/// Whether two live memories are close enough to be about one subject at all.
 ///
-/// The band's floor is [`CORRECTION_FLOOR`], the same one the write path uses
-/// — the shape of "same subject, different statement" does not change with
-/// who is asking. Its ceiling is [`CLUSTER_THRESHOLD`] rather than
-/// [`NEAR_DUP_THRESHOLD`], so that the two things `consolidate` reports
-/// *partition*: a pair is a cluster edge or a contradiction candidate, never
-/// both, and an agent reading the answer never has to work out whether two
-/// sections are talking about the same pair.
+/// The floor is [`CORRECTION_FLOOR`], the same one the write path uses. There
+/// is deliberately **no ceiling**, and that is a measurement rather than a
+/// taste: seven contradiction pairs an agent would plausibly hold at once —
+/// stdout against stderr, npm against pnpm, Friday deploys against never on a
+/// Friday — score 0.919 to 0.974 with BGE-small, while a pair about one
+/// subject that merely says two *different* things scores 0.898. An embedding
+/// encodes topic, not polarity, so a claim and its negation read as
+/// paraphrases of each other, and a ceiling under [`CLUSTER_THRESHOLD`]
+/// therefore reported the pairs that agree and hid every pair that disagrees.
+///
+/// So the two lists `consolidate` returns do not partition, and cannot: above
+/// [`CLUSTER_THRESHOLD`] a pair is offered as both a merge candidate and a
+/// disagreement, because nothing on this side of the wire can tell those
+/// apart. What separates the lists is the question, not the range —
+/// `near_duplicates` asks whether one of these could be deleted,
+/// `contradictions` asks which of them is true — and the shared entity is what
+/// keeps the second list from being a copy of the first.
 pub fn is_contradiction_candidate(similarity: f64) -> bool {
-    (CORRECTION_FLOOR..CLUSTER_THRESHOLD).contains(&similarity)
+    similarity >= CORRECTION_FLOOR
 }
 
 /// A vector prepared for repeated comparison: scaled to unit length, so
@@ -195,12 +204,21 @@ mod tests {
     }
 
     #[test]
-    fn the_two_consolidate_bands_partition_at_the_cluster_threshold() {
+    fn the_two_consolidate_bands_overlap_above_the_cluster_threshold() {
         assert!(is_cluster_candidate(CLUSTER_THRESHOLD));
-        assert!(!is_contradiction_candidate(CLUSTER_THRESHOLD));
         assert!(is_contradiction_candidate(0.8999));
         assert!(!is_cluster_candidate(0.8999));
+        assert!(is_contradiction_candidate(CORRECTION_FLOOR));
         assert!(!is_contradiction_candidate(CORRECTION_FLOOR - 0.0001));
+
+        // Measured with BGE-small: a real contradiction scores 0.919–0.974,
+        // which is cluster territory, and both lists have to be able to hold
+        // it. A band that stopped at the cluster threshold contained the
+        // control pair — same subject, no disagreement — and nothing else.
+        for measured in [0.919, 0.948, 0.974] {
+            assert!(is_cluster_candidate(measured));
+            assert!(is_contradiction_candidate(measured));
+        }
 
         // A pair the write gate would have blocked is still a cluster — the
         // gate never compared these two to each other.
@@ -219,7 +237,9 @@ mod tests {
         assert!((east.similarity(&west) + 1.0).abs() < 1e-6);
 
         // Magnitude is scaled away, so only the angle is left.
-        assert!((east.similarity(&Unit::new(&[100.0, 0.0]).expect("a direction")) - 1.0).abs() < 1e-6);
+        assert!(
+            (east.similarity(&Unit::new(&[100.0, 0.0]).expect("a direction")) - 1.0).abs() < 1e-6
+        );
     }
 
     #[test]

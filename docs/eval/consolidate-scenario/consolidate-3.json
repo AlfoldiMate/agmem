@@ -1,0 +1,53 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.Wmrz2pcXOF",
+  "answer": "Here's what's stored under \"atlas\" (all in the `eval` space, all written today):\n\n**Duplicated (3 memories saying the same thing about deployment):**\n1. `01M16QHS4FHS9VJDPSC8BPDK3Z` — \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n2. `01M16QHS46XQ59NAJ3WK1G5ECK` — \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n3. `01M16QHS4MFQ8DXAFAKXMVQM8X` — \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n\nAll three assert the same core fact (deploy = `bin/ship.sh`), just reworded. #3 is the only one carrying extra information — that the old `make deploy` target is gone — so it's the most complete version. #1 and #2 are redundant with it and with each other.\n\n**Potentially out of date:**\n#3's mention that \"the old make deploy target is gone\" implies `make deploy` used to be the documented method. Since #1 and #2 don't mention that transition, they read as if `bin/ship.sh` were simply always the way — not wrong, but incomplete/stale next to #3. Worth consolidating into one record (likely keeping #3's wording) rather than treating them as three independent facts.\n\n**Questionable tagging, not really duplicate/stale — but off-topic:**\n- `01M16QHS4YVT9MC2FKCCYVS7X1` — \"The branch under review is spike/consolidate.\" This is tagged with entity `atlas` but its content has nothing to do with atlas deploy — looks mistagged rather than duplicated. Flagging it since it surfaced in the atlas search but probably doesn't belong there.\n\nI haven't changed anything — let me know if you'd like me to consolidate the three deploy facts into one (via `supersedes`) and/or fix the mistagged branch entry.",
+  "cost_usd": 0.09932940000000001,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QHS4FHS9VJDPSC8BPDK3Z\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819454906775,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277819627103,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T12:22:43.590437Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QHS46XQ59NAJ3WK1G5ECK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819453885095,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659277815540382,\\"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas deploy ship",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QHS4MFQ8DXAFAKXMVQM8X\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249998261820338,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999993047281353,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T12:22:43.590442Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QHS46XQ59NAJ3WK1G5ECK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8979400073868378,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "tags": [
+          "deploy"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"To ship atlas you run the bin/ship.sh script at the top of the repo.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QHS4FHS9VJDPSC8BPDK3Z\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499999505841437,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999802336575,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T12:22:43.590437Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16QHS46XQ59NAJ3WK1G5ECK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499999505106486,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999802042595,\\\"rrf\\\":0,\\\"rrf_n"
+    }
+  ]
+}

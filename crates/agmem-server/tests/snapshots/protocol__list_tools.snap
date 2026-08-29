@@ -56,7 +56,7 @@ expression: "&tools.tools"
           "type": "object"
         },
         "Contradiction": {
-          "description": "Two live claims about one subject, close but not the same.",
+          "description": "Two live claims naming one subject, offered so the caller can decide which\nof them is true.",
           "properties": {
             "a": {
               "$ref": "#/$defs/MemoryView",
@@ -74,7 +74,7 @@ expression: "&tools.tools"
               "type": "array"
             },
             "similarity": {
-              "description": "How close they are: high enough to be one subject, below the clustering\nbar, which is where a disagreement lives rather than a restatement.",
+              "description": "How close they are. High is not evidence of agreement: measured with\nthis embedder, real contradictions score 0.92–0.97 — above the\nclustering bar — because the vector carries the subject, not the\npolarity. Read both claims.",
               "format": "double",
               "type": "number"
             },
@@ -301,7 +301,7 @@ expression: "&tools.tools"
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "contradictions": {
-          "description": "Pairs of live claims about one subject that may disagree. Nothing here\njudges that they do — read both and decide.",
+          "description": "Pairs of live claims about one subject that may disagree. Nothing here\njudges that they do — read both and decide, and expect to find some of\nthese in `near_duplicates` too: an embedding cannot tell a claim from\nits own negation, so the two lists overlap by design.",
           "items": {
             "$ref": "#/$defs/Contradiction"
           },

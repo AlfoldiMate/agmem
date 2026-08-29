@@ -1,0 +1,58 @@
+[
+  {
+    "pair": "logging",
+    "similarity": 0.9737485004214599,
+    "gate": "blocked",
+    "a": "Atlas writes its log output to stdout.",
+    "b": "Atlas writes its log output to stderr, because stdout carries the protocol."
+  },
+  {
+    "pair": "formatter",
+    "similarity": 0.9588358181430335,
+    "gate": "blocked",
+    "a": "The user formats Python with black.",
+    "b": "The user formats Python with ruff format, and black is uninstalled."
+  },
+  {
+    "pair": "platforms",
+    "similarity": 0.9505516113823471,
+    "gate": "blocked",
+    "a": "The atlas release build targets ubuntu and macos.",
+    "b": "Atlas releases are built for linux only; the macos runner was dropped in June."
+  },
+  {
+    "pair": "packages",
+    "similarity": 0.9480057327751183,
+    "gate": "written, reported",
+    "a": "Atlas uses npm to manage its JavaScript packages.",
+    "b": "Atlas moved to pnpm for JavaScript packages; npm is no longer used."
+  },
+  {
+    "pair": "testrunner",
+    "similarity": 0.947809238274833,
+    "gate": "written, reported",
+    "a": "The atlas test suite is run with cargo nextest run.",
+    "b": "Atlas tests are run with plain cargo test, because nextest is not installed on the build machines."
+  },
+  {
+    "pair": "window",
+    "similarity": 0.9322148556478012,
+    "gate": "written, reported",
+    "a": "Atlas deploys go out on Fridays.",
+    "b": "Atlas deploys never go out on a Friday; the release window is Monday to Wednesday."
+  },
+  {
+    "pair": "staging",
+    "similarity": 0.9192526614443265,
+    "gate": "written, reported",
+    "a": "The atlas staging database is a copy of production.",
+    "b": "The atlas staging database is seeded with synthetic rows and shares nothing with production."
+  },
+  {
+    "pair": "control",
+    "similarity": 0.8984317658462261,
+    "gate": "written, reported",
+    "a": "The atlas test suite is run with cargo nextest run.",
+    "b": "Project atlas is deployed by running bin/ship.sh from the repository root."
+  }
+]

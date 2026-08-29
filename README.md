@@ -4,13 +4,14 @@ Memory for coding agents, over MCP. One local process, one embedded database,
 no server-side LLM: the agent distils what is worth keeping, agmem stores it,
 dates it, ranks it, and shows its work.
 
-Six tools — `remember`, `recall`, `context`, `forget`, `inspect`,
-`consolidate` — and two rituals that ask for them.
+Seven tools — `remember`, `recall`, `context`, `forget`, `inspect`,
+`consolidate`, `reflect` — and two rituals that ask for them.
 
-> Status: Phase 2 complete, and `consolidate` (Phase 3) has landed. The loop,
-> the session-start block, removal, startup pruning, the shared daemon, the
-> rituals and candidate surfacing all work end to end from Claude Code. The
-> entity graph and the memory-quality eval are what is left of Phase 3.
+> Status: Phase 2 complete, and `consolidate` and `reflect` (Phase 3) have
+> landed. The loop, the session-start block, removal, startup pruning, the
+> shared daemon, the rituals, candidate surfacing and cited insights all work
+> end to end from Claude Code. The entity graph and the memory-quality eval
+> are what is left of Phase 3.
 
 ## Install
 
@@ -393,9 +394,31 @@ together through a middle claim tells you it may not be one claim at all.
 Unlike every other read here, `consolidate` looks in the current space alone —
 a tidy-up should not reach the shared `user` space unless you name it.
 
+**`reflect`** — store a conclusion together with what it was drawn from.
+`remember` is for something you were told; this is for something several
+memories told you at once. `derived_from` is required and takes the ids you
+actually read — bare or prefixed, memories or episodes — and they are stored
+on the row, so the claim stays checkable rather than being something a later
+session has to take on faith.
+
+```json
+// reflect { insight: "Timing a build here means warming the cargo cache first",
+//           derived_from: ["01M14XWWAXJG…", "episode:01M14XY6T7RX…"] }
+{ "id": "01M14Z2QF8VN…", "created": true,
+  "content": "Timing a build here means warming the cargo cache first",
+  "derived_from": ["memory:01M14XWWAXJG…", "episode:01M14XY6T7RX…"],
+  "related": [] }
+```
+
+It is stored as a `lesson` unless you say otherwise, so it appears in the
+Lessons section of `context` and fades slowly. `inspect` renders the citations
+as refs it takes as they stand — one call per piece of evidence, each with its
+own history to walk. Ids resolve in the current space and in `user`, so an
+insight about the project may cite what is known about the person.
+
 ## Two rituals
 
-The six tools are what an agent *may* call. These two are what you ask it to
+The seven tools are what an agent *may* call. These two are what you ask it to
 do — MCP prompts, which Claude Code shows as slash commands:
 
 | | |
@@ -451,7 +474,8 @@ stdout. `agmem --help` is the same list with the exact spellings.
 A tool description is most of what decides whether an agent reaches for memory,
 and what counts as good wording depends on the model, the client and the work.
 `AGMEM_TOOL_DESC_<TOOL>` replaces one outright — `REMEMBER`, `RECALL`,
-`CONTEXT`, `FORGET`, `INSPECT`, per server, no rebuild:
+`CONTEXT`, `FORGET`, `INSPECT`, `CONSOLIDATE`, `REFLECT`, per server, no
+rebuild:
 
 ```jsonc
 { "mcpServers": { "agmem": {
@@ -513,6 +537,11 @@ over raw JSON-RPC, all passing:
     `expires_in_days` 19.9 at `access_count` 8. Ranking that list by cosine
     puts duplicates above disagreements, which is the open half of this — see
     the ledger.
+12. `reflect`, citing the claim and the episode from step 1 → `created: true`
+    and `derived_from` echoing both as `memory:<id>` and `episode:<id>`.
+    `inspect` on the new id shows the two links; feeding either straight back
+    to `inspect` lands on the evidence. Citing an id no space holds, or none
+    at all, is refused before anything is written.
 
 ## Troubleshooting
 

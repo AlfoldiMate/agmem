@@ -158,6 +158,16 @@ expression: "&tools.tools"
               "$ref": "#/$defs/DecayClass",
               "description": "How fast it fades between uses."
             },
+            "derived_from": {
+              "description": "What this claim was reflected out of, when `reflect` wrote it: the\nmemories and episodes it was drawn from, as refs to hand straight back\nto `inspect`. Absent on a claim that cites nothing.\n\nThis is what makes a conclusion checkable rather than something to take\non faith — the evidence is named, and each piece of it has its own\nhistory to walk.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "entities": {
               "description": "The subjects it is about.",
               "items": {
@@ -864,6 +874,16 @@ expression: "&tools.tools"
               "$ref": "#/$defs/DecayClass",
               "description": "How fast it fades between uses."
             },
+            "derived_from": {
+              "description": "What this claim was reflected out of, when `reflect` wrote it: the\nmemories and episodes it was drawn from, as refs to hand straight back\nto `inspect`. Absent on a claim that cites nothing.\n\nThis is what makes a conclusion checkable rather than something to take\non faith — the evidence is named, and each piece of it has its own\nhistory to walk.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "entities": {
               "description": "The subjects it is about.",
               "items": {
@@ -1356,6 +1376,173 @@ expression: "&tools.tools"
       "readOnlyHint": true,
       "destructiveHint": false,
       "openWorldHint": false
+    }
+  },
+  {
+    "name": "reflect",
+    "description": "Store something you worked out from what memory already holds, together with the ids it was drawn from.\n\nCall it when reading several memories together tells you something none of them says on its own: a pattern across three failures, what a preference and a constraint mean taken together, the reason behind a decision that only became visible later. This is the verb for a conclusion you reached; `remember` is the verb for something you were told.\n\n`derived_from` is required, and it is the point. Pass the ids you actually read — memory ids, episode ids, bare or prefixed, exactly as `recall`, `remember`, `context` or `inspect` handed them to you. They are stored on the insight and shown by `inspect`, so a later session can see what the conclusion was built on and check whether that evidence still stands, instead of taking it on faith. An insight with nothing behind it is a `remember` call.\n\nStored as a `lesson` unless you say otherwise, which fades slowly and appears in the Lessons section of `context`. Ids are looked for in this space and in the shared `user` space, so an insight about the project may cite what is known about the person.\n\nReturns the id it was stored under. `created: false` means an equivalent insight was already there and nothing was written — read `content`, and if yours says something different, send it again with `supersedes` set to that id. `related` carries live claims near the insight with their text, for the same decision.",
+    "inputSchema": {
+      "$defs": {
+        "Kind": {
+          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
+          "oneOf": [
+            {
+              "const": "fact",
+              "description": "A distilled statement about the world, the user, or the project.",
+              "type": "string"
+            },
+            {
+              "const": "lesson",
+              "description": "A procedural insight: \"X fails when Y; do Z\".",
+              "type": "string"
+            },
+            {
+              "const": "instruction",
+              "description": "A standing behavioral rule, always part of assembled context.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "derived_from": {
+          "description": "The ids this insight was drawn from — memory ids, episode ids, or\nboth, exactly as `recall`, `remember` or `context` handed them to you.\nAt least one; an insight with nothing behind it belongs in `remember`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entities": {
+          "default": [],
+          "description": "The subjects it is about (\"user\", \"project-x\"), for filtered recall.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "insight": {
+          "description": "The insight itself: one atomic, self-contained statement in the third\nperson, understandable with no conversation around it. What you\nconcluded, not the reasoning that got you there.",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Kind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the insight is; defaults to `lesson`."
+        },
+        "space": {
+          "default": null,
+          "description": "Where to store this. Defaults to the space this server was started\nwith; `user` is the reserved space for memory that follows the person\nacross every project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supersedes": {
+          "default": null,
+          "description": "The id of a live claim this insight replaces. The old one is closed and\nstays readable and dated; only the correction is live afterwards.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "default": [],
+          "description": "Free labels. `identity` marks a fact that belongs in every session's\nprofile.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "insight",
+        "derived_from"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "$defs": {
+        "Related": {
+          "description": "A live claim near the insight that was just stored.",
+          "properties": {
+            "content": {
+              "description": "What it says, so the two can be judged without a second lookup.",
+              "type": "string"
+            },
+            "id": {
+              "description": "The id of the older claim — what `supersedes` would take.",
+              "type": "string"
+            },
+            "similarity": {
+              "description": "Cosine similarity between the two, below the duplicate threshold and\nabove the floor for being worth mentioning at all.",
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "content",
+            "similarity"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "description": "What is stored under `id` — your wording when it was written, the\nexisting claim's when it was not.",
+          "type": "string"
+        },
+        "created": {
+          "description": "Whether the row was written now.\n\n`false` means an equivalent insight was already stored and nothing\nchanged. Read `content`: if it says something other than what you sent,\nyours is a correction rather than a repetition, and it is still unsaid\nuntil you send it again with `supersedes` set to `id`.",
+          "type": "boolean"
+        },
+        "derived_from": {
+          "description": "The evidence recorded with the insight, as refs `inspect` takes as they\nstand.\n\nEmpty when `created` is false: nothing was written, and the claim\nalready under `id` keeps whatever evidence it was written with.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "The insight's id — newly minted, or the id of the claim that already\nsaid this.",
+          "type": "string"
+        },
+        "related": {
+          "description": "Live claims near the insight, which it may be correcting.\n\nThese were **not** blocked and are not duplicates — they are here\nbecause a correction and the claim it corrects are near neighbours, and\nthis is the only moment the older one's id is in front of you. If one\nof them is what your insight replaces, send the insight again with\n`supersedes` set to its id. If it is merely related, ignore it.",
+          "items": {
+            "$ref": "#/$defs/Related"
+          },
+          "type": "array"
+        },
+        "superseded": {
+          "description": "The id of the claim closed by a `supersedes` in this call.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "created",
+        "content",
+        "derived_from",
+        "related"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true
     }
   },
   {

@@ -382,6 +382,69 @@ pub enum Source {
     },
 }
 
+/// A piece of evidence a reflection was drawn from (design §3.1, `reflect`).
+///
+/// Serializes as the canonical `memory:<id>` / `episode:<id>` string — the
+/// grammar `inspect` already takes, so a derivation link is followed rather
+/// than translated.
+///
+/// ```
+/// use agmem_core::Derivation;
+/// let cited: Derivation = "memory:01M145SMNET1XRYA713EWAQTD3".parse()?;
+/// assert_eq!(cited.to_string(), "memory:01M145SMNET1XRYA713EWAQTD3");
+/// # Ok::<(), agmem_core::CoreError>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum Derivation {
+    /// A distilled claim the insight was drawn from.
+    Memory(MemoryId),
+    /// Verbatim text the insight was drawn from.
+    Episode(EpisodeId),
+}
+
+impl std::fmt::Display for Derivation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Memory(id) => write!(f, "memory:{id}"),
+            Self::Episode(id) => write!(f, "episode:{id}"),
+        }
+    }
+}
+
+impl std::str::FromStr for Derivation {
+    type Err = CoreError;
+
+    /// # Errors
+    /// [`CoreError::UnknownVariant`] for anything but the two prefixes, and
+    /// [`CoreError::InvalidRecordId`] when the prefix is right and the id is
+    /// not a ULID.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once(':') {
+            Some(("memory", id)) => MemoryId::new(id).map(Self::Memory),
+            Some(("episode", id)) => EpisodeId::new(id).map(Self::Episode),
+            _ => Err(CoreError::UnknownVariant {
+                name: "derivation",
+                value: s.to_owned(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<String> for Derivation {
+    type Error = CoreError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl From<Derivation> for String {
+    fn from(cited: Derivation) -> Self {
+        cited.to_string()
+    }
+}
+
 /// A distilled, supersedable memory as stored.
 ///
 /// Fields mirror the `memory` table; see `docs/design.md` §2.2. Ranking
@@ -425,6 +488,9 @@ pub struct MemoryRecord {
     pub superseded_by: Option<MemoryId>,
     /// Provenance.
     pub source: Source,
+    /// The memories and episodes this claim was reflected out of. Empty for
+    /// everything a `reflect` call did not write.
+    pub derived_from: Vec<Derivation>,
     /// When the row was written.
     pub created_at: Timestamp,
 }
@@ -572,6 +638,37 @@ mod tests {
     }
 
     #[test]
+    fn a_derivation_round_trips_through_the_ref_grammar() {
+        let cited: Derivation = "memory:01M145SMNET1XRYA713EWAQTD3".parse().unwrap();
+        assert_eq!(
+            cited,
+            Derivation::Memory(MemoryId::new("01M145SMNET1XRYA713EWAQTD3").unwrap())
+        );
+        assert_eq!(
+            serde_json::to_value(&cited).unwrap(),
+            serde_json::json!("memory:01M145SMNET1XRYA713EWAQTD3"),
+            "a citation is served as the ref inspect already takes"
+        );
+        assert_eq!(
+            "episode:01M145SMNET1XRYA713EWAQTD3"
+                .parse::<Derivation>()
+                .unwrap()
+                .to_string(),
+            "episode:01M145SMNET1XRYA713EWAQTD3"
+        );
+        for bad in [
+            // A bare ULID says nothing about its table, so the store resolves
+            // one before this type exists.
+            "01M145SMNET1XRYA713EWAQTD3",
+            "chunk:01M145SMNET1XRYA713EWAQTD3",
+            "memory:nope",
+            "",
+        ] {
+            assert!(bad.parse::<Derivation>().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
     fn ids_and_spaces_validate_while_deserializing() {
         assert!(serde_json::from_value::<MemoryId>(serde_json::json!("nope")).is_err());
         assert!(serde_json::from_value::<SpaceName>(serde_json::json!("Nope!")).is_err());
@@ -604,6 +701,9 @@ mod tests {
             source: Source::Episode {
                 episode: EpisodeId::new("01M145SMNET1XRYA713EWAQTD3").unwrap(),
             },
+            derived_from: vec![Derivation::Memory(
+                MemoryId::new("01M145SMNET1XRYA713EWAQTD4").unwrap(),
+            )],
             created_at: Timestamp::UNIX_EPOCH,
         };
 
@@ -615,6 +715,10 @@ mod tests {
                 "kind": "episode",
                 "ref": "01M145SMNET1XRYA713EWAQTD3",
             })
+        );
+        assert_eq!(
+            json["derived_from"],
+            serde_json::json!(["memory:01M145SMNET1XRYA713EWAQTD4"])
         );
         assert_eq!(
             serde_json::from_value::<MemoryRecord>(json).unwrap(),

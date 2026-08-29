@@ -14,8 +14,8 @@
 //! them.
 
 use agmem_core::{
-    ChunkId, DecayClass, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind, MemoryId,
-    MemoryRecord, Source, SpaceName,
+    ChunkId, DecayClass, Derivation, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind,
+    MemoryId, MemoryRecord, Source, SpaceName,
 };
 use jiff::Timestamp;
 use surrealdb::types::{Datetime, RecordId, SurrealValue, Value};
@@ -68,6 +68,14 @@ pub(crate) fn chunk_ref(id: &ChunkId) -> RecordId {
     RecordId::new(EPISODE_CHUNK, id.as_str())
 }
 
+/// The full record id a citation points at, in whichever table it names.
+pub(crate) fn derivation_ref(cited: &Derivation) -> RecordId {
+    match cited {
+        Derivation::Memory(id) => memory_ref(id),
+        Derivation::Episode(id) => episode_ref(id),
+    }
+}
+
 /// The `memory` columns a write supplies, minus `source`.
 ///
 /// `source` is spelled by the query rather than carried here: a memory
@@ -86,6 +94,7 @@ pub(crate) struct MemoryRow {
     pub(crate) decay_class: String,
     pub(crate) valid_from: Datetime,
     pub(crate) supersedes: Option<RecordId>,
+    pub(crate) derived_from: Vec<RecordId>,
 }
 
 /// The `source` object: `{ kind, ref }`, with `ref` absent for `agent`.
@@ -175,7 +184,37 @@ pub(crate) struct MemoryReadRow {
     pub(crate) superseded_by: Option<String>,
     pub(crate) source_kind: String,
     pub(crate) source_ref: Option<String>,
+    pub(crate) derived_from: Vec<DerivationRow>,
     pub(crate) created_at: Datetime,
+}
+
+/// One `derived_from` link, as the two halves a projection can name.
+///
+/// The table travels beside the id rather than as one rendered `table:id`
+/// string, because how the engine escapes a record id in text is its business
+/// and not something a read should have to parse back.
+#[derive(SurrealValue)]
+pub(crate) struct DerivationRow {
+    pub(crate) table: String,
+    pub(crate) id: String,
+}
+
+impl DerivationRow {
+    /// The domain citation this link spells.
+    ///
+    /// # Errors
+    /// [`StoreError::MalformedRow`] when the id is not a ULID, and
+    /// [`StoreError::UnexpectedResponse`] for a table the schema's own type
+    /// assertion cannot have allowed in.
+    fn into_derivation(self) -> Result<Derivation, StoreError> {
+        match self.table.as_str() {
+            MEMORY => Ok(Derivation::Memory(MemoryId::new(self.id)?)),
+            EPISODE => Ok(Derivation::Episode(EpisodeId::new(self.id)?)),
+            _ => Err(StoreError::UnexpectedResponse(
+                "a derivation link names neither a memory nor an episode",
+            )),
+        }
+    }
 }
 
 impl MemoryReadRow {
@@ -209,6 +248,11 @@ impl MemoryReadRow {
             supersedes: self.supersedes.map(MemoryId::new).transpose()?,
             superseded_by: self.superseded_by.map(MemoryId::new).transpose()?,
             source: to_source(&self.source_kind, self.source_ref)?,
+            derived_from: self
+                .derived_from
+                .into_iter()
+                .map(DerivationRow::into_derivation)
+                .collect::<Result<_, StoreError>>()?,
             created_at: to_timestamp(&self.created_at),
         })
     }
@@ -383,6 +427,14 @@ pub(crate) fn kind_str(kind: Kind) -> String {
 /// The row spelling of a decay class.
 pub(crate) fn decay_class_str(class: DecayClass) -> String {
     class.as_str().to_owned()
+}
+
+/// What a [`crate::queries::read::LOCATE`] found: which of the ids asked
+/// about name a memory in the space, and which name an episode.
+#[derive(SurrealValue)]
+pub(crate) struct LocatedRow {
+    pub(crate) memories: Vec<String>,
+    pub(crate) episodes: Vec<String>,
 }
 
 /// The single object a purge returns: what it deleted, by id.

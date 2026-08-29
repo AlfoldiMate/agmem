@@ -505,6 +505,7 @@ mod tests {
             supersedes: None,
             superseded_by: None,
             source: Source::Agent,
+            derived_from: Vec::new(),
             created_at: Timestamp::UNIX_EPOCH,
         }
     }

@@ -8,7 +8,9 @@
 //! share sits here too — [`spaces`] resolves `current|user|all|<name>` the same
 //! way for every read, [`embed_query`] decides once what a dimensionless
 //! embedder means, and [`provenance`] spells a `source` the same way in every
-//! answer.
+//! answer. The two writing tools share [`resolve_space`] and [`memory_id`] for
+//! the same reason: where a claim lands, and what counts as an id, cannot be
+//! two different answers depending on which verb was called.
 //!
 //! # The annotation contract (design §3.1)
 //!
@@ -20,6 +22,7 @@
 //! | `forget` | `destructive_hint = true` |
 //! | `inspect` | `read_only_hint = true, open_world_hint = false` |
 //! | `consolidate` | `read_only_hint = true, open_world_hint = false` |
+//! | `reflect` | `destructive_hint = false, idempotent_hint = true` |
 //!
 //! rmcp omits an unset hint from the wire entirely, and the MCP spec's default
 //! for a *missing* `destructiveHint` is **true** — so a tool that says nothing
@@ -44,6 +47,7 @@ pub mod context;
 pub mod forget;
 pub mod inspect;
 pub mod recall;
+pub mod reflect;
 pub mod remember;
 
 use std::borrow::Cow;
@@ -59,16 +63,17 @@ use std::sync::Arc;
 ///
 /// `list_tools` does **not** report this order — rmcp's `ToolRouter::list_all`
 /// sorts by name.
-pub const NAMES: [&str; 6] = [
+pub const NAMES: [&str; 7] = [
     "remember",
     "recall",
     "context",
     "forget",
     "inspect",
     "consolidate",
+    "reflect",
 ];
 
-use agmem_core::{Source, SpaceName};
+use agmem_core::{MemoryId, Source, SpaceName};
 use agmem_store::{StoreError, repo};
 use rmcp::ErrorData;
 
@@ -130,6 +135,42 @@ pub(crate) async fn embed_query(
         .map_err(|error| internal(format!("embedding the query failed: {error}")))
 }
 
+/// The space a write lands in, registered if it is a new one.
+///
+/// Startup registers the configured space (design §5.1 step 8); a call that
+/// names another one registers it here, so `inspect` can list every space that
+/// actually holds something.
+///
+/// # Errors
+/// [`ErrorData`] with `INVALID_PARAMS` for a name that is not a valid slug.
+pub(crate) async fn resolve_space(
+    service: &AgmemService,
+    requested: Option<&str>,
+) -> Result<SpaceName, ErrorData> {
+    let Some(requested) = requested else {
+        return Ok(service.config().space.clone());
+    };
+    let space: SpaceName = requested
+        .parse()
+        .map_err(|error| invalid(format!("space: {error}")))?;
+    if space != service.config().space {
+        repo::ensure_space(service.db(), &space)
+            .await
+            .map_err(|error| store_error(&error))?;
+    }
+    Ok(space)
+}
+
+/// A memory id as sent, with or without the `memory:` table prefix agmem's own
+/// output leaves off.
+///
+/// # Errors
+/// [`ErrorData`] with `INVALID_PARAMS`, naming `field`, for anything else.
+pub(crate) fn memory_id(raw: &str, field: &str) -> Result<MemoryId, ErrorData> {
+    MemoryId::new(raw.strip_prefix("memory:").unwrap_or(raw))
+        .map_err(|error| invalid(format!("{field}: {error}")))
+}
+
 /// A memory's provenance in the form `inspect`'s `ref` takes.
 ///
 /// One string rather than a nested object, because it is a *pointer*: an agent
@@ -176,6 +217,27 @@ pub(crate) fn store_error(error: &StoreError) -> ErrorData {
 #[cfg(test)]
 mod tests {
     use rmcp::model::ToolAnnotations;
+
+    use super::memory_id;
+
+    #[test]
+    fn a_supersedes_id_is_accepted_with_or_without_its_table() {
+        let bare = "01M145SMNET1XRYA713EWAQTD3";
+        assert_eq!(
+            memory_id(bare, "f").expect("bare ulid").as_str(),
+            memory_id(&format!("memory:{bare}"), "f")
+                .expect("prefixed")
+                .as_str(),
+            "agmem returns bare ULIDs but the schema sketch shows memory:…; \
+             both round-trip"
+        );
+        let error = memory_id("not-an-id", "memories[2].supersedes").expect_err("rejected");
+        assert!(
+            error.message.contains("memories[2].supersedes"),
+            "a rejection has to name the entry that caused it: {}",
+            error.message
+        );
+    }
 
     #[test]
     fn an_unset_hint_is_read_as_the_dangerous_default() {

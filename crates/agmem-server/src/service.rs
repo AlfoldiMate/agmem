@@ -36,6 +36,7 @@ use crate::tools::context::{self, ContextParams};
 use crate::tools::forget::{self, ForgetParams, ForgetResult, Pending};
 use crate::tools::inspect::{self, InspectParams, InspectResult};
 use crate::tools::recall::{self, RecallParams, RecallResult};
+use crate::tools::reflect::{self, ReflectParams, ReflectResult};
 use crate::tools::remember::{self, RememberParams, RememberResult};
 
 /// What the agent is told agmem is for, at `initialize`.
@@ -358,6 +359,37 @@ the shared user space unless you name it with `space`.",
         Parameters(params): Parameters<ConsolidateParams>,
     ) -> Result<Json<ConsolidateResult>, ErrorData> {
         consolidate::run(self, params).await.map(Json)
+    }
+
+    /// The insight verb (design §3.1, issue #26). A reflection is a memory
+    /// row like any other; the citations are what make it one.
+    #[tool(
+        name = "reflect",
+        description = "Store something you worked out from what memory already holds, together \
+with the ids it was drawn from.\n\n\
+Call it when reading several memories together tells you something none of them says on its own: a \
+pattern across three failures, what a preference and a constraint mean taken together, the reason \
+behind a decision that only became visible later. This is the verb for a conclusion you reached; \
+`remember` is the verb for something you were told.\n\n\
+`derived_from` is required, and it is the point. Pass the ids you actually read — memory ids, \
+episode ids, bare or prefixed, exactly as `recall`, `remember`, `context` or `inspect` handed them \
+to you. They are stored on the insight and shown by `inspect`, so a later session can see what the \
+conclusion was built on and check whether that evidence still stands, instead of taking it on \
+faith. An insight with nothing behind it is a `remember` call.\n\n\
+Stored as a `lesson` unless you say otherwise, which fades slowly and appears in the Lessons \
+section of `context`. Ids are looked for in this space and in the shared `user` space, so an \
+insight about the project may cite what is known about the person.\n\n\
+Returns the id it was stored under. `created: false` means an equivalent insight was already \
+there and nothing was written — read `content`, and if yours says something different, send it \
+again with `supersedes` set to that id. `related` carries live claims near the insight with their \
+text, for the same decision.",
+        annotations(destructive_hint = false, idempotent_hint = true)
+    )]
+    async fn reflect(
+        &self,
+        Parameters(params): Parameters<ReflectParams>,
+    ) -> Result<Json<ReflectResult>, ErrorData> {
+        reflect::run(self, params).await.map(Json)
     }
 }
 

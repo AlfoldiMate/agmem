@@ -126,6 +126,15 @@ impl Harness {
             .expect("remember answers with structured content, not just text")
     }
 
+    /// One successful `reflect`, as the structured result an agent reads.
+    async fn reflect(&self, arguments: Value) -> Value {
+        let result = self.call("reflect", arguments).await.expect("reflect");
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        result
+            .structured_content
+            .expect("reflect answers with structured content, not just text")
+    }
+
     /// One successful `recall`, as the structured result an agent reads.
     async fn recall(&self, arguments: Value) -> Value {
         let result = self.call("recall", arguments).await.expect("recall");
@@ -2213,4 +2222,182 @@ async fn consolidate_stays_in_the_current_space_unless_asked_otherwise() {
         1,
         "{asked:#}"
     );
+}
+
+#[tokio::test]
+async fn a_reflection_is_recallable_and_walks_back_to_its_evidence() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let stored = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The cargo build failed twice on a cold disk cache",
+                "entities": ["cargo"]
+            }],
+            "episode": { "content": "Cold cache again. The build took nine minutes." }
+        }))
+        .await;
+    let evidence = stored["created"][0]
+        .as_str()
+        .expect("the claim id")
+        .to_owned();
+    let episode = stored["episode"]
+        .as_str()
+        .expect("the episode id")
+        .to_owned();
+
+    let reflected = agmem
+        .reflect(json!({
+            "insight": "Timing a build on this machine means warming the cargo cache first",
+            "derived_from": [evidence.clone(), format!("episode:{episode}")],
+            "entities": ["cargo"]
+        }))
+        .await;
+    assert_eq!(reflected["created"], json!(true), "{reflected}");
+    let citations = json!([format!("memory:{evidence}"), format!("episode:{episode}")]);
+    assert_eq!(
+        reflected["derived_from"], citations,
+        "a bare id comes back qualified, in the order it was cited: {reflected}"
+    );
+    let insight = reflected["id"].as_str().expect("the insight id").to_owned();
+
+    // Recallable like anything else: a reflection is a memory row, not a
+    // second kind of record. Filters only, so the order is not a search
+    // engine's opinion.
+    let lessons = agmem.recall(json!({ "kinds": ["lesson"] })).await;
+    assert_eq!(
+        hit_contents(&lessons),
+        vec!["Timing a build on this machine means warming the cargo cache first"],
+        "{lessons}"
+    );
+
+    // …and walkable back: `inspect` renders the citations as refs it takes as
+    // they stand, so the evidence behind a conclusion is one call away.
+    let audited = agmem.inspect(&insight).await;
+    assert_eq!(
+        audited["found"]["memory"]["derived_from"], citations,
+        "{audited}"
+    );
+    for cited in citations.as_array().expect("citations") {
+        let followed = agmem.inspect(cited.as_str().expect("a ref")).await;
+        assert_eq!(
+            followed["ref"], *cited,
+            "a citation is a ref inspect answers to unchanged: {followed}"
+        );
+    }
+    let text = agmem.inspect(&format!("episode:{episode}")).await;
+    assert!(
+        text["found"]["derived"]
+            .as_array()
+            .expect("the claims drawn from the text")
+            .iter()
+            .any(|claim| claim["id"].as_str() == Some(evidence.as_str())),
+        "the cited episode still lists what was distilled from it: {text}"
+    );
+
+    // A claim nobody reflected out of anything says so by omission.
+    let plain = agmem.inspect(&evidence).await;
+    assert_eq!(
+        plain["found"]["memory"]["derived_from"],
+        Value::Null,
+        "an empty citation list is absent rather than empty: {plain}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_reflection_has_to_cite_something_the_store_holds() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let claim = agmem
+        .remember(json!({ "memories": [{ "content": "The project pins surrealdb to 3.x" }] }))
+        .await["created"][0]
+        .as_str()
+        .expect("the claim id")
+        .to_owned();
+    const ABSENT: &str = "01M145SMNET1XRYA713EWAQTD3";
+
+    for (arguments, expected) in [
+        (
+            json!({ "insight": "an insight", "derived_from": [] }),
+            "derived_from is empty",
+        ),
+        (
+            json!({ "insight": "   ", "derived_from": [claim.clone()] }),
+            "insight is empty",
+        ),
+        (
+            json!({ "insight": "an insight", "derived_from": [ABSENT] }),
+            "no memory or episode",
+        ),
+        (
+            // The prefix is checked rather than trusted: an id that names the
+            // other table is a mistake worth naming.
+            json!({ "insight": "an insight", "derived_from": [format!("episode:{claim}")] }),
+            "that id names a memory",
+        ),
+        (
+            json!({ "insight": "an insight", "derived_from": [format!("chunk:{ABSENT}")] }),
+            "derived_from takes ids",
+        ),
+    ] {
+        let error = agmem
+            .call("reflect", arguments.clone())
+            .await
+            .expect_err("the call must be refused");
+        assert!(
+            refusal(&error, expected),
+            "{arguments} should be refused with {expected:?}, got {error:?}"
+        );
+    }
+
+    assert!(
+        agmem.memories().await.len() == 1,
+        "a refused reflection writes nothing"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_same_insight_twice_is_reported_rather_than_stored_again() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let evidence = agmem
+        .remember(json!({ "memories": [{ "content": "python scripts here are throwaway" }] }))
+        .await["created"][0]
+        .as_str()
+        .expect("the claim id")
+        .to_owned();
+
+    let first = agmem
+        .reflect(json!({
+            "insight": "rust is the language this project reaches for",
+            "derived_from": [evidence.clone()]
+        }))
+        .await;
+    assert_eq!(first["created"], json!(true), "{first}");
+
+    let again = agmem
+        .reflect(json!({
+            "insight": "rust is what gets written here, whatever the task",
+            "derived_from": [evidence]
+        }))
+        .await;
+    assert_eq!(again["created"], json!(false), "{again}");
+    assert_eq!(
+        again["id"], first["id"],
+        "the answer is the id of the claim that already said this: {again}"
+    );
+    assert_eq!(
+        again["content"], first["content"],
+        "and its wording, so a correction can be told from a repetition: {again}"
+    );
+    assert_eq!(
+        again["derived_from"],
+        json!([]),
+        "nothing was written, so nothing was cited: {again}"
+    );
+    assert_eq!(
+        agmem.memories().await.len(),
+        2,
+        "the store holds the evidence and one insight"
+    );
+    agmem.shutdown().await;
 }

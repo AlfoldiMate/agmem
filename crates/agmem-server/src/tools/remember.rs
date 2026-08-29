@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use agmem_core::{DecayClass, Kind, MemoryId, SpaceName, chunk, dedup};
+use agmem_core::{DecayClass, Kind, chunk, dedup};
 use agmem_store::repo::{self, Batch, NewChunk, NewEpisode, NewMemory, Written};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -21,7 +21,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::service::AgmemService;
-use crate::tools::{internal, invalid, store_error};
+use crate::tools::{internal, invalid, memory_id, resolve_space, store_error};
 
 /// One `remember` call: a batch of distilled claims, optionally with the
 /// verbatim text they were distilled from.
@@ -440,36 +440,6 @@ async fn embed(
     Ok(())
 }
 
-/// The space this call writes to, registered if it is a new one.
-///
-/// Startup registers the configured space (design §5.1 step 8); a call that
-/// names another one registers it here, so `inspect` can list every space that
-/// actually holds something.
-async fn resolve_space(
-    service: &AgmemService,
-    requested: Option<&str>,
-) -> Result<SpaceName, ErrorData> {
-    let Some(requested) = requested else {
-        return Ok(service.config().space.clone());
-    };
-    let space: SpaceName = requested
-        .parse()
-        .map_err(|error| invalid(format!("space: {error}")))?;
-    if space != service.config().space {
-        repo::ensure_space(service.db(), &space)
-            .await
-            .map_err(|error| store_error(&error))?;
-    }
-    Ok(space)
-}
-
-/// A memory id as sent, with or without the `memory:` table prefix agmem's own
-/// output leaves off.
-fn memory_id(raw: &str, field: &str) -> Result<MemoryId, ErrorData> {
-    MemoryId::new(raw.strip_prefix("memory:").unwrap_or(raw))
-        .map_err(|error| invalid(format!("{field}: {error}")))
-}
-
 /// An RFC3339 instant, or a message naming the field that was not one.
 fn timestamp(raw: &str, field: &str) -> Result<Timestamp, ErrorData> {
     raw.parse()
@@ -479,25 +449,6 @@ fn timestamp(raw: &str, field: &str) -> Result<Timestamp, ErrorData> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_supersedes_id_is_accepted_with_or_without_its_table() {
-        let bare = "01M145SMNET1XRYA713EWAQTD3";
-        assert_eq!(
-            memory_id(bare, "f").expect("bare ulid").as_str(),
-            memory_id(&format!("memory:{bare}"), "f")
-                .expect("prefixed")
-                .as_str(),
-            "agmem returns bare ULIDs but the schema sketch shows memory:…; \
-             both round-trip"
-        );
-        let error = memory_id("not-an-id", "memories[2].supersedes").expect_err("rejected");
-        assert!(
-            error.message.contains("memories[2].supersedes"),
-            "a rejection has to name the entry that caused it: {}",
-            error.message
-        );
-    }
 
     #[test]
     fn a_blank_claim_is_refused_before_it_reaches_the_store() {

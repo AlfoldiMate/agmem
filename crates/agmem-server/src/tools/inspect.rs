@@ -12,7 +12,7 @@
 //!
 //! | `ref` | answer |
 //! |---|---|
-//! | `memory:<id>` | the record, its whole supersession chain oldest→newest, and the text it came from |
+//! | `memory:<id>` | the record, its whole supersession chain oldest→newest, the text it came from, and what it was reflected out of |
 //! | a bare id | whichever of those rows it names — a verbatim hit hands out a *chunk* id, which answers with its episode |
 //! | `episode:<id>` | the verbatim text, its retrieval slices, and every claim distilled from it |
 //! | `entity:<name>` | every claim naming that subject, closed ones included |
@@ -139,6 +139,21 @@ pub struct MemoryView {
 
     /// Where it came from: `agent`, `episode:<id>`, or `external:<origin>`.
     pub source: String,
+
+    /// What this claim was reflected out of, when `reflect` wrote it: the
+    /// memories and episodes it was drawn from, as refs to hand straight back
+    /// to `inspect`. Absent on a claim that cites nothing.
+    ///
+    /// This is what makes a conclusion checkable rather than something to take
+    /// on faith — the evidence is named, and each piece of it has its own
+    /// history to walk.
+    ///
+    // An `Option` rather than a `Vec` with `skip_serializing_if`: schemars
+    // marks a bare `Vec` *required* whatever serde then omits, and a schema
+    // that requires a field the answer leaves out is one a strict client is
+    // entitled to reject.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derived_from: Option<Vec<String>>,
 
     /// How fast it fades between uses.
     pub decay_class: DecayClass,
@@ -572,6 +587,13 @@ impl From<MemoryRecord> for MemoryView {
             entities: memory.entities,
             tags: memory.tags,
             source: provenance(&memory.source),
+            derived_from: (!memory.derived_from.is_empty()).then(|| {
+                memory
+                    .derived_from
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            }),
             decay_class: memory.decay_class,
             strength: memory.strength,
             access_count: memory.access_count,

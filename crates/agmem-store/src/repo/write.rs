@@ -5,7 +5,9 @@
 //! either created or an exact duplicate, never as an error. The agent decides
 //! what a duplicate means.
 
-use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup, scoring};
+use agmem_core::{
+    DecayClass, Derivation, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup, scoring,
+};
 use jiff::Timestamp;
 use surrealdb::types::RecordId;
 
@@ -41,6 +43,13 @@ pub struct NewMemory {
     pub supersedes: Option<MemoryId>,
     /// Provenance; `None` means the batch's episode, or `agent` without one.
     pub source: Option<Source>,
+    /// The memories and episodes this claim was reflected out of.
+    ///
+    /// Record links, not foreign keys: nothing here checks that the rows still
+    /// exist, because the caller resolved them to say which table each id
+    /// belongs to in the first place ([`super::locate`]), and a purge is
+    /// allowed to leave a citation pointing at text that is gone.
+    pub derived_from: Vec<Derivation>,
 }
 
 impl NewMemory {
@@ -56,6 +65,7 @@ impl NewMemory {
             valid_from: None,
             supersedes: None,
             source: None,
+            derived_from: Vec::new(),
         }
     }
 }
@@ -236,6 +246,11 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
                 ),
                 valid_from: types::to_datetime(memory.valid_from.unwrap_or_else(now)),
                 supersedes: memory.supersedes.as_ref().map(types::memory_ref),
+                derived_from: memory
+                    .derived_from
+                    .iter()
+                    .map(types::derivation_ref)
+                    .collect(),
             },
         ));
         if !shapes[index].source_is_batch_episode {

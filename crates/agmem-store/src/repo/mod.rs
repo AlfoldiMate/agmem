@@ -12,8 +12,8 @@ mod write;
 pub use read::{
     Candidate, DEFAULT_POOL, Embedded, EpisodeDetail, Filters, Hit, Liveness, Lookup, MAX_POOL,
     Neighbour, Search, SpaceStats, StaleContexts, count_matching, direct_lookup, episode,
-    episode_of_chunk, history_chain, live_vectors, nearest_live, prune_horizon_secs, reinforce,
-    search_hybrid, spaces, stale_contexts, stats,
+    episode_of_chunk, history_chain, live_vectors, locate, nearest_live, prune_horizon_secs,
+    reinforce, search_hybrid, spaces, stale_contexts, stats,
 };
 pub use write::{
     Batch, BatchOutcome, Forget, Forgotten, NewChunk, NewEpisode, NewMemory, Written, ensure_space,

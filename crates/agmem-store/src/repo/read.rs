@@ -15,8 +15,8 @@
 use std::collections::HashMap;
 
 use agmem_core::{
-    ChunkId, Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName, dedup,
-    scoring,
+    ChunkId, Derivation, Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName,
+    dedup, scoring,
 };
 use jiff::Timestamp;
 use surrealdb::engine::any::Any;
@@ -29,8 +29,8 @@ use crate::StoreError;
 use crate::db::Db;
 use crate::queries::read as queries;
 use crate::types::{
-    self, ChainRow, ChunkReadRow, EpisodeDetailRow, LiveVectorsRow, MemoryReadRow, NeighbourRow,
-    SearchRow, StatsRow,
+    self, ChainRow, ChunkReadRow, EpisodeDetailRow, LiveVectorsRow, LocatedRow, MemoryReadRow,
+    NeighbourRow, SearchRow, StatsRow,
 };
 
 /// The candidate pool one recall considers, before `k` truncates it
@@ -654,6 +654,65 @@ pub async fn episode_of_chunk(
         .take::<Option<String>>(script.result_index)?
         .map(EpisodeId::new)
         .transpose()?)
+}
+
+/// What each of `ids` names in `spaces`, in the order they were asked about.
+///
+/// `reflect` is handed citations an agent copied out of an earlier answer, and
+/// those are bare ULIDs: `remember` returns one, a recall hit carries one, and
+/// nothing about a ULID says which table it belongs to. This resolves the lot
+/// in one round-trip, preferring a memory when a ULID somehow names a row in
+/// both tables — the same order `inspect` tries them in.
+///
+/// `None` in a slot means no row in any of `spaces` answers to that id, which is the
+/// caller's error to report rather than this one's: the ids came from an
+/// agent, and naming which one missed is the whole of the useful message.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for an id the engine reported that is not a
+/// ULID.
+pub async fn locate(
+    db: &Db,
+    spaces: &[SpaceName],
+    ids: &[String],
+) -> Result<Vec<Option<Derivation>>, StoreError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let memories: Vec<RecordId> = ids
+        .iter()
+        .map(|id| RecordId::new(types::MEMORY, id.as_str()))
+        .collect();
+    let episodes: Vec<RecordId> = ids
+        .iter()
+        .map(|id| RecordId::new(types::EPISODE, id.as_str()))
+        .collect();
+    let searched: Vec<String> = spaces.iter().map(types::space_str).collect();
+    let mut resp = checked(
+        db.query(queries::LOCATE)
+            .bind(("spaces", searched))
+            .bind(("mids", memories))
+            .bind(("eids", episodes))
+            .await?,
+    )?;
+    let found: LocatedRow =
+        resp.take::<Option<LocatedRow>>(0)?
+            .ok_or(StoreError::UnexpectedResponse(
+                "the id lookup reported nothing",
+            ))?;
+
+    ids.iter()
+        .map(|id| {
+            if found.memories.iter().any(|hit| hit == id) {
+                Ok(Some(Derivation::Memory(MemoryId::new(id.clone())?)))
+            } else if found.episodes.iter().any(|hit| hit == id) {
+                Ok(Some(Derivation::Episode(EpisodeId::new(id.clone())?)))
+            } else {
+                Ok(None)
+            }
+        })
+        .collect()
 }
 
 /// Every space this store knows about, alphabetically.

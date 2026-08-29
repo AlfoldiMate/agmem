@@ -17,7 +17,10 @@ const BOOTSTRAP: &str = "DEFINE TABLE IF NOT EXISTS meta SCHEMAFULL;
      DEFINE FIELD IF NOT EXISTS created_at ON meta TYPE datetime DEFAULT time::now();";
 
 /// Ordered migration batches; index + 1 is the schema version they produce.
-const MIGRATIONS: &[&str] = &[include_str!("migrations/v1_schema.surql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("migrations/v1_schema.surql"),
+    include_str!("migrations/v2_derived_from.surql"),
+];
 
 /// The schema version this binary produces.
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;

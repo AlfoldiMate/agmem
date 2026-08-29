@@ -100,6 +100,8 @@ const MEMORY_FIELDS: &str = "record::id(id) AS id, space, kind, content, content
      source.kind AS source_kind,
      IF type::is_record(source.ref) { record::id(source.ref) } ELSE { source.ref }
          AS source_ref,
+     array::map(derived_from ?? [],
+         |$link| { table: record::table($link), id: record::id($link) }) AS derived_from,
      created_at";
 
 /// Every `episode_chunk` column a read projects, minus `embedding`.
@@ -312,6 +314,21 @@ pub(crate) fn chunk_episode() -> Script {
         "RETURN (SELECT VALUE record::id(episode) FROM $target WHERE space = $space)[0]".to_owned(),
     )
 }
+
+/// Which table in `$space` answers to each of the ids asked about.
+///
+/// A reflection cites ids an agent read off some earlier answer, and a bare
+/// ULID says nothing about its table — the problem `inspect` solves by trying
+/// each table in turn (issue #36). Both are asked in one round-trip here,
+/// because `reflect` has to resolve every citation before it writes anything.
+/// The `space` clause keeps an id a capability inside its space, as every
+/// other read does; an id that names nothing simply appears in neither list.
+pub(crate) const LOCATE: &str = "RETURN {
+     memories: (SELECT VALUE record::id(id) FROM memory
+         WHERE space IN $spaces AND id IN $mids),
+     episodes: (SELECT VALUE record::id(id) FROM episode
+         WHERE space IN $spaces AND id IN $eids)
+ }";
 
 /// One KNN probe per candidate vector: the nearest live memories in `$space`.
 ///

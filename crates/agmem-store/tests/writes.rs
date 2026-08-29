@@ -5,7 +5,7 @@
 //! reported result rather than an aborted transaction, that a rejected row
 //! takes the whole batch down with it — are proven here rather than assumed.
 
-use agmem_core::{DecayClass, InvalidReason, Kind, MemoryId, Source, SpaceName};
+use agmem_core::{DecayClass, Derivation, InvalidReason, Kind, MemoryId, Source, SpaceName};
 use agmem_store::db::Db;
 use agmem_store::repo::{
     self, Batch, Forget, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Written,
@@ -741,5 +741,103 @@ async fn a_second_prune_moves_nothing_the_first_one_left() {
             .1,
         Some(InvalidReason::Forgotten),
         "and it keeps the reason it was closed for"
+    );
+}
+
+#[tokio::test]
+async fn a_reflection_carries_its_citations_and_they_read_back_typed() {
+    let db = store().await;
+    let seeded = repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: Some(NewEpisode::new("cargo build failed on a cold cache")),
+            memories: vec![NewMemory::new(
+                Kind::Fact,
+                "cargo builds fail when the disk cache is cold",
+            )],
+        },
+    )
+    .await
+    .expect("seed the evidence");
+    let evidence = seeded.memories[0].id().clone();
+    let episode = seeded.episode.expect("an episode was written").into_id();
+
+    let mut insight = NewMemory::new(
+        Kind::Lesson,
+        "warm the cargo cache before timing a build on this machine",
+    );
+    insight.derived_from = vec![
+        Derivation::Memory(evidence.clone()),
+        Derivation::Episode(episode.clone()),
+    ];
+    let written = repo::insert_batch(&db, batch(vec![insight]))
+        .await
+        .expect("write the reflection");
+    let id = written.memories[0].id().clone();
+
+    let stored = all_memories(&db, &space())
+        .await
+        .into_iter()
+        .find(|row| row.id == id)
+        .expect("the reflection");
+    assert_eq!(
+        stored.derived_from,
+        vec![Derivation::Memory(evidence), Derivation::Episode(episode),],
+        "citations keep the order they were written in, and each one knows \
+         which table it points at"
+    );
+    assert!(
+        all_memories(&db, &space())
+            .await
+            .into_iter()
+            .filter(|row| row.id != id)
+            .all(|row| row.derived_from.is_empty()),
+        "everything else cites nothing"
+    );
+}
+
+#[tokio::test]
+async fn locate_says_which_table_each_id_belongs_to() {
+    let db = store().await;
+    let seeded = repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: Some(NewEpisode::new("the verbatim text")),
+            memories: vec![NewMemory::new(Kind::Fact, "the distilled claim")],
+        },
+    )
+    .await
+    .expect("seed");
+    let memory = seeded.memories[0].id().clone();
+    let episode = seeded.episode.expect("an episode").into_id();
+
+    let other: SpaceName = "other".parse().expect("valid slug");
+    let stranger = elsewhere(&db, &other, "a claim in another space").await;
+
+    let asked = vec![
+        episode.to_string(),
+        memory.to_string(),
+        stranger.to_string(),
+        "01M145SMNET1XRYA713EWAQTD3".to_owned(),
+    ];
+    assert_eq!(
+        repo::locate(&db, &[space()], &asked).await.expect("locate"),
+        vec![
+            Some(Derivation::Episode(episode)),
+            Some(Derivation::Memory(memory)),
+            // An id is a capability inside its space: one from another space
+            // is as unknown here as one that names nothing at all.
+            None,
+            None,
+        ]
+    );
+    assert!(
+        repo::locate(&db, &[space()], &[])
+            .await
+            .expect("no ids")
+            .is_empty(),
+        "nothing asked about is nothing to ask the store"
     );
 }

@@ -76,7 +76,7 @@ Key properties:
 
 | Spectron | agmem |
 |---|---|
-| 7 verbs: remember/recall/context/reflect/forget/upload/inspect | 5 tools v1: **remember, recall, context, forget, inspect** (+ reflect as an MCP *prompt* ritual, later a persisting tool; upload dropped) |
+| 7 verbs: remember/recall/context/reflect/forget/upload/inspect | 5 tools v1: **remember, recall, context, forget, inspect** (+ reflect as a persisting tool in phase 3, #26; upload dropped) |
 | Server-side 3-stage LLM extraction pipeline | **The calling agent extracts**; tool descriptions + input schemas are the contract |
 | Reconciler (create/update/supersede/flag, confidence floor) | Caller-driven supersession (`supersedes:` param) + server-side dedup gate (exact hash + cosine ≥ 0.95 → report duplicate instead of insert) |
 | Tri-temporal (system/known/valid time) | **Bi-temporal-lite**: `created_at` (known) + `valid_from`/`invalid_at` (valid); supersede-don't-delete chains |
@@ -109,6 +109,7 @@ memory together) trivial.
  memory  (distilled: fact | lesson | instruction)
    │  [FT + HNSW indexes; supersession chain within table]
    ├── supersedes / superseded_by ──▶ memory      (version chain)
+   ├── derived_from: [record]      ──▶ memory | episode   (reflect citations)
    ├── source: {kind, ref}          ▶ episode | external string
    ├── entities: [string]           (denormalized subject index, v1)
    └── tags: [string]
@@ -194,6 +195,8 @@ DEFINE FIELD invalid_reason ON memory TYPE option<string>
 DEFINE FIELD supersedes    ON memory TYPE option<record<memory>>;
 DEFINE FIELD superseded_by ON memory TYPE option<record<memory>>;
 DEFINE FIELD source        ON memory TYPE object;   -- { kind: "episode"|"agent"|"external", ref: option }
+-- schema v2: what a `reflect` insight was drawn from; empty for every other write
+DEFINE FIELD derived_from  ON memory TYPE array<record<memory | episode>> DEFAULT [];
 DEFINE FIELD created_at    ON memory TYPE datetime DEFAULT time::now();
 DEFINE INDEX mem_hash     ON memory COLUMNS space, content_hash UNIQUE;
 DEFINE INDEX mem_entities ON memory COLUMNS entities.*;   -- .* = per element
@@ -277,6 +280,7 @@ session's wording for every project sharing the store.
 | `forget` | `destructive: true` | Soft-invalidate (default) or purge by id/query |
 | `inspect` | `read_only: true, open_world: false` | Provenance, history chains, stats, health |
 | `consolidate` | `read_only: true, open_world: false` | Merge, contradiction and staleness *candidates*, for the agent to act on (phase 3) |
+| `reflect` | `destructive: false, idempotent: true` | Persist an insight with the memory/episode ids it was drawn from (phase 3) |
 
 Input schemas (sketch; exact schemars structs are a phase-1 task):
 
@@ -370,6 +374,26 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // `min_similarity` is the weakest pair *in* the cluster rather than the
 // weakest edge, because clusters are transitive closures — a low number is
 // how a chained group announces itself before it is merged into one claim.
+
+// reflect — a memory row that carries its evidence (#26)
+{
+  "space": "optional string (default: configured space)",
+  "insight": "one atomic, self-contained statement — the conclusion",
+  "derived_from": ["01J…", "memory:01J…", "episode:01J…"],  // required, non-empty
+  "kind": "fact | lesson | instruction (default lesson)",
+  "entities": ["cargo"], "tags": ["identity"],              // optional
+  "supersedes": "memory:01J…"                                // optional
+}
+// → { id, created, content,
+//     derived_from: ["memory:<id>" | "episode:<id>"],  // empty when created is false
+//     related: [{ id, content, similarity }],
+//     superseded? }
+// Citations resolve in the write space ∪ `user`, because an insight about the
+// project is often drawn partly from what is known about the person. A bare
+// ULID is resolved by the store (memory first, then episode); a prefix that
+// disagrees with what the id names is refused rather than corrected. The
+// write is `remember`'s: one embedding, the same near-dup gate, the same
+// correction candidates from the same probe.
 ```
 
 Behavioral rules baked into the tools:
@@ -384,6 +408,12 @@ Behavioral rules baked into the tools:
   ops confirm scope by construction, not by convention.
 - Every write records `source` (episode link when the episode is provided in
   the same call, `"agent"` otherwise) — no anonymous facts (poisoning defense).
+- `reflect` records `source: agent` like any other agent-authored claim, and
+  additionally `derived_from`: the ids it was drawn from. That is the
+  Generative Agents pattern kept on this side of the no-server-side-LLM line —
+  the agent does the reflecting, agmem stores the conclusion *with* what it
+  was built on, and `inspect` renders the links so a later session can check
+  the evidence instead of taking the conclusion on faith.
 
 ### 3.2 `context` assembly (fixed section order, budget-capped)
 

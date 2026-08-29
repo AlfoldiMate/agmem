@@ -1,0 +1,37 @@
+{
+  "scenario": "multihop",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.vTRgNziFDB",
+  "answer": "The atlas search index is owned by the **harbour crew**, and their tech lead is **Priya Raman** — that's who you'd want to talk to about the stale index.\n\nA couple of relevant details from what I found: atlas runs a nightly refresh job at 02:00 UTC (which apparently didn't complete or succeed last night), and the index is rebuilt from Postgres, so worst case it can just be discarded and regenerated if a quick fix isn't obvious.",
+  "cost_usd": 0.06832840000000001,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index ownership who is responsible",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is rebuilt from Postgres, so it can always be discarded and regenerated.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M17KJS75APMAPPV68GS765BW\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249994009200464,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999997603680186,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:32:36.421105Z\\\"},{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17KJSS83X7XW6TCBKZ1J0DN\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9041152492274126,\\\"signals\\\":{\\\"importance\\\":0."
+    }
+  ]
+}

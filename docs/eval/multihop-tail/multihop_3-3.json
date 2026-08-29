@@ -1,0 +1,66 @@
+{
+  "scenario": "multihop_3",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "context"
+  ],
+  "calls": 4,
+  "superseded": false,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 4,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.5KXeEYJiqb",
+  "answer": "Ownership: the **atlas search index is owned by the harbour crew**, whose tech lead is **Priya Raman** — but Priya is on sabbatical until October, so **Ines Fabre** is standing in as acting lead. She's who you should actually be talking to this week.\n\nTwo other things worth noting since it's fresh (stale index this week):\n- Atlas runs a nightly reindex job at 02:00 UTC — worth checking if that job actually ran/failed, since it's the direct mechanism behind the staleness.\n- There's a related lesson on file: a deploy of atlas that skipped `bin/ship.sh` previously left the search index stale and cost the team an afternoon of downtime — worth ruling out as the cause here too.",
+  "cost_usd": 0.115354,
+  "agent_turns": 7,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas search index owner responsible on-call",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"No personal data is written to the atlas search index.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M17KNRWK8Y1HZZVMRH51WGQ7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249993940661856,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999975762647428,\\\"rrf\\\":0.032018442622950824,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:34:13.78719Z\\\"},{\\\"content\\\":\\\"The atlas support inbox is triaged by whoever is on call.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M17KNRWVT2C8NNND13PDNT2C\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.910596865997343,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999975779353406,\\\"rrf\\\":0.03151364"
+    },
+    {
+      "turn": 0,
+      "tool": "context",
+      "input": {
+        "query": "atlas search index ownership team on-call"
+      },
+      "answer": "[{\"type\":\"text\",\"text\":\"# Memory context (spaces: eval + user)\\n\\n## Instructions\\n- Billing questions about atlas go to the finance team rather than support. `01M17KNRX2FXRRHS9Z6V0SS6AX`\\n- Postmortems for atlas are blameless and published internally within a week. `01M17KNRWBXFRMNE75WB2N77JP`\\n- A security advisory affecting atlas is triaged within two working days. `01M17KNRSC0N4H0K0Q0EXVSWQT`\\n- A flag in atlas is deleted within a month of full rollout. `01M17KNRQZ80BA51RQ8V3SX7PT`\\n- Every write endpoint in atlas requires an idempotency key. `01M17KNRM111GAZHRNX7DGGKDF`\\n- Never commit directly to atlas main; open a pull request even for a one-line change. `01M17KNRBNBCFSWQSPH1985WTF`\\n-"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "harbour crew lead contact person this week vacation covering on-call rotation",
+        "space": "all",
+        "k": 15
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Priya Raman is on sabbatical until October and Ines Fabre is standing in for her.\\\",\\\"entities\\\":[\\\"priya-raman\\\",\\\"ines-fabre\\\"],\\\"id\\\":\\\"01M17KNS0CHSX29P16C82N4C8H\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249991629240866,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999966516963463,\\\"rrf\\\":0.03289369100844511,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:34:13.787268Z\\\"},{\\\"content\\\":\\\"Priya Raman is the tech lead of the harbour crew.\\\",\\\"entities\\\":[\\\"harbour-crew\\\",\\\"priya-raman\\\"],\\\"id\\\":\\\"01M17KNRZGMDSD92T9MB16SVPP\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9157656035244129,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "who is on call this week for atlas",
+        "space": "all",
+        "k": 15
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The on-call rotation for atlas is weekly and hands over on Tuesday mornings.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M17KNRF02VQARW3EXR4ZCXZ8\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999850493059,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999940197224,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:34:13.786906Z\\\"},{\\\"content\\\":\\\"The atlas support inbox is triaged by whoever is on call.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M17KNRWVT2C8NNND13PDNT2C\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.89721624498014,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999960228473,"
+    }
+  ]
+}

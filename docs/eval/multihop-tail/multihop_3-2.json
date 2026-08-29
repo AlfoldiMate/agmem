@@ -1,0 +1,69 @@
+{
+  "scenario": "multihop_3",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "context"
+  ],
+  "calls": 4,
+  "superseded": false,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 4,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.I6upqIW8wL",
+  "answer": "Ownership and current contact:\n\n- **Owner:** The atlas search index is owned by the **harbour crew**. Nominal tech lead is **Priya Raman** — but she's on sabbatical until October.\n- **Talk to this week:** **Ines Fabre**, who is standing in for Priya as the harbour crew's tech lead while she's out.\n- Also worth knowing: the on-call rotation for atlas is weekly and hands over Tuesday mornings, and the support inbox is triaged by whoever's currently on call — so if this is urgent/operational rather than a design question, check who's on the current on-call rotation via PagerDuty rather than waiting on Ines.\n\nOne relevant lesson on file: a prior stale-index incident was caused by a deploy that skipped `bin/ship.sh` — worth checking if that happened again before escalating.",
+  "cost_usd": 0.11456,
+  "agent_turns": 7,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "who owns the atlas search index, on-call, oncall rotation",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M17KMWNC80GBMGXAX0JT5QT4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249990297589429,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999961190357717,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:33:44.791603Z\\\"},{\\\"content\\\":\\\"The atlas search index is rebuilt from Postgres, so it can always be discarded and regenerated.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M17KMVZJ5A6N1HWZQQ0MYGE4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.882726480952644,\\\"signals\\\":{\\\"importance\\\":0.5"
+    },
+    {
+      "turn": 0,
+      "tool": "context",
+      "input": {
+        "query": "atlas search index owner responsible team on-call"
+      },
+      "answer": "[{\"type\":\"text\",\"text\":\"# Memory context (spaces: eval + user)\\n\\n## Instructions\\n- Billing questions about atlas go to the finance team rather than support. `01M17KMWK0800DZDTEJAM370C2`\\n- Postmortems for atlas are blameless and published internally within a week. `01M17KMWJ8T3S5V4C3TV636N73`\\n- A security advisory affecting atlas is triaged within two working days. `01M17KMWEXCBKJ5YCYT4R181NG`\\n- A flag in atlas is deleted within a month of full rollout. `01M17KMWDCG4SNCSHDG0M3HSQB`\\n- Every write endpoint in atlas requires an idempotency key. `01M17KMW8VPENZWWC4SHKASZM6`\\n- Never commit directly to atlas main; open a pull request even for a one-line change. `01M17KMW10MF2ZQC4ES442J9SP`\\n-"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "on call this week rotation vacation out of office harbour crew",
+        "space": "all",
+        "entities": [
+          "harbour-crew",
+          "atlas",
+          "priya-raman"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The on-call rotation for atlas is weekly and hands over on Tuesday mornings.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M17KMW3VF9N51R3PPWRHFGEZ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249987198974903,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999948795899612,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:33:44.791267Z\\\"},{\\\"content\\\":\\\"Alerts from atlas page the on-call rota through PagerDuty.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M17KMW3KTAKVRYB3SXHH1Z5X\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8742589458598999,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994455443667"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "harbour crew team members roles",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas billing exports are owned by the lighthouse crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"billing-exports\\\",\\\"lighthouse-crew\\\"],\\\"id\\\":\\\"01M17KMWNW6SPF58RMRN1Y2Y5H\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249987528481918,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999950113927673,\\\"rrf\\\":0.0386434143549893,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T20:33:44.791614Z\\\"},{\\\"content\\\":\\\"Priya Raman is the tech lead of the harbour crew.\\\",\\\"entities\\\":[\\\"harbour-crew\\\",\\\"priya-raman\\\"],\\\"id\\\":\\\"01M17KMWNMNXM4RKP010QPT1K6\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8048986182449467,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0."
+    }
+  ]
+}

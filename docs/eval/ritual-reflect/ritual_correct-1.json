@@ -1,0 +1,51 @@
+{
+  "scenario": "ritual_correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.faFrNbtbIR",
+  "answer": "Checkpoint complete.\n\n- **Saved:** the user now formats Python with `ruff format`, not black; black is uninstalled in their projects.\n- **Corrected:** superseded the old claim that \"the user formats Python with black.\"\n- **Left out:** nothing else — the session had no other durable content to capture.",
+  "cost_usd": 0.0731716,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "code formatter black ruff format"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M175JJ9WQ01EHVTMM0S8T6KP\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999508095044,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999980323801765,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:27:49.436597Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user formats Python with ruff format, not black; black is uninstalled in their projects.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity"
+            ],
+            "supersedes": "01M175JJ9WQ01EHVTMM0S8T6KP"
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "checkpoint-2026-08-29"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M175JXVB19ZGPBPXKCHVNG0Q\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M175JXV121RSEWZSH97MN9K1\\\",\\\"related\\\":[],\\\"superseded\\\":[\\\"01M175JJ9WQ01EHVTMM0S8T6KP\\\"]}\""
+    }
+  ]
+}

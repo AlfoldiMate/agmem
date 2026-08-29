@@ -467,7 +467,11 @@ What the sketch leaves out, settled while building it (#19):
 - `checkpoint` — end of session: review the conversation for what is durable,
   **`recall` each candidate before writing it** to find the id it corrects,
   then one batched `remember` with `supersedes` set on the corrections, then
-  say what was saved and what was left out.
+  say what was saved and what was left out. A candidate the agent *concluded*
+  from what that recall returned goes through `reflect` instead, citing those
+  ids — the one write no description can ask for, since the ids do not exist
+  until step 2 has run (#26 measured `reflect` at 0/3 from its description
+  alone, with all three runs writing the insight through `remember`).
 
 Both take one optional `focus` argument — free text, because that is how a
 client renders a prompt argument (Claude Code passes whatever follows the

@@ -172,6 +172,43 @@ const CONSOLIDATE_FILLER = [
     {content: "The data retention policy for atlas is written up in docs/retention.md." kind: "fact" entities: ["atlas" "docs"]}
 ]
 
+# Four claims that each say something small and true, and together say something
+# none of them says: the timeout is the cold cache. Nothing in the seed states
+# the conclusion, so an insight here is a claim the store did not already hold —
+# which is the whole difference between `reflect` and `remember`.
+#
+# The two distractors are there to be left out of `derived_from`. An insight
+# that cites everything it read cites nothing in particular.
+const REFLECT_SEED = [
+    {
+        content: "The atlas CI job starts every release build with an empty cargo registry cache."
+        kind: "fact"
+        entities: ["atlas"]
+        tags: ["ci"]
+    }
+    {
+        content: "A cold cargo registry cache adds about 18 minutes to an atlas release build."
+        kind: "fact"
+        entities: ["atlas"]
+        tags: ["ci"]
+    }
+    {
+        content: "The atlas CI pipeline cancels any job still running after 30 minutes."
+        kind: "fact"
+        entities: ["atlas"]
+        tags: ["ci"]
+    }
+    {
+        content: "The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19."
+        kind: "fact"
+        entities: ["atlas"]
+        tags: ["ci"]
+    }
+    {content: "The atlas team reviews pull requests on Tuesdays." kind: "fact" entities: ["atlas"]}
+    {content: "Project atlas pins surrealdb to the 3.x line." kind: "fact" entities: ["atlas"]}
+]
+
+
 const SCENARIOS = [
     {
         name: "orient"
@@ -308,40 +345,27 @@ const SCENARIOS = [
         #
         # The two distractors are there to be left out of `derived_from`. An
         # insight that cites everything it read cites nothing in particular.
-        seed: [
-            {
-                content: "The atlas CI job starts every release build with an empty cargo registry cache."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["ci"]
-            }
-            {
-                content: "A cold cargo registry cache adds about 18 minutes to an atlas release build."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["ci"]
-            }
-            {
-                content: "The atlas CI pipeline cancels any job still running after 30 minutes."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["ci"]
-            }
-            {
-                content: "The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19."
-                kind: "fact"
-                entities: ["atlas"]
-                tags: ["ci"]
-            }
-            {content: "The atlas team reviews pull requests on Tuesdays." kind: "fact" entities: ["atlas"]}
-            {content: "Project atlas pins surrealdb to the 3.x line." kind: "fact" entities: ["atlas"]}
-        ]
+        seed: $REFLECT_SEED
         # No tool is named and memory is named only as "what you already know",
         # the way a user actually asks. The second clause asks for the answer
         # to outlive the conversation without saying how — `remember` would be
         # a defensible call here, and a run that makes one instead is the
         # result this scenario exists to see.
         turns: ["The atlas release build got cancelled again this morning. From what you already know about this project, work out why this keeps happening — and I would rather not have to work it out again next month."]
+        want: ["reflect"]
+        avoid: []
+    }
+    {
+        name: "ritual_reflect"
+        asks: "does the checkpoint prompt get the citation the description could not?"
+        # `reflect` with the ritual added, the same way `ritual` is `store` with
+        # the ritual added. Same seed, same first turn, one extra turn — so the
+        # pair is a controlled comparison and `reflect` at 0/3 is its control.
+        seed: $REFLECT_SEED
+        turns: [
+            "The atlas release build got cancelled again this morning. From what you already know about this project, work out why this keeps happening — and I would rather not have to work it out again next month."
+            "/mcp__agmem__checkpoint"
+        ]
         want: ["reflect"]
         avoid: []
     }

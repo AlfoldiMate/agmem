@@ -1,0 +1,631 @@
+[
+  {
+    "scenario": "ritual",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "remember",
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.7zVWpQJA6S",
+    "answer": "Only one durable item came out of this session, and it's already stored (id `01M175H17JD835HBBDB06JTK40`) with no conflicting or duplicate claim found. Nothing else in the session was durable — no derived insight to `reflect` on, just a direct instruction I already recorded verbatim.\n\n**Summary:**\n- Saved: nothing new (already stored in the prior turn)\n- Corrected: nothing\n- Left out: nothing else — the session was just this one preference",
+    "cost_usd": 0.08198640000000001,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for their error types — never the reverse. This convention was established because violating it caused problems twice.",
+              "kind": "instruction",
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ],
+              "entities": [
+                "project"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175H17JD835HBBDB06JTK40\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "library crates thiserror binaries anyhow error handling convention",
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for their error types — never the reverse. This convention was established because violating it caused problems twice.\\\",\\\"entities\\\":[\\\"project\\\"],\\\"id\\\":\\\"01M175H17JD835HBBDB06JTK40\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:26:59.185717Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "remember",
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.lrWq2NVWMn",
+    "answer": "Confirmed the claim is already stored — nothing new to write this round.\n\nCheckpoint summary:\n- **Saved:** nothing new — the sole durable item from this session (library crates → `thiserror`, binaries → `anyhow`, never reversed) was already stored as an instruction (`01M175HKRFEGRBKMG6DK92HJQ7`) in the prior turn.\n- **Corrected:** nothing.\n- **Left out:** the rest of the session was tool-schema loading and the remember call itself — mechanics, not durable content.",
+    "cost_usd": 0.0849274,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs — never the reverse (e.g. a library using anyhow or a binary using thiserror).",
+              "kind": "instruction",
+              "decay_class": "pinned",
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ],
+              "entities": [
+                "project"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.",
+            "session": "rust-error-handling-convention"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175HKRFEGRBKMG6DK92HJQ7\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M175HKR7GRWKTBYE3KYY7FFS\\\",\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "error handling convention: thiserror for libraries, anyhow for binaries",
+          "tags": [
+            "rust",
+            "error-handling",
+            "convention"
+          ]
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs — never the reverse (e.g. a library using anyhow or a binary using thiserror).\\\",\\\"entities\\\":[\\\"project\\\"],\\\"id\\\":\\\"01M175HKRFEGRBKMG6DK92HJQ7\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"episode:01M175HKR7GRWKTBYE3KYY7FFS\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:27:18.151371Z\\\"},{\\\"content\\\":\\\"Heads up for future work on this codebase: I want library crates to use thiserror for their "
+      }
+    ]
+  },
+  {
+    "scenario": "ritual",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "remember",
+      "recall"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.FibygZ4M6V",
+    "answer": "Already stored, exact match — nothing to add.\n\n- **Saved:** nothing new (this session's only durable item — the thiserror/anyhow convention for libraries vs. binaries — was already stored earlier in the session as memory `01M175J538M2N21MH89VFFAPVB`).\n- **Corrected:** nothing.\n- **Left out:** the rest of the session was just the tool-loading/storage mechanics themselves, which aren't durable content worth recording.",
+    "cost_usd": 0.0829072,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs — never the reverse (library using anyhow or binary using thiserror). This convention has been violated twice before, causing problems.",
+              "kind": "instruction",
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ],
+              "entities": [
+                "project"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175J538M2N21MH89VFFAPVB\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "library crates thiserror binaries anyhow error handling convention",
+          "entities": [
+            "project"
+          ]
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow for theirs — never the reverse (library using anyhow or binary using thiserror). This convention has been violated twice before, causing problems.\\\",\\\"entities\\\":[\\\"project\\\"],\\\"id\\\":\\\"01M175J538M2N21MH89VFFAPVB\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:27:35.912242Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": true,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.faFrNbtbIR",
+    "answer": "Checkpoint complete.\n\n- **Saved:** the user now formats Python with `ruff format`, not black; black is uninstalled in their projects.\n- **Corrected:** superseded the old claim that \"the user formats Python with black.\"\n- **Left out:** nothing else — the session had no other durable content to capture.",
+    "cost_usd": 0.0731716,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "code formatter black ruff format"
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M175JJ9WQ01EHVTMM0S8T6KP\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999508095044,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999980323801765,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:27:49.436597Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user formats Python with ruff format, not black; black is uninstalled in their projects.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity"
+              ],
+              "supersedes": "01M175JJ9WQ01EHVTMM0S8T6KP"
+            }
+          ],
+          "episode": {
+            "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+            "session": "checkpoint-2026-08-29"
+          }
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175JXVB19ZGPBPXKCHVNG0Q\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M175JXV121RSEWZSH97MN9K1\\\",\\\"related\\\":[],\\\"superseded\\\":[\\\"01M175JJ9WQ01EHVTMM0S8T6KP\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "remember",
+      "recall"
+    ],
+    "calls": 3,
+    "superseded": true,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.kxXAURoznQ",
+    "answer": "This claim was already stored and correctly superseded the prior \"user formats Python with black\" claim during the conversation. There's nothing else durable in this session — it was a single fact statement, already checkpointed.\n\n**Summary:**\n- **Saved:** nothing new (already stored this turn)\n- **Corrected:** nothing new (the black→ruff format correction already happened earlier in this session)\n- **Left out:** nothing else — the session contained no other decisions, conventions, or lessons worth persisting",
+    "cost_usd": 0.0941816,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity",
+                "tooling"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M175K1CV83SMXJG6PJNWGBYA\\\",\\\"of\\\":0,\\\"similarity\\\":0.9566595736127156}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity",
+                "tooling"
+              ],
+              "supersedes": "01M175K1CV83SMXJG6PJNWGBYA"
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175K9CN94909Q2FYQBZN7MK\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M175K1CV83SMXJG6PJNWGBYA\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "user's Python code formatter preference ruff black",
+          "entities": [
+            "user"
+          ]
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user has moved off black for Python code formatting and now uses ruff format instead; black is uninstalled in their environment.\\\",\\\"entities\\\":[\\\"user\\\"],\\\"id\\\":\\\"01M175K9CN94909Q2FYQBZN7MK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249994702926907,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999978811707633,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\",\\\"tooling\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:28:13.077211Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_correct",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "remember",
+      "recall"
+    ],
+    "calls": 3,
+    "superseded": true,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.SLxQDX95Um",
+    "answer": "This claim is already stored and current — no further write needed.\n\nCheckpoint summary:\n- **Saved (already done earlier this session):** the user formats Python with `ruff format`, not black; black is uninstalled.\n- **Corrected:** replaced the stale claim \"the user formats Python with black\" with the above.\n- **Left out:** nothing else in this session was durable — no other decisions, conventions, or lessons emerged.",
+    "cost_usd": 0.08906280000000001,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user formats Python code with ruff format instead of black; black is uninstalled from their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity",
+                "tooling"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M175KPN4YCBG7VD9RRKW7V8G\\\",\\\"of\\\":0,\\\"similarity\\\":0.9587706825186721}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The user formats Python code with ruff format instead of black; black is uninstalled from their environment.",
+              "kind": "fact",
+              "entities": [
+                "user"
+              ],
+              "tags": [
+                "identity",
+                "tooling"
+              ],
+              "supersedes": "01M175KPN4YCBG7VD9RRKW7V8G"
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175KYCNWBDV37G9C1DVMWA3\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M175KPN4YCBG7VD9RRKW7V8G\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "user's Python code formatter tool",
+          "entities": [
+            "user"
+          ],
+          "tags": [
+            "tooling"
+          ]
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python code with ruff format instead of black; black is uninstalled from their environment.\\\",\\\"entities\\\":[\\\"user\\\"],\\\"id\\\":\\\"01M175KYCNWBDV37G9C1DVMWA3\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249995430393643,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999981721574576,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\",\\\"tooling\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:28:34.58083Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_reflect",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "recall",
+      "context",
+      "remember",
+      "reflect"
+    ],
+    "calls": 7,
+    "superseded": true,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.uGVa9ygfrH",
+    "answer": "Checkpoint done.\n\n- **Saved**: the cancellation-history fact now includes the new 2026-08-29 occurrence (supersedes the old 8/11+8/19-only version).\n- **Corrected**: replaced the root-cause lesson I'd stored earlier this turn via `remember` with a proper `reflect` insight carrying `derived_from` (the empty-cache, 18-min-cost, 30-min-timeout, and cancellation-history facts) — same conclusion, but now traceable to its evidence instead of stored as a bare claim.\n- **Left out**: everything else in the session was either already-stored background facts (surrealdb pin, Tuesday PR reviews) or one-turn scratch work (checking the local directory for a repo, tool-schema lookups) with nothing durable to add.",
+    "cost_usd": 0.1864668,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled why",
+          "space": "all",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175MA34QV1E9ND4P3006CBJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999565437241,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999982617489644,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:28:46.54562Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175MA2Z23QBT6B02HAZFHD1\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476666337186642,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999998260614475"
+      },
+      {
+        "turn": 0,
+        "tool": "context",
+        "input": {
+          "query": "atlas release build pipeline CI"
+        },
+        "answer": "[{\"type\":\"text\",\"text\":\"# Memory context (spaces: eval + user)\\n\\n## Relevant\\n- The atlas CI job starts every release build with an empty cargo registry cache. `01M175MA2HP9WPDX1KRWWPMP5Q`\\n- The atlas CI pipeline cancels any job still running after 30 minutes. `01M175MA2Z23QBT6B02HAZFHD1`\\n- A cold cargo registry cache adds about 18 minutes to an atlas release build. `01M175MA2TPY0VJ5QVPQWCF991`\\n- Project atlas pins surrealdb to the 3.x line. `01M175MA3E94SZ8Z6YAPGB9S0E`\\n- The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19. `01M175MA34QV1E9ND4P3006CBJ`\\n- The atlas team reviews pull requests on Tuesdays. `01M175MA397BPBG2XPKWV6XY45`\"}]"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "content": "The atlas release build gets cancelled roughly every 2-3 weeks because CI has no cargo registry cache (cold cache adds ~18min) combined with a fixed 30-minute job cancellation timeout, leaving too little margin; fix is to add cargo registry/target caching to the release CI workflow.",
+          "kind": "lesson"
+        },
+        "answer": "\"failed to deserialize parameters: missing field `memories`\""
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build is repeatedly cancelled by CI because the 30-minute job cancellation timeout leaves too little margin once a cold cargo registry cache (no caching configured) adds ~18 minutes to every build; the fix is to add cargo registry/target caching to the release CI workflow rather than re-diagnosing the timeout each time.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175N84WR2BBN4CZN4AMXVJB\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M175MA2HP9WPDX1KRWWPMP5Q\\\",\\\"of\\\":0,\\\"similarity\\\":0.9319851514061238},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M175MA2TPY0VJ5QVPQWCF991\\\",\\\"of\\\":0,\\\"similarity\\\":0.9278944878358074},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"id\\\":\\\"01M175MA2Z23QBT6B02HAZFHD1\\\",\\\"of\\\":0,\\\"similarity\\\":0.9172241566423273},{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again"
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled dates history",
+          "space": "all",
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175MA34QV1E9ND4P3006CBJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249987160017636,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999994864007055,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:28:46.54562Z\\\"},{\\\"content\\\":\\\"The atlas release build is repeatedly cancelled by CI because the 30-minute job cancellation timeout leaves too little margin once a cold cargo registry cache (no caching configured) adds ~18 minutes to every build; the fix is to add cargo regis"
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build was cancelled by CI on 2026-08-11, 2026-08-19, and again on 2026-08-29.",
+              "kind": "fact",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "supersedes": "01M175MA34QV1E9ND4P3006CBJ"
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175P4ZMNSJ37WZNJ3AF5W89\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M175MA34QV1E9ND4P3006CBJ\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "reflect",
+        "input": {
+          "insight": "The atlas release build's recurring CI cancellations are caused by the fixed 30-minute job timeout leaving too little margin once the empty cargo registry cache adds ~18 minutes to every build; adding cargo registry/target caching to the release CI workflow would remove the recurring cancellations rather than needing re-diagnosis each time.",
+          "derived_from": [
+            "01M175MA2HP9WPDX1KRWWPMP5Q",
+            "01M175MA2TPY0VJ5QVPQWCF991",
+            "01M175MA2Z23QBT6B02HAZFHD1",
+            "01M175MA34QV1E9ND4P3006CBJ"
+          ],
+          "supersedes": "01M175N84WR2BBN4CZN4AMXVJB",
+          "entities": [
+            "atlas"
+          ],
+          "tags": [
+            "ci"
+          ]
+        },
+        "answer": "\"{\\\"content\\\":\\\"The atlas release build's recurring CI cancellations are caused by the fixed 30-minute job timeout leaving too little margin once the empty cargo registry cache adds ~18 minutes to every build; adding cargo registry/target caching to the release CI workflow would remove the recurring cancellations rather than needing re-diagnosis each time.\\\",\\\"created\\\":true,\\\"derived_from\\\":[\\\"memory:01M175MA2HP9WPDX1KRWWPMP5Q\\\",\\\"memory:01M175MA2TPY0VJ5QVPQWCF991\\\",\\\"memory:01M175MA2Z23QBT6B02HAZFHD1\\\",\\\"memory:01M175MA34QV1E9ND4P3006CBJ\\\"],\\\"id\\\":\\\"01M175P76BB541HAPV265TMSQG\\\",\\\"related\\\":[],\\\"superseded\\\":\\\"01M175N84WR2BBN4CZN4AMXVJB\\\"}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_reflect",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember",
+      "reflect",
+      "inspect"
+    ],
+    "calls": 5,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.CjE1BNvZDP",
+    "answer": "The claim was already stored verbatim, so the store deduped rather than creating a fresh provenance-linked record — the content is live and correct either way.\n\n**Checkpoint summary:**\n- **Saved:** One lesson — the atlas release-build cancellation root cause (cold cargo cache + 30-min CI timeout leave only ~12 min margin) and the recommended fix (persist the cargo cache, not just raise the timeout). Already live in memory from mid-session.\n- **Corrected:** Nothing — attempted to re-file it via `reflect` with proper `derived_from` provenance, but the store recognized it as identical to the existing entry and deduped rather than creating a new record, so no change was made.\n- **Left out:** The individual underlying facts (cache-empty-by-default, 18-min penalty, 30-min timeout, past cancellation dates) — these were already in memory from before this session, not new.",
+    "cost_usd": 0.18350360000000002,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled failing",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175PCX59W4R6WV260NKTWDK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249994870713595,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999979482854381,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:29:54.962914Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175PCX0GV32BS2NTRB0EQKK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476665553511046,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999979471442"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build is repeatedly cancelled by CI because a cold cargo registry cache (no cache persisted between builds) adds ~18 minutes to every release build, leaving only ~12 minutes of margin under atlas CI's 30-minute hard job timeout; any minor slowdown in the actual build pushes it over and CI kills the job. Fix: persist/restore the cargo registry cache (and ideally target/) between release builds keyed on Cargo.lock, rather than just raising the timeout.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "decay_class": "slow"
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175QAH1AFCZ7DZA4Z10FY52\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M175PCWVFZHPZBY084RFDY7G\\\",\\\"of\\\":0,\\\"similarity\\\":0.9198572170436541},{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M175PCWKWJCA7C54BNHPFCHK\\\",\\\"of\\\":0,\\\"similarity\\\":0.915188379189239},{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M175PCX59W4R6WV260NKTWDK\\\",\\\"of\\\":0,\\\"similarity\\\":0.888218502083749},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running afte"
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "why does the atlas release build keep getting cancelled",
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build is repeatedly cancelled by CI because a cold cargo registry cache (no cache persisted between builds) adds ~18 minutes to every release build, leaving only ~12 minutes of margin under atlas CI's 30-minute hard job timeout; any minor slowdown in the actual build pushes it over and CI kills the job. Fix: persist/restore the cargo registry cache (and ideally target/) between release builds keyed on Cargo.lock, rather than just raising the timeout.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175QAH1AFCZ7DZA4Z10FY52\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.9624996373592041,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"retention\\\":0.999998549436816,\\\"rrf\\\":0.032266458495"
+      },
+      {
+        "turn": 1,
+        "tool": "reflect",
+        "input": {
+          "insight": "The atlas release build is repeatedly cancelled by CI because a cold cargo registry cache (no cache persisted between builds) adds ~18 minutes to every release build, leaving only ~12 minutes of margin under atlas CI's 30-minute hard job timeout; any minor slowdown in the actual build pushes it over and CI kills the job. Fix: persist/restore the cargo registry cache (and ideally target/) between release builds keyed on Cargo.lock, rather than just raising the timeout.",
+          "derived_from": [
+            "01M175PCX59W4R6WV260NKTWDK",
+            "01M175PCX0GV32BS2NTRB0EQKK",
+            "01M175PCWKWJCA7C54BNHPFCHK",
+            "01M175PCWVFZHPZBY084RFDY7G"
+          ],
+          "supersedes": "01M175QAH1AFCZ7DZA4Z10FY52",
+          "entities": [
+            "atlas"
+          ],
+          "tags": [
+            "ci"
+          ]
+        },
+        "answer": "\"{\\\"content\\\":\\\"The atlas release build is repeatedly cancelled by CI because a cold cargo registry cache (no cache persisted between builds) adds ~18 minutes to every release build, leaving only ~12 minutes of margin under atlas CI's 30-minute hard job timeout; any minor slowdown in the actual build pushes it over and CI kills the job. Fix: persist/restore the cargo registry cache (and ideally target/) between release builds keyed on Cargo.lock, rather than just raising the timeout.\\\",\\\"created\\\":false,\\\"derived_from\\\":[],\\\"id\\\":\\\"01M175QAH1AFCZ7DZA4Z10FY52\\\",\\\"related\\\":[]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "inspect",
+        "input": {
+          "ref": "01M175QAH1AFCZ7DZA4Z10FY52"
+        },
+        "answer": "\"{\\\"found\\\":{\\\"chain\\\":[{\\\"access_count\\\":1,\\\"content\\\":\\\"The atlas release build is repeatedly cancelled by CI because a cold cargo registry cache (no cache persisted between builds) adds ~18 minutes to every release build, leaving only ~12 minutes of margin under atlas CI's 30-minute hard job timeout; any minor slowdown in the actual build pushes it over and CI kills the job. Fix: persist/restore the cargo registry cache (and ideally target/) between release builds keyed on Cargo.lock, rather than just raising the timeout.\\\",\\\"created_at\\\":\\\"2026-08-29T16:30:25.313159Z\\\",\\\"decay_class\\\":\\\"slow\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175QAH1AFCZ7DZA4Z10FY52\\\",\\\"kind\\\":\\\"lesson\\\",\\\"last_access"
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_reflect",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember",
+      "reflect"
+    ],
+    "calls": 3,
+    "superseded": false,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.BR5hMJqiID",
+    "answer": "Checkpoint complete.\n\n- **Saved:** nothing new — the root-cause lesson about the atlas release-build cancellations (30-min CI timeout + cold cargo registry cache costing ~18 min) was already stored earlier in this session; attempting to store it as a `reflect` insight came back as a duplicate of the existing entry, so no new write was made.\n- **Corrected:** nothing — no existing claim conflicted with what this session found.\n- **Left out:** the pending action (\"apply the cache fix once given the repo path\") — that's a to-do for this turn, not a durable fact/preference/lesson, so it wasn't stored.",
+    "cost_usd": 0.1478162,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled failure reason",
+          "space": "all"
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175RT20THEJ5VZ1HPGTBZ4W\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996649848309,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999986599393238,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-08-29T16:31:13.964484Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M175RT1TVNAPFRTJZ5JNQ5WX\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476667331961731,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999986585245"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The recurring atlas release build cancellations (2026-08-11, 2026-08-19, 2026-08-29) are caused by the 30-minute CI job timeout combined with every release build starting from an empty cargo registry cache, which alone costs ~18 minutes; this leaves little margin so normal build-time variance pushes jobs past the cutoff. Fix: persist/restore the cargo registry (and ideally target/) cache between release builds, keyed on Cargo.lock, rather than raising the timeout.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"created\\\":[\\\"01M175SH2N4W38WZAGHWDTFNK7\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M175RT20THEJ5VZ1HPGTBZ4W\\\",\\\"of\\\":0,\\\"similarity\\\":0.9140496968730656},{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M175RT1CXYFED4MABN79Z0DS\\\",\\\"of\\\":0,\\\"similarity\\\":0.9051256493108436},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M175RT1NVT52V891XC10MZH8\\\",\\\"of\\\":0,\\\"similarity\\\":0.8982440586671969},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running af"
+      },
+      {
+        "turn": 1,
+        "tool": "reflect",
+        "input": {
+          "insight": "The recurring atlas release build cancellations (2026-08-11, 2026-08-19, 2026-08-29) are caused by the 30-minute CI job timeout combined with every release build starting from an empty cargo registry cache, which alone costs ~18 minutes; this leaves little margin so normal build-time variance pushes jobs past the cutoff. Fix: persist/restore the cargo registry (and ideally target/) cache between release builds, keyed on Cargo.lock, rather than raising the timeout.",
+          "derived_from": [
+            "01M175RT20THEJ5VZ1HPGTBZ4W",
+            "01M175RT1TVNAPFRTJZ5JNQ5WX",
+            "01M175RT1CXYFED4MABN79Z0DS",
+            "01M175RT1NVT52V891XC10MZH8"
+          ],
+          "entities": [
+            "atlas"
+          ],
+          "tags": [
+            "ci"
+          ],
+          "supersedes": "01M175SH2N4W38WZAGHWDTFNK7"
+        },
+        "answer": "\"{\\\"content\\\":\\\"The recurring atlas release build cancellations (2026-08-11, 2026-08-19, 2026-08-29) are caused by the 30-minute CI job timeout combined with every release build starting from an empty cargo registry cache, which alone costs ~18 minutes; this leaves little margin so normal build-time variance pushes jobs past the cutoff. Fix: persist/restore the cargo registry (and ideally target/) cache between release builds, keyed on Cargo.lock, rather than raising the timeout.\\\",\\\"created\\\":false,\\\"derived_from\\\":[],\\\"id\\\":\\\"01M175SH2N4W38WZAGHWDTFNK7\\\",\\\"related\\\":[]}\""
+      }
+    ]
+  }
+]

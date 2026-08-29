@@ -13,7 +13,11 @@
 //!
 //! Which is why these two carry the parts of the contract the descriptions
 //! could not make stick: [`checkpoint`] carries "look before you correct"
-//! (issue #38 is that same instruction failing from a description), and
+//! (issue #38 is that same instruction failing from a description) and "a
+//! conclusion cites what it came from" (#26 measured `reflect` at 0/3 from its
+//! description, every run writing the insight through `remember` instead —
+//! and the citation ids only exist once step 2 has run, so no description
+//! could have asked for it), and
 //! [`recall_first`] carries "read the block as fact, not as a suggestion"
 //! (#23's `orient` runs recalled the right claim 3/3 and then hedged around
 //! it).
@@ -138,12 +142,21 @@ pub fn checkpoint(focus: &Focus) -> String {
          Set `supersedes` to the id from step 2 on each entry that replaces an \
          existing claim, and leave it unset on genuinely new ones.\n\
          \n\
-         4. **Read the answer back.** `created` is what is now stored. \
+         4. **A conclusion you worked out goes through `reflect` instead.** If \
+         one of your candidates is something you concluded *from* what step 2 \
+         returned — the cause behind three separate failures, what a preference \
+         and a constraint mean taken together — store that one with `reflect`: \
+         the insight, and `derived_from` set to the ids you drew it from. Same \
+         write, with the evidence attached, so a later session can check the \
+         conclusion rather than take it on faith. Something you were simply \
+         told is not this; it belongs in the batch above.\n\
+         \n\
+         5. **Read the answer back.** `created` is what is now stored. \
          `duplicates` is what was already there, each with how close a match it \
          was — decide per entry whether that means a no-op or a correction you \
          missed in step 2. `superseded` is what you closed.\n\
          \n\
-         5. **Tell me, in one short list**: what was saved, what was corrected, \
+         6. **Tell me, in one short list**: what was saved, what was corrected, \
          and what you deliberately left out.\n\
          \n\
          Saving nothing is a correct outcome for a session that produced nothing \
@@ -184,6 +197,11 @@ mod tests {
         assert!(
             end.contains("`recall`") && end.contains("`remember`"),
             "{end}"
+        );
+        assert!(
+            end.contains("`reflect`") && end.contains("`derived_from`"),
+            "a conclusion drawn from the store is the one write no description \
+             can ask for, because the ids only exist after step 2: {end}"
         );
         assert!(
             end.find("`recall`") < end.find("`remember`"),

@@ -1,0 +1,31 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.R3WNTumgD1",
+  "answer": "I recall all `atlas`-tagged memories (space: `eval`, 46 entries). Nothing has been changed. Here's what stands out:\n\n**Direct contradiction (needs a decision before handover):**\n- `01M16YP9FRH53QCKZ0N511FJB2`: \"Merging to main deploys atlas to staging automatically.\"\n- `01M16YP9K6F1JCDFTRTM221JWZ`: \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"\nThese can't both be true. Both were written at the same batch timestamp, so I can't tell which superseded which — this is the one thing I'd want you to resolve, since deploy behavior is exactly the kind of thing a handover doc should get right.\n\n**Pure duplicates (same fact, restated):**\n- Deploy command, stated 3 times:\n  - `01M16YP9EW455C2F3N9WJ84EER`: \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n  - `01M16YP9J3M9FENJFKZDH2BW40`: \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n  - `01M16YP9P5QTTFVA83ZMMHBW5M`: \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" — this one has extra info (old `make deploy` target is gone), so it's the one worth keeping if consolidating.\n- Test runner, stated twice:\n  - `01M16YP9G2Y6MCYCFWEBJM30M6`: \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n  - `01M16YP9MMEWPR9107E5V22R88`: \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n**Overlapping, not identical, but worth merging:**\n- `01M16YP9FEAH4M0GBFCVMPSJVC`: \"atlas stores its data in Postgres 16...\" vs `01M16YP9NMJ4BWQMVNMVWBSPN1`: \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" — the second is a superset of the first.\n\n**Possibly stale / shouldn't survive a handover (ephemeral, low-importance, session-scoped):**\n- `01M16YP9Q8RSMN9ZDXS47R9DXA`: \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — time-bound (\"this week\"), likely resolved or irrelevant by now.\n- `01M16YP9Q2XDBX36M7MNFTAAJ8`: \"The branch under review is spike/consolidate.\" — pure in-session state, not durable project knowledge.\n\n**Minor inconsistency worth a sanity check, not necessarily wrong:**\n- `01M16YP9GCV780WWECQAP2FA8A` lists the CI pipeline as fmt → clippy → test → no-default-features build, but `01M16YP9MZ93DFGM9RA2A4Y27N` calls out \"the release build\" as the slowest CI step — the release build isn't named as one of the pipeline's stages, so it's unclear if it's a 5th step that was never recorded or an outdated leftover.\n\nNothing else in the 46 entries duplicates or conflicts — the rest (bearer-token auth, port 8080, healthz/readyz, branch naming, PR/merge rules, crate layout, error-handling conventions, etc.) each appear once and look internally consistent.\n\nLet me know which of these you want resolved (e.g., pick a side on the deploy contradiction, drop the duplicates, prune the two ephemeral ones) and I'll update memory accordingly.",
+  "cost_usd": 0.1430896,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16YP9FKNPFZ3J30BSP8MW7Y\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T14:27:31.419251Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16YP9F9YD2FH3EWACDSJGWM\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819114508346,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+    }
+  ]
+}

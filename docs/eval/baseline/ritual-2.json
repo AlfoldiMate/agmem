@@ -1,0 +1,65 @@
+{
+  "scenario": "ritual",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.kqdc40cYek",
+  "answer": "Checkpointed.\n\n- **Saved:** two new claims — (1) instruction: Rust library crates must use `thiserror`, binaries must use `anyhow`, never reversed; (2) lesson: this rule exists because getting it backwards has bitten the user twice.\n- **Corrected:** nothing — no prior claim on this existed (recall came back empty).\n- **Left out:** nothing else from this session was durable — the rest was just executing the file-based memory write, which is scratch/mechanical, not a fact worth storing separately.",
+  "cost_usd": 0.15278540000000002,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Rust library crates should use thiserror and binaries should use anyhow for error handling",
+        "k": 5
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In Rust projects, the user requires library crates to define error types using thiserror, and binary crates to use anyhow for error handling, never the reverse.",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling",
+              "identity"
+            ],
+            "decay_class": "pinned"
+          },
+          {
+            "content": "The user has been bitten twice by Rust crates using the wrong error-handling library for their crate type (e.g. a library crate using anyhow instead of thiserror, or vice versa for a binary), which motivates a strict thiserror-in-libs/anyhow-in-bins rule.",
+            "kind": "lesson",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.\n\nAssistant saved this preference to file-based memory (feedback_rust_error_handling.md) noting: never reversed, has caused issues twice.",
+          "session": "rust-error-handling-preference"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16YG2DYPVGGCY6FEM576AJS\\\",\\\"01M16YG2E7BEE7J4BVJM6PYS3S\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16YG2DNEYNC02X6KTB4RJVF\\\",\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    }
+  ]
+}

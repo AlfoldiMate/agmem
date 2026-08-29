@@ -1,0 +1,52 @@
+{
+  "scenario": "ritual_correct",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.KBY3pUjex5",
+  "answer": "**Checkpoint summary:**\n\n- **Corrected:** the stale claim \"the user formats Python with black\" — superseded with \"the user formats Python code with ruff format, not black; black is uninstalled in their environment.\"\n- **Saved:** nothing new beyond that correction.\n- **Left out:** nothing else in this session was durable — it was a single-fact update.",
+  "cost_usd": 0.14873800000000004,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "project uses ruff format instead of black, black is uninstalled",
+        "k": 10
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M16YH7JHNHEMXD8VT1Z46NRA\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249984264731811,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999937058927246,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T14:24:45.649529Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user formats Python code with ruff format, not black; black is uninstalled in their environment.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity"
+            ],
+            "supersedes": "01M16YH7JHNHEMXD8VT1Z46NRA"
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "tmp.iYRgM38795"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16YJ79S30W1DBW5EXW2P9MB\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16YJ79HPZZY7X23YRJRMCXA\\\",\\\"related\\\":[],\\\"superseded\\\":[\\\"01M16YH7JHNHEMXD8VT1Z46NRA\\\"]}\""
+    }
+  ]
+}

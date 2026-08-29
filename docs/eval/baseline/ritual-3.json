@@ -1,0 +1,59 @@
+{
+  "scenario": "ritual",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.DgPxyL2FEM",
+  "answer": "Checkpoint complete.\n\n**Saved (2 new claims):**\n- Instruction: Rust library crates use `thiserror`, binaries use `anyhow` — never swapped.\n- Lesson: this mix-up has bitten the user's team twice, which is why it's a hard rule.\n\n**Corrected:** none — no prior claims existed on this topic.\n\n**Left out:** nothing else from this session — it consisted solely of setting this one convention (already also mirrored into the file-based memory system).",
+  "cost_usd": 0.1505784,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "thiserror anyhow Rust library binary error handling convention"
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user wants Rust library crates to use the thiserror crate for their error types, and Rust binaries to use the anyhow crate for error handling — never swapped (no anyhow in library public APIs, no thiserror boilerplate in binaries).",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          },
+          {
+            "content": "Mixing up the thiserror/anyhow convention (thiserror for libraries, anyhow for binaries) has caused problems for the user's team twice already, which is why it's a hard rule rather than a stylistic preference.",
+            "kind": "lesson",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16YH3C1BW5PTDKNEXN6HVRH\\\",\\\"01M16YH3CAZ4AQGW4AXFRDTYVD\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "scenario": "consolidate_large",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "consolidate"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.FVt8ZWNVSH",
+  "answer": "I pulled everything tagged `atlas` (117 claims) and ran it through the memory system's consolidation check rather than just eyeballing a recall page — that tool compares every claim against every other, which a single ranked list can't do. Nothing has been changed. Here's what it surfaced:\n\n**Real contradiction — deploy automation**\n- \"Merging to main deploys atlas to staging automatically.\"\n- \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"\n\nThese directly conflict and weren't even paired by the similarity search (it grouped the second one with an unrelated ship.sh claim instead) — I only caught it by cross-checking the full list by hand. Both were written at the same time with no way to tell which is current from timestamps alone, so this needs your call on which is true before I touch it.\n\n**Genuine duplicates (same fact, reworded) — safe to merge**\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\" ≈ \"The atlas test suite is run with cargo nextest run, not cargo test.\" (0.98 similarity)\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\" ≈ \"To ship atlas you run the bin/ship.sh script at the top of the repo.\" (0.95 similarity)\n- A third ship.sh claim — \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" — says the same thing but adds one new fact (the old `make deploy` target is gone). Worth folding into one claim rather than dropping.\n\n**Stale, likely dead weight**\n- \"The branch under review is spike/consolidate.\"\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\"\n\nBoth were filed as short-lived/\"this week\" scoped and haven't been touched in 40 days — almost certainly stale scaffolding from a past session rather than durable facts.\n\n**Noise, not worth acting on**\nThe consolidator also flagged a cluster of 8 unrelated infra facts (license, status page, image registry, distroless base, pagination style, query timeout, container user, image tagging) as \"near duplicates.\" Reading them, they're just distinct facts that happened to embed closely — a chained false positive, not actual redundancy. I'd leave those alone.\n\nWant me to go ahead and merge the two genuine duplicate clusters and drop the two stale ones, and separately, which of the two conflicting deploy claims should I keep?",
+  "cost_usd": 0.2369064,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16YVWTPRC02615RQXECMG8P\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819320804852,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.765927728321941,\\\"rrf\\\":0.031746031746031744,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T14:30:35.076302Z\\\"},{\\\"content\\\":\\\"atlas stores its data in Postgres 16 and the schema lives under migrations/.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16YVWTTQ0QKMQ7QZGC8MX00\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8069056154934915,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7"
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "eval"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-08-29T14:30:35.254691Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M16YVWZP0JY1VEEV4SSA11XQ\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-08-29T14:30:46.796084Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":4,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-08-29T14:30:35.076532Z\\\"},\\\"b\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"created_at\\\":\\\"2026-08-29T14:30:35.117421Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\""
+    }
+  ]
+}

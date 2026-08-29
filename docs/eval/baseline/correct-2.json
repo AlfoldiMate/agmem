@@ -1,0 +1,15 @@
+{
+  "scenario": "correct",
+  "run": 2,
+  "pass": false,
+  "tools": [],
+  "calls": 0,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.zgJ3FhDDi8",
+  "answer": "Noted — I'll use `ruff format` and won't reference black going forward.",
+  "cost_usd": 0.0665514,
+  "agent_turns": 4,
+  "session": []
+}

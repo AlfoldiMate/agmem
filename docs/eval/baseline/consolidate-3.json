@@ -1,0 +1,31 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.5L8ZTvzzkq",
+  "answer": "I checked both stores. The local file-based memory (`MEMORY.md`) is empty — everything is in the agmem persistent store, space `eval`. Here's what I found on **atlas**, 48 entries total:\n\n## Duplicates (same fact stated multiple times)\n\n**Deploy command (3 near-identical entries):**\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" ← this one has the extra detail (old `make deploy` target removed), so it's the one worth keeping\n\n**Test runner (2 identical entries):**\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n## Contradiction — likely out of date\n\n- **\"Merging to main deploys atlas to staging automatically.\"**\n  vs.\n- **\"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\"**\n\nThese directly conflict. Given the surrounding memories (manual `bin/ship.sh`, a lesson about a downtime incident from *skipping* that manual step), the \"automatic on merge\" one looks like the stale leftover from an older CI-driven deploy setup that got replaced by the manual script. Worth confirming which is actually true today and marking the other invalid via `supersedes` rather than leaving both live.\n\n## Minor overlap, not a hard conflict\n\n- \"atlas stores its data in Postgres 16...\" vs. \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" Not contradictory, just different granularity — could be consolidated into one.\n\n## Ephemeral / probably not worth carrying into a handover\n\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — time-boxed (\"this week\"), already low retention score, will be meaningless to a future reader.\n- \"The branch under review is spike/consolidate.\" — session-scoped note, lowest relevance score of the set, reads like leftover state rather than durable project knowledge.\n\nNothing changed yet — let me know which of these you want merged, superseded, or dropped before you hand off.",
+  "cost_usd": 0.14331539999999998,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16YT29QQ612QT5GPB948ZT4\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T14:29:35.13607Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16YT29ES249SJ9FDHTYHYNA\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819239235471,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.765"
+    }
+  ]
+}

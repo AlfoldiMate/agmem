@@ -1,0 +1,65 @@
+{
+  "scenario": "ritual",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.lxS9TQa0pB",
+  "answer": "Checkpoint complete.\n\n- **Saved**: two new claims — (1) an instruction that library crates use `thiserror` and binaries use `anyhow`, never swapped; (2) a lesson that getting this backwards has bitten the user's team twice.\n- **Corrected**: nothing — no existing agmem claims on this topic.\n- **Left out**: nothing else from this session was durable (it consisted solely of stating and saving this one preference, which was already mirrored into the file-based memory system earlier).",
+  "cost_usd": 0.14864899999999998,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Rust error handling convention thiserror anyhow library binary crates",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user requires Rust library crates to use the thiserror crate for their error types, and Rust binaries to use the anyhow crate for error handling, and requires this convention to never be swapped or reversed.",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling",
+              "conventions"
+            ],
+            "decay_class": "pinned"
+          },
+          {
+            "content": "Getting the thiserror-in-libraries versus anyhow-in-binaries convention backwards has caused real problems for the user's team on two separate past occasions.",
+            "kind": "lesson",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "rust",
+              "error-handling"
+            ]
+          }
+        ],
+        "episode": {
+          "content": "User: Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice.",
+          "session": "checkpoint-rust-error-handling"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16YF2RKSJX490N5T1FHGFRS\\\",\\\"01M16YF2RW1DMZW6FB05BV334Q\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16YF2RCY0W8BXSZNQP00YCS\\\",\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    }
+  ]
+}

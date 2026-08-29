@@ -1,0 +1,32 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.0ZooQQqgiy",
+  "answer": "I found 46 memories about atlas in the `eval` space (all recalled, none previously invalidated). Here's what's duplicated or out of date — no changes made:\n\n## Duplicates (same fact, stored multiple times)\n\n**Deploy command** — stated three separate times:\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\" (`01M16YR1XDV2...`)\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\" (`01M16YR20J0F...`)\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" (`01M16YR24AZT...`)\n\nThe third one has extra info (the retired `make deploy` target) but is otherwise the same claim as the other two.\n\n**Test runner** — stated twice, nearly word-for-word:\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\" (`01M16YR1YK2B...`)\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\" (`01M16YR22SJV...`)\n\n## Contradiction (needs resolving, not just deduping)\n\n- \"Merging to main deploys atlas to staging automatically.\" (`01M16YR1Y92A...`)\n- \"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\" (`01M16YR21Q0B...`)\n\nThese directly conflict on whether staging deploys are automatic. One of them is wrong or the process changed — worth checking which is current before a handover, since a successor could act on the wrong one.\n\n## Minor overlap worth tightening\n\n- \"atlas stores its data in Postgres 16...\" vs \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" Not contradictory, but the first is a strictly less complete version of the second.\n\n## Stale / session-specific (shouldn't survive a handover)\n\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — time-relative (\"this week\"), already low retention/importance in the data, will be meaningless to a successor.\n- \"The branch under review is spike/consolidate.\" — ephemeral session state, not durable project knowledge.\n\n**Recommendation for when you're ready:** use `supersedes` to collapse the three deploy-command memories and two test-runner memories into one each, resolve the staging-automation contradiction by checking which is actually true and marking the other superseded, and forget the two session-specific entries outright. Say the word and I'll do it.",
+  "cost_usd": 0.1500914,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50,
+        "include_invalidated": true
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M16YR1Y47JF8VQFB2FF8F8B2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T14:28:29.227611Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16YR1XTC1DP6E2JK27SWCSH\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819431685895,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "scenario": "ritual_correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.7Bx9cNkhz2",
+  "answer": "Checkpoint complete:\n\n- **Saved:** the user now formats Python with `ruff format`, not black; black is uninstalled.\n- **Corrected:** superseded a stale claim that said \"the user formats Python with black.\"\n- **Left out:** nothing else in this session was durable — the rest was just recording that fact in the file-based memory system, which is scratch/mechanical, not new knowledge.",
+  "cost_usd": 0.14952,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "Python formatter black ruff format"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M16YJBPR200TVZGD12FE2GF7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249985933039575,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999943732158304,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"identity\\\"],\\\"valid_from\\\":\\\"2026-08-29T14:25:22.648243Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user formats Python code with ruff format, not black; black has been uninstalled.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity"
+            ],
+            "supersedes": "01M16YJBPR200TVZGD12FE2GF7"
+          }
+        ],
+        "episode": {
+          "content": "User: I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later.",
+          "session": "tmp.RBgSIi2pwN"
+        }
+      },
+      "answer": "\"{\\\"created\\\":[\\\"01M16YK6H47K9RB6QZCGK62Y0P\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M16YK6GVP86E3ADVH93G6Z9V\\\",\\\"related\\\":[],\\\"superseded\\\":[\\\"01M16YJBPR200TVZGD12FE2GF7\\\"]}\""
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "scenario": "orient",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.I3wXIPA0W1",
+  "answer": "I checked memory and found a claim that \"atlas is deployed by running `bin/ship.sh` from the repo root,\" but I want to flag that before you rely on it:\n\n- The current working directory doesn't contain an atlas project at all — it only has an `mcp.json` file. There's no `bin/ship.sh` here, no repo, nothing to verify the claim against.\n- That memory entry is tagged as coming from an \"eval\" space with source \"agent,\" which is a bit unusual provenance for a deployment instruction — I can't confirm a human ever actually stated it.\n\nSo rather than tell you to run a script I can't verify exists or is safe, I need some clarification:\n\n1. What is \"atlas\" in your context — is it a specific repo/project you have locally elsewhere, MongoDB Atlas, HashiCorp/Ariga Atlas, or something else?\n2. If it's a local project, what's the path, and can you point me to how it's normally deployed (docs, CI config, Makefile, etc.)?\n\nOnce I know which \"atlas\" and where it lives, I can look at the actual deployment tooling instead of trusting an unverified memory claim.",
+  "cost_usd": 0.0729392,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas deployment"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root; the make deploy target was removed.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16YAE3V6BW5YE9ZBY82VG8Q\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249993109272806,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999972437091227,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T14:21:02.971316Z\\\"},{\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M16YAE43HZBWE6RY88T3YP1F\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499931140748767,\\\"signals\\\":{\\\"importance\\\":0."
+    }
+  ]
+}

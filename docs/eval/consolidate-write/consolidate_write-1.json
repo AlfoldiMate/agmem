@@ -1,0 +1,254 @@
+{
+  "scenario": "consolidate_write",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "inspect",
+    "consolidate"
+  ],
+  "calls": 20,
+  "superseded": false,
+  "cited": null,
+  "on_target": null,
+  "touched": 0,
+  "purged": false,
+  "closed": [],
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.anUqASAbdC",
+  "answer": "I've reviewed all 120 stored claims about atlas. Before I start editing, one thing needs your input rather than a guess: I found a direct contradiction, not just a wording duplicate.\n\n**Contradiction — is staging deploy automatic or manual?**\n- \"Merging to main deploys atlas to staging automatically.\"\n- \"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\"\n\nThese can't both be true. Which one is actually current?\n\nMeanwhile, here's what I'll fix regardless of your answer:\n\n**Duplicates to merge:**\n- Two copies of \"tests run via cargo nextest run, not cargo test\" (worded differently, same fact)\n- Three overlapping memories all saying \"deploy atlas via bin/ship.sh from repo root\" — I'll fold the useful extra detail (the old `make deploy` target is gone) into one canonical fact and drop the redundant restatements\n\n**Stale/out-of-date (ephemeral state that's now irrelevant):**\n- \"The branch under review is spike/consolidate.\" — leftover working state, no longer applicable\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — time-bound \"this week\" note, long past relevant\n\nEverything else I checked (SDKs, CI, infra, security, billing, process rules, etc.) is internally consistent — no real duplicates hiding there, just topically-similar facts the similarity search flagged as false positives.\n\nWhich staging-deploy fact is correct — automatic on merge, or manual via `--staging`?",
+  "cost_usd": 0.391818,
+  "agent_turns": 24,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "Atlas project",
+        "entities": [
+          "Atlas"
+        ],
+        "k": 50,
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "Atlas",
+        "k": 50,
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M177Z7GEWCTWPCJ1DV3VKCJY\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664818989967392,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659275959869571,\\\"rrf\\\":0.031746031746031744,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.499915Z\\\"},{\\\"content\\\":\\\"atlas stores its data in Postgres 16 and the schema lives under migrations/.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M177Z7GK6WF2XVDNZ1Z78489\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8069055824072338,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0."
+    },
+    {
+      "turn": 0,
+      "tool": "inspect",
+      "input": {
+        "ref": "stats"
+      },
+      "answer": "\"{\\\"found\\\":{\\\"counts\\\":[{\\\"chunks\\\":0,\\\"episodes\\\":0,\\\"invalidated\\\":0,\\\"live\\\":120,\\\"live_by_kind\\\":[{\\\"count\\\":108,\\\"kind\\\":\\\"fact\\\"},{\\\"count\\\":9,\\\"kind\\\":\\\"instruction\\\"},{\\\"count\\\":3,\\\"kind\\\":\\\"lesson\\\"}],\\\"memories\\\":120,\\\"space\\\":\\\"eval\\\"}],\\\"kind\\\":\\\"stats\\\"},\\\"ref\\\":\\\"stats\\\",\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "eval"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-08-29T17:09:41.675396Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M177Z7NBQSDBDJA5S86SBPG7\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-08-29T17:09:55.751632Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":4,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.50009Z\\\"},\\\"b\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"created_at\\\":\\\"2026-08-29T17:09:41.541079Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"i"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "deploy"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"A deploy of atlas that skips bin/ship.sh leaves the search index stale, which cost the team an afternoon of downtime.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M177Z7JJWQ9S5WT7J8ASKE38\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.36249986006457907,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"retention\\\":0.9999994402583163,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.499999Z\\\"},{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M177Z7FZDAWPYJ5X94EAP39B\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249994402364629,\\\"signals"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "k": 120,
+        "space": "eval"
+      },
+      "answer": "\"k must be between 1 and 50\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "db"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M177Z7GQB278TA45YG96Y97T\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.499926Z\\\"},{\\\"content\\\":\\\"The connection pool in atlas holds sixteen database connections.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M177Z7WTDKVZXF8HGG169BD3\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249992944835476,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999971779341904,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "api"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Every write endpoint in atlas requires an idempotency key.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"api\\\"],\\\"id\\\":\\\"01M177Z7XJJ12AM6SPA9WVWJ1X\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500301Z\\\"},{\\\"content\\\":\\\"Rate limiting in atlas is per-token at 100 requests a minute, enforced in the api crate.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"api\\\"],\\\"id\\\":\\\"01M177Z7J8E11DZGE9ESH6CK8E\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499928680003354,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999971472001341,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "infra"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Terraform under infra/ owns every atlas resource except the DNS zone.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"infra\\\"],\\\"id\\\":\\\"01M177Z7SQHHXAE88VHB4RE9KF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249992784540216,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999971138160864,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500213Z\\\"},{\\\"content\\\":\\\"The DNS zone for atlas is edited by hand in the registrar console.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"infra\\\"],\\\"id\\\":\\\"01M177Z7T5SMDY5MP9MVVQHFMF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.324999278446701,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999997113786804,\\\"rrf\\\":0,\\\"rrf_no"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "sdk"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Breaking SDK changes for atlas wait for the next major release.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"sdk\\\"],\\\"id\\\":\\\"01M177Z7YP1XSJ0JB6AV4SX386\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664811545218822,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659246180875288,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500337Z\\\"},{\\\"content\\\":\\\"The TypeScript SDK for atlas is published to npm as acme-atlas.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"sdk\\\"],\\\"id\\\":\\\"01M177Z7YF1C3X3MPJX2ZSGW4N\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664811545168144,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659246180672578,\\\"rrf\\\":0,\\\"rrf_normalized\\\":"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "release"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"CHANGELOG.md in atlas is updated by hand at release time.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"release\\\"],\\\"id\\\":\\\"01M177Z7QCNV0Y72YCVBXW5RZS\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249992612353508,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999970449414032,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500152Z\\\"},{\\\"content\\\":\\\"The atlas release process tags vX.Y.Z and lets CI build the artefacts.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"release\\\"],\\\"id\\\":\\\"01M177Z7JW9XF0S228Y7ZCN3JW\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249992612120725,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999970448482901,\\\"rrf\\\":0,\\\"rrf_norm"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "ops"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The eleven minute outage in February came from an expired credential.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M177Z84HXEB9XSF1C92K8MB9\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.346376457426924,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"retention\\\":0.9355058297076962,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500485Z\\\"},{\\\"content\\\":\\\"The atlas status page is hosted by a third party and updated by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M177Z86ZS61YY70ACJ1V3V32\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249992553360917,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999970213443667,\\\"rrf\\\":0,\\\"rrf"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "security"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"A security advisory affecting atlas is triaged within two working days.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M177Z827ACV7VEJBH7S6AYGG\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500429Z\\\"},{\\\"content\\\":\\\"Personally identifying fields are redacted from atlas logs at write time.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M177Z7S179KDGF8140XXQ1FJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499924717315315,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999969886926127,\\\"rrf\\\":0,\\\"rrf_normalized\\"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "billing"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"A trial account on atlas expires after fourteen days.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"billing\\\"],\\\"id\\\":\\\"01M177Z86AZ9HAZWXZWQPGJYFK\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664811225935991,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659244903743964,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.50053Z\\\"},{\\\"content\\\":\\\"atlas is billed per seat and invoiced monthly in arrears.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"billing\\\"],\\\"id\\\":\\\"01M177Z862K0WS4PB04C3SE469\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.266481122588945,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76592449035578,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "support"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M177Z85VM4VWGNQE3FTQP23B\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.50052Z\\\"},{\\\"content\\\":\\\"The atlas support inbox is triaged by whoever is on call.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M177Z85MMPPQFSK4H2PE673A\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664811145099488,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659244580397954,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "docs"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas docs are built with mdbook and published from the docs/ directory.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"docs\\\"],\\\"id\\\":\\\"01M177Z7KGZ6JSMAPJ8EYFB8YZ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499922345864235,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999968938345695,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500029Z\\\"},{\\\"content\\\":\\\"The data retention policy for atlas is written up in docs/retention.md.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"docs\\\"],\\\"id\\\":\\\"01M177Z87NGS9V3EC0GYPZ6R6R\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664811064946914,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659244259787656,\\\"rrf"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "build"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Feature flags in atlas are additive only, so cargo check --all-features has to pass.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"build\\\"],\\\"id\\\":\\\"01M177Z7KB180ZSB2KDHDZ74TC\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249992153299785,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999996861319914,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500024Z\\\"}],\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "testing"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Load testing for atlas uses k6, with the scripts kept in load/.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"testing\\\"],\\\"id\\\":\\\"01M177Z7Q7T5Y27PANHHW7CHF3\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664810898669072,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659243594676288,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500146Z\\\"},{\\\"content\\\":\\\"atlas keeps integration tests in tests/ and unit tests beside the code they cover.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"testing\\\"],\\\"id\\\":\\\"01M177Z7KSE45PH0DHJ839TR4A\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.2664810897628928,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659243590515712,\\\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "process"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M177Z856BZGZGPB4295PEE1J\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500506Z\\\"},{\\\"content\\\":\\\"A flag in atlas is deleted within a month of full rollout.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M177Z80XFCPQM7VA5MW6G402\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eva"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "ci"
+        ],
+        "k": 30,
+        "space": "eval"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M177Z7P1SX38332PDDNYGRHQ\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-08-29T17:09:41.500111Z\\\"},{\\\"content\\\":\\\"clippy runs with -D warnings in atlas CI, so a single warning fails the build.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M177Z7HKSK27X6GBX7JYHEFR\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249991960209687,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999967840838748,\\\"rrf\\\":0,\\\"rrf_nor"
+    }
+  ]
+}

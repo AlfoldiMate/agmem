@@ -335,6 +335,64 @@ const SCENARIOS = [
         avoid: ["forget"]
     }
     {
+        name: "consolidate_write"
+        asks: "with the lists in front of it and the turn allowing the write, does the right claim get closed?"
+        # `consolidate_large` with the prohibition lifted: same seed, same
+        # plants, same sentence up to the last clause. The large seed and not
+        # the fifty-row one, because that is the arm where the tool is
+        # actually reached for — at fifty rows `consolidate` is called 0/3, so
+        # a write scenario built on it would re-measure the routing failure
+        # and say nothing about the merge.
+        #
+        # What the 3/3 left open: all three runs called `consolidate` and
+        # reported, and none merged anything, because the turn forbade it.
+        # Whether the three lists lead to the *right* `supersedes` is a
+        # different question, and this is the scenario that asks it.
+        seed: ($CONSOLIDATE_SEED ++ $CONSOLIDATE_FILLER)
+        stale: {days: 40, strength: 3.0, accesses: 8}
+        turns: ["Before I hand this project over — go through what you have stored about atlas and fix what is duplicated or out of date. Go ahead and make the changes."]
+        want: ["consolidate"]
+        # `forget` is not a failure here the way it is in the read-only pair:
+        # the turn asks for changes, and which verb an agent reaches for is
+        # part of what this measures rather than a disqualification. `closed`
+        # and `purged` in the run record say what it actually did.
+        avoid: []
+        # The four problems planted in the seed, each as the group of live
+        # claims it spans. Closing anything outside these is the unambiguous
+        # failure: 111 of the 120 rows are correct and have to survive.
+        plants: [
+            # Three wordings of one deploy command. Two of the three go, and
+            # which one survives is the agent's to choose.
+            [
+                "Project atlas is deployed by running bin/ship.sh from the repository root."
+                "To ship atlas you run the bin/ship.sh script at the top of the repo."
+                "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone."
+            ]
+            # Two wordings of one test runner.
+            [
+                "The atlas test suite is run with cargo nextest run, not cargo test."
+                "Tests in atlas are run through cargo nextest run; plain cargo test is not used."
+            ]
+            # A genuine disagreement about staging deploys. Nothing in the
+            # store says which of them is current, so closing either is on
+            # target and asking the user instead is defensible — what this
+            # group asserts is only that a write belongs *here* rather than
+            # in one of the hundred and eleven correct rows.
+            [
+                "Merging to main deploys atlas to staging automatically."
+                "Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand."
+            ]
+            # The two `fast` rows recall kept alive past their horizon. The
+            # design says reach for `supersedes` before `forget`, and a stale
+            # note has no replacement to supersede it with — the run record
+            # is where that tension gets read, not this list.
+            [
+                "The branch under review is spike/consolidate."
+                "The flaky test being chased this week is pagination_ordering in atlas-api."
+            ]
+        ]
+    }
+    {
         name: "reflect"
         asks: "when the answer is a conclusion drawn from several stored claims, is it stored with what it was drawn from?"
         # Four claims that each say something small and true, and together say
@@ -483,6 +541,38 @@ def summarise [] {
             calls: ($runs | get calls | math avg | math round --precision 1)
             tools: ($runs | get tools | flatten | uniq | sort | str join ",")
             superseded: ($runs | where superseded | length)
+            # Blank where the question does not apply, for the same reason
+            # `served` is: a zero would read as "asked for and missed" on a
+            # scenario that never asked it. `cited` needs a scenario wanting
+            # `reflect`; the two consolidation columns need one that plants.
+            cited: (
+                if ($runs | all {|run| ($run | get -o cited) == null}) {
+                    null
+                } else {
+                    $runs | where ($it.cited? | default false) | length
+                }
+            )
+            on_target: (
+                if ($runs | all {|run| ($run | get -o on_target) == null}) {
+                    null
+                } else {
+                    $runs | where ($it.on_target? | default false) | length
+                }
+            )
+            # Averaged, not totalled: the plants are the same every run, so
+            # "two of the four" is the number that reads, and a sum across
+            # three runs is not a quantity of anything.
+            touched: (
+                if ($runs | all {|run| ($run | get -o touched) == null}) {
+                    null
+                } else {
+                    $runs
+                    | each {|run| $run | get -o touched}
+                    | compact
+                    | math avg
+                    | math round --precision 1
+                }
+            )
         }
     }
 }
@@ -501,8 +591,14 @@ def run-one [
     let cwd = (mktemp -d)
     cd $cwd
 
-    if ($scenario.seed | is-not-empty) {
-        seed $binary $data $cache $scenario.seed $overrides
+    # What the store holds and where, so a metric can resolve an id an agent
+    # closed back to the claim it was. Empty for a scenario that seeds nothing.
+    let seeded = if ($scenario.seed | is-not-empty) {
+        $scenario.seed
+        | zip (seed $binary $data $cache $scenario.seed $overrides)
+        | each {|pair| {content: $pair.0.content, id: $pair.1}}
+    } else {
+        []
     }
     if "stale" in ($scenario | columns) {
         age $data $scenario.stale
@@ -571,6 +667,34 @@ def run-one [
         | flatten
     )
     let calls = (agmem-calls $events)
+    # Every live claim this run closed, resolved back to the text it was
+    # seeded with. `supersedes` and `forget` are the two ways to close one,
+    # and an id can arrive either bare or prefixed the way `inspect` takes it.
+    let closed = (
+        (
+            $calls
+            | where tool == "remember"
+            | each {|call|
+                $call.input.memories? | default [] | each {|memory| $memory.supersedes?}
+            }
+            | flatten
+        )
+        ++ ($calls | where tool == "forget" | each {|call| $call.input.ids? | default []} | flatten)
+        | compact
+        | each {|id| $id | str replace "memory:" ""}
+        | uniq
+        | each {|id| {
+            id: $id
+            content: ($seeded | where id == $id | get -o 0.content | default "")
+        }}
+    )
+    # The problems this scenario planted in its seed, each as the group of
+    # live claims it spans. Absent on every scenario that plants nothing.
+    let plants = ($scenario | get -o plants)
+    let planted = ($plants | default [] | flatten)
+    # And what the store did about it. Only for a scenario that plants: it
+    # costs a `surreal` open per run, and nothing else here asks the question.
+    let landed = if $plants == null { [] } else { closed-rows $data $seeded }
     let used = ($calls | get tool | uniq)
     let hit = (($scenario.want | is-empty) or ($scenario.want | any {|tool| $tool in $used}))
     let clean = ($scenario.avoid | all {|tool| $tool not-in $used})
@@ -608,15 +732,55 @@ def run-one [
         # The recorded answer is the tool result as JSON text and its quotes
         # arrive backslash-escaped, so the backslashes come out before matching
         # rather than the match being written to expect one depth of escaping.
+        # Null on a scenario that is not asking for a citation, so the
+        # summary reads a blank there rather than a zero: `reflect` was never
+        # wanted, not wanted and missed.
         cited: (
-            $calls
-            | where tool == "reflect"
-            | any {|call|
-                $call.answer
-                | str replace --all "\\" ""
-                | str contains (["\"created\"" "true"] | str join ":")
+            if "reflect" not-in $scenario.want {
+                null
+            } else {
+                $calls
+                | where tool == "reflect"
+                | any {|call|
+                    $call.answer
+                    | str replace --all "\\" ""
+                    | str contains (["\"created\"" "true"] | str join ":")
+                }
             }
         )
+        # Whether everything this run closed was one of the planted rows. A
+        # run that closed nothing is null, not true: `all` over an empty list
+        # is vacuously true, and reporting a non-event as a success is the
+        # mistake `served` exists to catch. `touched` is where a run that
+        # wrote nothing shows up instead.
+        on_target: (
+            if $plants == null or ($landed | is-empty) {
+                null
+            } else {
+                $landed | all {|row| $row.content in $planted}
+            }
+        )
+        # How many of the planted problems were addressed, not how many rows
+        # were closed: merging two wordings of one deploy command is one
+        # problem solved, and the seed plants four.
+        touched: (
+            if $plants == null {
+                null
+            } else {
+                $plants | where {|group| $landed | any {|row| $row.content in $group}} | length
+            }
+        )
+        # `purge` deletes outright and takes the correction history with it,
+        # which is the one thing a consolidation must not do. Nothing else in
+        # the record tells it apart from a clean close.
+        purged: ($calls | where tool == "forget" | any {|call| $call.input.purge? | default false})
+        # What the calls asked to close, kept so a surprising `on_target` can be
+        # read rather than argued about. An empty `content` is an id that was
+        # not seeded. `landed` is the same question asked of the store, and a
+        # row in `closed` that is missing from `landed` is a merge the agent
+        # sent and the near-dup gate swallowed.
+        closed: $closed
+        landed: $landed
         # Whether agmem was there at all. Without it, a server that failed to
         # start reads as an agent that chose not to call anything — which is a
         # pass on `restraint` and a failure everywhere else, both wrong.
@@ -702,7 +866,8 @@ def agmem-calls [events: list] {
     | flatten
 }
 
-# Preload a store the way a previous session would have left it.
+# Preload a store the way a previous session would have left it, and hand back
+# the ids it wrote in seed order.
 #
 # Raw JSON-RPC over stdin rather than a client library: it is the same path a
 # real session takes, and the process exits when stdin closes.
@@ -744,6 +909,18 @@ def seed [binary: string, data: string, cache: string, memories: list, overrides
     if ($answer | is-empty) or (($answer | get -o 0.error) != null) {
         error make {msg: $"the store refused the seed: ($seeded.stdout)"}
     }
+    # The ids, in send order, so a scenario can name a seeded claim and a
+    # metric can say which row an agent closed rather than only how many.
+    #
+    # `remember` never compares two entries of one call, so nothing in a seed
+    # batch deduplicates against itself and `created` lines up with the seed
+    # one for one. A non-empty `duplicates` would shift every id after it
+    # silently, so it is an error rather than a shrug.
+    let stored = ($answer | get -o 0.result.structuredContent | default {})
+    if ($stored.duplicates? | default [] | is-not-empty) {
+        error make {msg: "the seed deduplicated against itself; ids no longer line up with it"}
+    }
+    $stored.created? | default []
 }
 
 # Backdate the `fast` rows a scenario just seeded, so `stale_contexts` has
@@ -769,6 +946,61 @@ def age [data: string, stale: record] {
     )
     if $aged.exit_code != 0 {
         error make {msg: $"aging the seeded rows failed — is the surreal CLI installed? ($aged.stderr)"}
+    }
+}
+
+# The seeded claims that stopped being live during the session, and why.
+#
+# Every metric above this reads what an agent *asked for*; this reads what the
+# store did with it, and the two come apart exactly where it matters.
+# `remember` blocks a claim it judges a duplicate, and a `supersedes` riding on
+# a blocked claim closes nothing — so a run can send four correct merges and
+# change nothing at all. A `purge` goes the other way and takes the row out of
+# the table, which is why an id the query does not return counts as closed
+# rather than as missing data.
+#
+# `expired` is left out: that is the startup sweep, not the agent, and this
+# scenario deliberately ages its `fast` rows to a strength the sweep does not
+# reach — a run credited for it would be credited for someone else's work.
+#
+# The `surreal` CLI opens agmem's own store directly, the same way `age`
+# backdates rows. No tool reports liveness in bulk, and the alternative is one
+# `inspect` per seeded claim.
+def closed-rows [data: string, seeded: list] {
+    if ($seeded | is-empty) {
+        return []
+    }
+    let read = (
+        "SELECT meta::id(id) AS id, invalid_reason FROM memory;"
+        | ^surreal sql --endpoint $"surrealkv://($data)/agmem.db" --ns agmem --db main --hide-welcome --json
+        | complete
+    )
+    if $read.exit_code != 0 {
+        error make {msg: $"reading the store back failed: ($read.stderr)"}
+    }
+    # The CLI prints its own startup log to stdout ahead of the answer, so the
+    # result is the one line that begins a JSON array — one entry per
+    # statement, each holding its rows.
+    let rows = (
+        $read.stdout
+        | lines
+        | where {|line| $line | str starts-with "["}
+        | each {|line| $line | from json | get 0}
+        | flatten
+    )
+    $seeded
+    | each {|row|
+        let found = ($rows | where id == $row.id)
+        let reason = if ($found | is-empty) {
+            "purged"
+        } else {
+            $found | get -o 0.invalid_reason
+        }
+        if $reason == null or $reason == "expired" {
+            null
+        } else {
+            {id: $row.id, content: $row.content, reason: $reason}
+        }
     }
 }
 

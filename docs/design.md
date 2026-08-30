@@ -507,8 +507,15 @@ Naming: the prompts are `checkpoint` and `recall_first`, not
 client that shows prompts scopes them by server — Claude Code renders them
 `/mcp__agmem__checkpoint` — so the prefix only stutters.
 
-Resources (`memory://<space>/<id>` URIs) are a phase-4 progressive
-enhancement — tools-first, since resources have uneven client support.
+Resources (`memory://` URIs) are a phase-4 progressive enhancement —
+tools-first, since resources have uneven client support; everything a resource
+serves is also a `recall` or `inspect` answer, and no feature may depend on
+them. The grammar is two forms: `memory://<space>` reads the index (every live
+claim, slim, each entry carrying its own URI), and `memory://<space>/<id>`
+reads the full `inspect` answer for whatever the id names. `resources/list`
+serves one entry per registered space; the record form is published as a URI
+template rather than enumerated, so a large store never pushes thousands of
+rows at a client that renders the list as a menu.
 
 ---
 

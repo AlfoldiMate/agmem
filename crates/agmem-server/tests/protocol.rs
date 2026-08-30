@@ -25,7 +25,8 @@ use clap::Parser as _;
 use rmcp::RoleClient;
 use rmcp::ServiceExt as _;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode, GetPromptRequestParams, Role,
+    CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode, GetPromptRequestParams,
+    ReadResourceRequestParams, Role,
 };
 use rmcp::service::{RunningService, ServiceError};
 use serde_json::{Value, json};
@@ -433,6 +434,10 @@ async fn initialize_announces_agmem_and_its_tool_capability() {
         "and the prompt capability — a client that is not told about prompts \
          never asks, and the rituals simply do not exist for it"
     );
+    assert!(
+        info.capabilities.resources.is_some(),
+        "and the resource capability, or `memory://` is unreachable"
+    );
     let instructions = info.instructions.as_deref().expect("instructions");
     assert!(
         instructions.contains("supersedes"),
@@ -563,6 +568,163 @@ fn text_of(result: &rmcp::model::GetPromptResult) -> &str {
         ContentBlock::Text(text) => &text.text,
         other => panic!("a ritual is text, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn resources_list_serves_one_index_per_space() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let listed = agmem
+        .client
+        .list_resources(None)
+        .await
+        .expect("list_resources");
+
+    let index = listed
+        .resources
+        .iter()
+        .find(|resource| resource.uri == "memory://default")
+        .unwrap_or_else(|| panic!("the served space must be listed: {:?}", listed.resources));
+    assert_eq!(index.name, "default");
+    assert_eq!(index.mime_type.as_deref(), Some("application/json"));
+    assert!(
+        listed
+            .resources
+            .iter()
+            .all(|resource| resource.uri.starts_with("memory://")),
+        "every listed resource is a space index: {:?}",
+        listed.resources
+    );
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn resource_templates_publish_the_record_form() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let listed = agmem
+        .client
+        .list_resource_templates(None)
+        .await
+        .expect("list_resource_templates");
+
+    let [template] = &listed.resource_templates[..] else {
+        panic!("one template — records are addressed, never enumerated: {listed:?}");
+    };
+    assert_eq!(template.uri_template, "memory://{space}/{id}");
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_space_index_lists_live_claims_and_their_uris() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let first = agmem
+        .remember(json!({ "memories": [{ "content": "The deploy target is Fly.io." }] }))
+        .await;
+    let stored = ids(&first["created"])[0].to_owned();
+    let correction = agmem
+        .remember(json!({ "memories": [
+            { "content": "The deploy target moved to Railway.", "supersedes": [stored] }
+        ] }))
+        .await;
+    let live = ids(&correction["created"])[0].to_owned();
+
+    let index = read_json(&agmem, "memory://default").await;
+    assert_eq!(index["space"], "default");
+    assert_eq!(
+        index["live"], 1,
+        "a superseded claim is not part of the index: {index}"
+    );
+    let entry = &index["memories"][0];
+    assert_eq!(entry["id"], live.as_str(), "{index}");
+    assert_eq!(entry["content"], "The deploy target moved to Railway.");
+    assert_eq!(
+        entry["uri"],
+        format!("memory://default/{live}"),
+        "each entry carries the URI that reads it whole"
+    );
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_memory_uri_reads_the_inspect_answer() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let written = agmem
+        .remember(
+            json!({ "memories": [{ "content": "The CI cache key includes the rustc version." }] }),
+        )
+        .await;
+    let stored = ids(&written["created"])[0].to_owned();
+
+    let answer = read_json(&agmem, &format!("memory://default/{stored}")).await;
+    assert_eq!(
+        answer["ref"],
+        format!("memory:{stored}"),
+        "the URI resolves to inspect's canonical reference: {answer}"
+    );
+    assert_eq!(answer["found"]["kind"], "memory", "{answer}");
+    assert_eq!(
+        answer["found"]["memory"]["content"],
+        "The CI cache key includes the rustc version."
+    );
+    assert_eq!(
+        answer["found"]["chain"].as_array().expect("chain").len(),
+        1,
+        "provenance comes with the record: {answer}"
+    );
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_uri_naming_nothing_is_resource_not_found() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    for uri in [
+        "memory://default/01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "memory://no-such-space",
+        "file:///etc/passwd",
+    ] {
+        let error = agmem
+            .client
+            .read_resource(ReadResourceRequestParams::new(uri))
+            .await
+            .expect_err(uri);
+        let ServiceError::McpError(error) = &error else {
+            panic!("{uri}: expected a protocol error, got {error:?}");
+        };
+        assert_eq!(
+            error.code,
+            ErrorCode::RESOURCE_NOT_FOUND,
+            "{uri}: {error:?}"
+        );
+    }
+
+    agmem.shutdown().await;
+}
+
+/// One `resources/read`, its single JSON text block parsed.
+async fn read_json(agmem: &Harness, uri: &str) -> Value {
+    let result = agmem
+        .client
+        .read_resource(ReadResourceRequestParams::new(uri))
+        .await
+        .unwrap_or_else(|error| panic!("{uri}: {error}"));
+    let [
+        rmcp::model::ResourceContents::TextResourceContents {
+            text,
+            mime_type,
+            uri: echoed,
+            ..
+        },
+    ] = &result.contents[..]
+    else {
+        panic!("{uri}: one text block, got {result:?}");
+    };
+    assert_eq!(mime_type.as_deref(), Some("application/json"), "{uri}");
+    assert_eq!(echoed, uri, "the contents name the URI they answer");
+    serde_json::from_str(text).unwrap_or_else(|error| panic!("{uri}: {error}: {text}"))
 }
 
 #[tokio::test]

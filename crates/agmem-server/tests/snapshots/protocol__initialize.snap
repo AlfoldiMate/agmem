@@ -4,5 +4,6 @@ expression: "&info.capabilities"
 ---
 {
   "prompts": {},
+  "resources": {},
   "tools": {}
 }

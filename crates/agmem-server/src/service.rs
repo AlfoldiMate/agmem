@@ -15,22 +15,24 @@ use std::sync::Arc;
 use agmem_embed::Embedder;
 use agmem_store::db::Db;
 use rmcp::{
-    ErrorData, Json, ServerHandler, ServiceExt,
+    ErrorData, Json, RoleServer, ServerHandler, ServiceExt,
     handler::server::router::prompt::PromptRouter,
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{
-        CallToolResult, GetPromptResult, Implementation, PromptMessage, Role, ServerCapabilities,
-        ServerInfo,
+        CallToolResult, GetPromptResult, Implementation, ListResourceTemplatesResult,
+        ListResourcesResult, PaginatedRequestParams, PromptMessage, ReadResourceRequestParams,
+        ReadResourceResponse, Role, ServerCapabilities, ServerInfo,
     },
     prompt, prompt_handler, prompt_router,
-    service::ServerInitializeError,
+    service::{RequestContext, ServerInitializeError},
     tool, tool_handler, tool_router,
     transport::stdio,
 };
 
 use crate::config::Config;
 use crate::prompts::{self, Focus};
+use crate::resources;
 use crate::tools::consolidate::{self, ConsolidateParams, ConsolidateResult};
 use crate::tools::context::{self, ContextParams};
 use crate::tools::forget::{self, ForgetParams, ForgetResult, Pending};
@@ -470,10 +472,40 @@ impl ServerHandler for AgmemService {
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_prompts()
+                .enable_resources()
                 .build(),
         )
         .with_server_info(Implementation::new("agmem", env!("CARGO_PKG_VERSION")))
         .with_instructions(INSTRUCTIONS)
+    }
+
+    // The `memory://` surface (design §3.3, issue #31). Hand-written rather
+    // than routed because there is no router to want: two URI forms, both
+    // answered by [`crate::resources`], and a template standing in for the
+    // per-record listing.
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        resources::list(self).await
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, ErrorData> {
+        Ok(resources::templates())
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResponse, ErrorData> {
+        resources::read(self, &request.uri).await.map(Into::into)
     }
 }
 

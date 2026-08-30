@@ -433,7 +433,9 @@ pub async fn forget(db: &Db, request: &Forget) -> Result<Forgotten, StoreError> 
 /// considered. That is the TTL class by definition, while the others' end of
 /// life is a correction or a `forget`, so an untouched working note stops
 /// answering `recall` after about twenty days — longer for every recall that
-/// reinforced it, since strength scales the horizon.
+/// reinforced it, since strength scales the horizon, but never past five
+/// horizons: the comparison clamps strength at `scoring::MAX_STABILITY`
+/// (issue #52), so even the hottest note expires within months.
 ///
 /// The close is soft, exactly as `forget`'s is: `invalid_reason = "expired"`,
 /// the chain intact, still readable through `inspect`. A second run changes
@@ -456,6 +458,7 @@ pub async fn prune_expired(db: &Db) -> Result<Vec<MemoryId>, StoreError> {
             .bind(("class", types::decay_class_str(PRUNE_CLASS)))
             .bind(("horizon", horizon))
             .bind(("floor", scoring::MIN_STABILITY))
+            .bind(("cap", scoring::MAX_STABILITY))
             .await?,
     )?;
     let closed: Vec<String> = resp.take(0)?;

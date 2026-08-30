@@ -149,8 +149,11 @@ pub(crate) const FORGET_SOFT: &str = "UPDATE $memories
 ///
 /// The decay curve is not repeated here. `$horizon` is the idle time at which
 /// unit strength reaches the threshold (`core::scoring::decay_horizon_secs`)
-/// and a row's own horizon is that scaled by its `strength`, floored at
-/// `$floor` the way the Rust formula floors it.
+/// and a row's own horizon is that scaled by its `strength`, clamped between
+/// `$floor` and `$cap` the way the Rust formula clamps it. The cap is what
+/// lets the sweep reach a row reinforced past it before the ceiling existed
+/// (issue #52) — no migration rewrites stored strengths; the comparison just
+/// stops honouring them.
 ///
 /// The comparison is written forwards — `last_accessed + horizon < now` rather
 /// than `now − last_accessed > horizon` — because SurrealDB durations are
@@ -162,7 +165,8 @@ pub(crate) const PRUNE_EXPIRED: &str = "UPDATE memory
      SET invalid_at = time::now(), invalid_reason = 'expired'
      WHERE decay_class = $class AND invalid_at IS NONE
        AND last_accessed
-           + duration::from_secs(<int> math::round($horizon * math::max([strength, $floor])))
+           + duration::from_secs(<int> math::round(
+                 $horizon * math::min([math::max([strength, $floor]), $cap])))
            < time::now()
      RETURN VALUE record::id(id)";
 

@@ -238,18 +238,21 @@ Notes:
 Decay is **computed at read time** — no background sweeper exists:
 
 ```
-retention(m) = exp(-Δdays(now, m.last_accessed) * rate(m.decay_class) / m.strength)
+retention(m) = exp(-Δdays(now, m.last_accessed) * rate(m.decay_class) / clamp(m.strength, 0.01, 5))
 
 rate: pinned = 0        slow = 0.005      normal = 0.02     fast = 0.15
 ```
 
 Reinforcement: when `recall` returns a memory, the server bumps
-`strength += 1`, `access_count += 1`, `last_accessed = now` (batched,
-fire-and-forget) — MemoryBank's Ebbinghaus model; frequently used memories
-become effectively permanent, untouched ones fade in ranking. `fast` records
-(working context) additionally get lazy TTL pruning: at startup, `fast`
-memories with retention below ~0.05 are closed with
-`invalid_reason = "expired"` (still soft — history remains).
+`strength += 1` (capped at `MAX_STABILITY = 5`, issue #52), `access_count += 1`,
+`last_accessed = now` (batched, fire-and-forget) — MemoryBank's Ebbinghaus
+model; frequently used memories outlast untouched ones, which fade in ranking.
+The cap is uniform across classes — the class sets the timescale through its
+rate, strength is the use-multiplier on top — and it bounds what use can buy
+at five times the class's own horizon: without it a `fast` note recalled fifty
+times survived ~3 years. `fast` records (working context) additionally get
+lazy TTL pruning: at startup, `fast` memories with retention below ~0.05 are
+closed with `invalid_reason = "expired"` (still soft — history remains).
 
 ---
 
@@ -876,8 +879,11 @@ The prune is one `UPDATE`, and the decay curve is not repeated in it. The
 selector is the **inverse** of the retention formula, computed once in
 `core::scoring::decay_horizon_secs`: the idle time at which unit strength
 falls to 0.05 — about twenty days for `fast` — which the engine then scales by
-each row's own `strength`. So the comparison is
-`last_accessed + horizon·strength < now`, written forwards on purpose:
+each row's own `strength`, clamped to `[MIN_STABILITY, MAX_STABILITY]` exactly
+as retention clamps it (issue #52) — which is also how the sweep reaches a row
+reinforced past the cap before the ceiling existed, with no migration. So the
+comparison is `last_accessed + horizon·clamp(strength) < now`, written
+forwards on purpose:
 SurrealDB durations are unsigned, and `now − last_accessed` on a row with a
 future timestamp either errors the statement or comes back large and positive,
 expiring exactly the row that has barely aged.

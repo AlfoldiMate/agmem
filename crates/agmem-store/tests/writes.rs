@@ -764,6 +764,30 @@ async fn the_startup_prune_expires_stale_working_context_and_nothing_else() {
 }
 
 #[tokio::test]
+async fn the_prune_reaches_a_row_reinforced_past_the_cap() {
+    let db = store().await;
+    let mut memory = NewMemory::new(Kind::Fact, "the demo login is on the whiteboard");
+    memory.decay_class = Some(DecayClass::Fast);
+    let hot = repo::insert_batch(&db, batch(vec![memory]))
+        .await
+        .expect("write")
+        .memories
+        .remove(0)
+        .into_id();
+
+    // Fifty recalls' worth of strength, idle past the capped horizon (five
+    // times ~20 days) but far inside the uncapped one (~3 years): the row
+    // issue #52 was filed about, written before the ceiling existed.
+    age(&db, &hot, 150, 50.0).await;
+
+    assert_eq!(
+        repo::prune_expired(&db).await.expect("prune"),
+        vec![hot],
+        "the sweep clamps strength in its comparison, so no migration is needed"
+    );
+}
+
+#[tokio::test]
 async fn a_second_prune_moves_nothing_the_first_one_left() {
     let db = store().await;
     let working = |content: &str| {

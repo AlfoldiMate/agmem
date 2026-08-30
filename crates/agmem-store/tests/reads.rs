@@ -354,6 +354,32 @@ async fn recall_reinforces_what_it_returned() {
 }
 
 #[tokio::test]
+async fn reinforcement_saturates_at_the_strength_cap() {
+    let db = seeded().await;
+    let id = live_id(&db, "the user prefers Rust").await;
+
+    // Nine recalls. Uncapped, this row would sit at strength 10 with a decay
+    // curve to match; the ceiling is what keeps a hot memory on its class's
+    // own timescale (issue #52).
+    for _ in 0..9 {
+        repo::reinforce(&db, std::slice::from_ref(&id))
+            .await
+            .expect("reinforce");
+    }
+
+    let rows = repo::direct_lookup(&db, &Lookup::new(vec![space()]))
+        .await
+        .expect("lookup");
+    let row = rows.iter().find(|m| m.id == id).expect("seeded memory");
+    assert_eq!(
+        row.strength,
+        agmem_core::scoring::MAX_STABILITY,
+        "use past the cap buys no more stability"
+    );
+    assert_eq!(row.access_count, 9, "but every recall still counts");
+}
+
+#[tokio::test]
 async fn direct_lookup_filters_on_the_indexed_columns() {
     let db = seeded().await;
     let contents_of = async |filters: Filters| {
@@ -884,10 +910,11 @@ async fn stale_contexts_are_the_rows_reinforcement_carried_past_the_prune() {
         ids[3].clone(),
     );
 
-    // Recalled thirty times, so `strength` bought it roughly 620 days against
-    // a class whose unreinforced horizon is twenty — the sweep will not reach
-    // it, which is exactly why it needs a decision instead.
-    age(&db, &carried, 200, 31.0, 30).await;
+    // Recalled thirty times. Uncapped, that strength bought roughly 620 days
+    // against a class whose unreinforced horizon is twenty; the cap holds it
+    // to five horizons (#52), and inside that window the sweep still will not
+    // reach it — which is exactly why it needs a decision instead.
+    age(&db, &carried, 60, 31.0, 30).await;
     // Equally idle, but nothing ever used it — the prune's own backlog, and
     // it will close on the next start rather than needing a decision.
     age(&db, &untouched, 200, 1.0, 1).await;

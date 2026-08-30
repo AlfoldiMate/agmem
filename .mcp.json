@@ -3,7 +3,8 @@
     "agmem": {
       "command": "agmem",
       "env": {
-        "AGMEM_SPACE": "agmem"
+        "AGMEM_SPACE": "agmem",
+        "AGMEM_DB": "ws://127.0.0.1:8000"
       }
     }
   }

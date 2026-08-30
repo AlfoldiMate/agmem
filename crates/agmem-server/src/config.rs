@@ -31,6 +31,21 @@ pub struct Cli {
     #[arg(long, env = "AGMEM_DB", value_name = "URL")]
     pub db: Option<String>,
 
+    /// Root username for a remote --db server. Embedded engines have no
+    /// signin, so this only applies when --db names a ws://, wss://,
+    /// http:// or https:// endpoint.
+    #[arg(long, env = "AGMEM_DB_USER", value_name = "USER")]
+    pub db_user: Option<String>,
+
+    /// Root password for a remote --db server; pair of --db-user.
+    #[arg(
+        long,
+        env = "AGMEM_DB_PASS",
+        value_name = "PASS",
+        hide_env_values = true
+    )]
+    pub db_pass: Option<String>,
+
     /// Space (project scope) served by this instance.
     #[arg(long, env = "AGMEM_SPACE", default_value = "default")]
     pub space: SpaceName,
@@ -210,6 +225,9 @@ impl<K: Into<String>, V: Into<String>> FromIterator<(K, V)> for ToolDescriptions
 pub struct Config {
     pub data_dir: PathBuf,
     pub db_url: String,
+    /// Root signin presented to a remote server; `None` on embedded engines.
+    pub db_user: Option<String>,
+    pub db_pass: Option<String>,
     pub space: SpaceName,
     pub embedder: EmbedderKind,
     pub pool: u16,
@@ -227,12 +245,28 @@ pub struct Config {
     pub idle_timeout: u64,
 }
 
+/// True when `url` names a DB in another process — no local lock file needed.
+fn is_remote(url: &str) -> bool {
+    ["ws://", "wss://", "http://", "https://"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
+}
+
 impl Config {
     /// True when the DB lives in another process — no local lock file needed.
     pub fn db_is_remote(&self) -> bool {
-        ["ws://", "wss://", "http://", "https://"]
-            .iter()
-            .any(|scheme| self.db_url.starts_with(scheme))
+        is_remote(&self.db_url)
+    }
+
+    /// The root signin to present to a remote server, when this deployment
+    /// set one. Embedded engines have no signin, so never any credentials.
+    pub fn db_credentials(&self) -> Option<agmem_store::db::Credentials<'_>> {
+        match (&self.db_user, &self.db_pass) {
+            (Some(user), Some(pass)) if self.db_is_remote() => {
+                Some(agmem_store::db::Credentials { user, pass })
+            }
+            _ => None,
+        }
     }
 }
 
@@ -249,9 +283,18 @@ impl Cli {
         let db_url = self
             .db
             .unwrap_or_else(|| format!("surrealkv://{}", data_dir.join("agmem.db").display()));
+        if is_remote(&db_url) && (self.db_user.is_some() != self.db_pass.is_some()) {
+            bail!(
+                "AGMEM_DB_USER and AGMEM_DB_PASS come as a pair: one without the \
+                 other would reach the server unauthenticated and be refused there. \
+                 Set both or neither."
+            );
+        }
         Ok(Config {
             data_dir,
             db_url,
+            db_user: self.db_user,
+            db_pass: self.db_pass,
             space: self.space,
             embedder: self.embedder,
             pool: self.pool,
@@ -290,6 +333,30 @@ mod tests {
     fn explicit_db_url_wins_and_remote_is_detected() {
         let cfg = parse(&["--db", "ws://localhost:8000"]);
         assert!(cfg.db_is_remote());
+    }
+
+    #[test]
+    fn half_a_credential_pair_is_refused_for_remote_engines() {
+        let err =
+            Cli::try_parse_from(["agmem", "--db", "ws://localhost:8000", "--db-user", "root"])
+                .expect("parse")
+                .resolve()
+                .expect_err("one credential without the other");
+        assert!(err.to_string().contains("pair"), "{err}");
+
+        let cfg = parse(&[
+            "--db",
+            "ws://localhost:8000",
+            "--db-user",
+            "root",
+            "--db-pass",
+            "s3cret",
+        ]);
+        assert!(cfg.db_credentials().is_some());
+
+        // Embedded engines have no signin; stray credentials never apply.
+        let cfg = parse(&["--db-user", "root", "--data", "/tmp/agmem-test"]);
+        assert!(cfg.db_credentials().is_none());
     }
 
     #[test]

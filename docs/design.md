@@ -938,6 +938,7 @@ rather than details:
 |---|---|---|
 | `--data` / `AGMEM_DATA` | `ProjectDirs("dev","agmem","agmem")` data dir | Home of DB file, lock file |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
+| `AGMEM_DB_USER` / `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | `default` | Current space for this server instance (per-project value set in the client's MCP config) |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `static` \| `none` |
 | `AGMEM_POOL` / `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |

@@ -34,7 +34,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let _lock = lock::acquire(&cfg.data_dir)?;
     restrict(&cfg.data_dir);
 
-    let db = agmem_store::db::connect(&cfg.db_url).await?;
+    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
     let schema = agmem_store::migrate::ensure(&db).await?;
     let embedder = embedder::build(&cfg)?;
     agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;

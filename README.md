@@ -179,9 +179,26 @@ Point every agmem at a SurrealDB server rather than an embedded file:
 The server becomes the single-writer boundary, so there is no lock file and no
 daemon — `--doctor` reports `skip single-writer lock, remote engine`. agmem
 uses the `agmem` namespace and the `main` database and applies its own
-migrations on first connect. It sends no credentials, so the server has to
-accept the connection unauthenticated: this is a trusted-network arrangement,
-not an exposed one.
+migrations on first connect. The smallest server that satisfies it:
+
+```sh
+surreal start --bind 127.0.0.1:8000 --unauthenticated surrealkv://~/surreal/agmem.db
+```
+
+For a server with authentication enabled, put a root signin in the same env
+block — `AGMEM_DB_USER` and `AGMEM_DB_PASS`, always as a pair (agmem refuses
+half of one). That is the whole credential story: agmem has no auth model of
+its own — spaces are scopes, not permissions — so the SurrealDB server is the
+security boundary, and anyone who can reach it can read every space. Keep it
+on a loopback or trusted network, `wss://` anywhere else.
+
+Two more properties of the mode, both verified by `tests/ws.rs` against a
+real server: sessions keep working across a server restart (the SDK
+reconnects by itself, requests in flight during the outage fail and later
+ones succeed), and switching back to the embedded engine is just unsetting
+`AGMEM_DB` — the data stays wherever the server's backend put it, so move it
+first with `surreal export` / `surreal import` if the embedded file is to
+keep the history.
 
 ## The loop
 
@@ -487,6 +504,7 @@ The numbers and the harness behind them are in `docs/tool-descriptions.md`.
 |---|---|---|
 | `--data` / `AGMEM_DATA` | platform data dir | Database, lock file, model cache |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine; `mem://` for scratch, `ws://host` to share one store |
+| `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`; a pair, ignored by embedded engines |
 | `--space` / `AGMEM_SPACE` | `default` | This instance's space |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed`, or `none` for BM25-only |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |

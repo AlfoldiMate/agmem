@@ -73,7 +73,7 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
 /// The database half of the report: open, migrate, write and read back.
 async fn check_store(cfg: &Config) -> u32 {
     let mut failures = 0u32;
-    let opened = match agmem_store::db::connect(&cfg.db_url).await {
+    let opened = match agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await {
         Ok(db) => {
             eprintln!("  ok    database open        {}", cfg.db_url);
             match agmem_store::migrate::ensure(&db).await {

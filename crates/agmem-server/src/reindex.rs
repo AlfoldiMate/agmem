@@ -55,7 +55,7 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
     };
 
     eprintln!("agmem reindex");
-    let db = agmem_store::db::connect(&cfg.db_url).await?;
+    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
     let schema = migrate::ensure(&db).await?;
     eprintln!("  ok    schema               v{schema}");
 

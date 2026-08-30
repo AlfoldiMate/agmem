@@ -413,7 +413,7 @@ an agent can check itself against.
   started the daemon would have chosen the wording for all of them.
 
 `agmem --doctor` prints which tools a run is rewording — an override is
-invisible from the outside otherwise, since the surface still lists five tools.
+invisible from the outside otherwise, since the surface still lists seven tools.
 
 ## Re-running this
 

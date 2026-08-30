@@ -174,7 +174,7 @@ impl ToolDescriptions {
             let tool = suffix.to_ascii_lowercase();
             if !crate::tools::NAMES.contains(&tool.as_str()) {
                 bail!(
-                    "{key} names no agmem tool. The five are: {}.",
+                    "{key} names no agmem tool. The seven are: {}.",
                     crate::tools::NAMES.join(", ")
                 );
             }
@@ -549,7 +549,7 @@ mod tests {
             ("AGMEM_SPACE", "unrelated"),
             ("PATH", "/usr/bin"),
         ])
-        .expect("all five names are known");
+        .expect("every name is a known tool");
 
         assert_eq!(overrides.get("recall"), Some("Search what you were told."));
         assert_eq!(overrides.get("remember"), Some("Write it down."));

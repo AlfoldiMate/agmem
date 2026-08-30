@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -16,10 +16,15 @@ repository = "https://github.com/AlfoldiMate/agmem"
 homepage = "https://github.com/AlfoldiMate/agmem"
 
 [workspace.dependencies]
-agmem-core = { path = "crates/agmem-core" }
-agmem-store = { path = "crates/agmem-store" }
+# The `version` beside each `path` is for `cargo package`, which release-plz
+# runs to compare a crate against its last release: packaging refuses a path
+# dependency with no version requirement. Local builds resolve by path either
+# way, and a caret requirement stays satisfied across the bumps release-plz
+# makes.
+agmem-core = { path = "crates/agmem-core", version = "0.1.3" }
+agmem-store = { path = "crates/agmem-store", version = "0.1.3" }
 # default-features off so a BM25-only build can drop the ONNX half entirely
-agmem-embed = { path = "crates/agmem-embed", default-features = false }
+agmem-embed = { path = "crates/agmem-embed", version = "0.1.3", default-features = false }
 
 # MCP + storage + embeddings (pinned per docs/design.md §4.1)
 rmcp = { version = "3.1", features = ["server", "macros", "transport-io"] }

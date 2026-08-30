@@ -1,0 +1,47 @@
+# The rolling release PR.
+#
+# release-plz maintains one open PR that accumulates merged work as a version
+# bump; **merging that PR is the release decision** — nothing releases on an
+# ordinary merge. On the push that merge makes, the `release` job pushes the
+# `v{version}` tag, and cargo-dist's release.yml takes over exactly as it does
+# for a hand-pushed tag (build, GitHub release, Homebrew tap publish).
+#
+# The old flow stays valid as the escape hatch: merge a manual version-bump PR
+# (for a minor bump the patch default undersells, say) and the release job
+# tags it the same way — it tags whatever version on main is newer than the
+# last tag, however it got there.
+#
+# Narrative commit titles carry no conventional-commit markers, so the bump
+# defaults to patch; pre-1.0 that is the honest default.
+#
+# Change detection checks out the last tag into a temp worktree and runs
+# `cargo package --workspace` there, verify-build included and no flag to skip
+# it — so the workflow points CARGO_TARGET_DIR at the cached target dir, which
+# turns that build from cold-surrealdb minutes into about one (measured
+# locally: 60s warm for the whole update). It is also why the internal path
+# dependencies in Cargo.toml carry a `version`: packaging refuses a path
+# dependency without one, and the *tagged* tree is what gets packaged — the
+# first tag whose tree carries the versions is where this flow starts working.
+
+[workspace]
+# Nothing here goes to crates.io — the binary ships through cargo-dist — and
+# without `git_only` release-plz would baseline against the registry, find
+# nothing there, and treat every version as an unreleased first release.
+publish = false
+git_only = true
+# cargo-dist creates the GitHub release when the tag lands; a second one from
+# this tool would race it.
+git_release_enable = false
+# One shared workspace version means per-crate changelogs would each see only
+# their own directory's commits and miss the rest of the release. The git log
+# between tags is the changelog, in this repo's own words.
+changelog_update = false
+# Every crate reads its baseline from the shared v* tag (the workspace version
+# is one number), but only the binary crate below *writes* the tag — four
+# crates racing to create the same tag name is three failures.
+git_tag_name = "v{{ version }}"
+git_tag_enable = false
+
+[[package]]
+name = "agmem-server"
+git_tag_enable = true

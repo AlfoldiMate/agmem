@@ -83,11 +83,19 @@ way to try something without touching real memory.
 
 ## Register it
 
-The same three lines in every client: an `mcpServers` entry naming the binary
-and this project's space.
+Once, globally, and every project is covered:
 
-**Claude Code** — `.mcp.json` in the project root, checked in so everyone on
-the repo gets it:
+```sh
+claude mcp add agmem --scope user -- agmem
+```
+
+No space to configure: each session derives it from where it runs — the
+enclosing git project's name, so every worktree of a repo shares one space,
+else the directory's name, else `default`. Set `AGMEM_SPACE` only to pin a
+name the folder doesn't already say.
+
+**Claude Code, pinned per project** — `.mcp.json` in the project root, checked
+in so everyone on the repo gets it (an explicit space wins over derivation):
 
 ```json
 {
@@ -140,9 +148,11 @@ the cross-project `user` space is usually the right one there.
 Any other MCP client works the same way: agmem is a stdio server, `command:
 "agmem"`, no arguments.
 
-`AGMEM_SPACE` names this project's memory. One space per project, plus the
-reserved `user` space for what follows the person everywhere — preferences,
-working style, things true regardless of repo.
+The space names this project's memory. One space per project — derived from
+the folder when `AGMEM_SPACE` doesn't say — plus the reserved `user` space for
+what follows the person everywhere: preferences, working style, things true
+regardless of repo. Derivation never lands on `user`; only an explicit
+`AGMEM_SPACE=user` serves personal memory.
 
 **Several sessions at once, one store.** The embedded store is single-writer,
 so the first session that needs it starts a small background daemon to own it
@@ -505,7 +515,7 @@ The numbers and the harness behind them are in `docs/tool-descriptions.md`.
 | `--data` / `AGMEM_DATA` | platform data dir | Database, lock file, model cache |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine; `mem://` for scratch, `ws://host` to share one store |
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`; a pair, ignored by embedded engines |
-| `--space` / `AGMEM_SPACE` | `default` | This instance's space |
+| `--space` / `AGMEM_SPACE` | derived: git project name, else directory name, else `default` | This instance's space |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed`, or `none` for BM25-only |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |

@@ -939,7 +939,7 @@ rather than details:
 | `--data` / `AGMEM_DATA` | `ProjectDirs("dev","agmem","agmem")` data dir | Home of DB file, lock file |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
 | `AGMEM_DB_USER` / `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
-| `--space` / `AGMEM_SPACE` | `default` | Current space for this server instance (per-project value set in the client's MCP config) |
+| `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `static` \| `none` |
 | `AGMEM_POOL` / `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
@@ -950,6 +950,13 @@ rather than details:
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip; prints report, exits |
 
 Client registration (the entire install story):
+
+```sh
+claude mcp add agmem --scope user -- agmem
+```
+
+Registered once globally, each session derives its space from where the client
+launches it; a project that wants a different name pins it:
 
 ```jsonc
 // .mcp.json / claude_desktop_config.json

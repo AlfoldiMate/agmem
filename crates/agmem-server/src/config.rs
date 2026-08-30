@@ -4,7 +4,7 @@
 //! feature handles the fallback).
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use agmem_core::SpaceName;
 use anyhow::{Context, bail};
@@ -46,9 +46,11 @@ pub struct Cli {
     )]
     pub db_pass: Option<String>,
 
-    /// Space (project scope) served by this instance.
-    #[arg(long, env = "AGMEM_SPACE", default_value = "default")]
-    pub space: SpaceName,
+    /// Space (project scope) served by this instance. Unset, it is derived:
+    /// the enclosing git project's name — every worktree of a repo maps to
+    /// the same space — else the current directory's name, else `default`.
+    #[arg(long, env = "AGMEM_SPACE")]
+    pub space: Option<SpaceName>,
 
     /// Embedding backend.
     #[arg(long, env = "AGMEM_EMBEDDER", value_enum, default_value_t = EmbedderKind::Fastembed)]
@@ -245,6 +247,79 @@ pub struct Config {
     pub idle_timeout: u64,
 }
 
+/// The space served when nothing names one (issue #44): the enclosing git
+/// project, else the directory itself, else [`fallback_space`].
+///
+/// Derived here, in the session process, so the daemon handshake carries a
+/// per-project space even under one global MCP registration — static client
+/// config cannot vary by folder, but the cwd the client launches us in can.
+fn derived_space(cwd: &Path) -> SpaceName {
+    project_dir(cwd)
+        .as_deref()
+        .and_then(space_from_dir_name)
+        .or_else(|| space_from_dir_name(cwd))
+        .unwrap_or_else(fallback_space)
+}
+
+/// The space of last resort, kept as the literal `default` so stores written
+/// before derivation existed keep resolving to the same place.
+fn fallback_space() -> SpaceName {
+    SpaceName::new("default").expect("a valid slug")
+}
+
+/// The directory that names the project around `start`: the parent of the git
+/// *common* dir. That is the repo root for a plain checkout, and the shared
+/// project root for a linked worktree — bare `.bare/`-style layouts included —
+/// so worktrees share one space rather than getting one per branch.
+fn project_dir(start: &Path) -> Option<PathBuf> {
+    let dot_git = start
+        .ancestors()
+        .map(|dir| dir.join(".git"))
+        .find(|candidate| candidate.exists())?;
+    let git_dir = if dot_git.is_dir() {
+        dot_git
+    } else {
+        // A worktree's `.git` is one line: `gitdir: <its private dir>`.
+        let target = std::fs::read_to_string(&dot_git).ok()?;
+        let target = PathBuf::from(target.strip_prefix("gitdir:")?.trim());
+        // join() discards its base when the target is already absolute
+        dot_git.parent()?.join(target)
+    };
+    // A linked worktree's private dir names the shared dir in `commondir`,
+    // usually relatively; a primary checkout has no such file.
+    let common = match std::fs::read_to_string(git_dir.join("commondir")) {
+        Ok(shared) => git_dir.join(shared.trim()),
+        Err(_) => git_dir,
+    };
+    // canonicalize collapses the `../..` a relative commondir carries
+    std::fs::canonicalize(common)
+        .ok()?
+        .parent()
+        .map(Path::to_path_buf)
+}
+
+/// `dir`'s name as a space: lowercased, anything outside `[a-z0-9-_]` becomes
+/// `-`, capped at [`SpaceName::MAX_LEN`]. `None` when nothing survives — and
+/// for the reserved `user` space, because a project that happens to be named
+/// `user` must not absorb cross-project personal memory.
+fn space_from_dir_name(dir: &Path) -> Option<SpaceName> {
+    let name = dir.file_name()?.to_string_lossy();
+    let slug: String = name
+        .chars()
+        .map(|c| match c {
+            _ if c.is_ascii_alphanumeric() => c.to_ascii_lowercase(),
+            '-' | '_' => c,
+            _ => '-',
+        })
+        .take(SpaceName::MAX_LEN)
+        .collect();
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() || slug == SpaceName::user().as_str() {
+        return None;
+    }
+    SpaceName::new(slug).ok()
+}
+
 /// True when `url` names a DB in another process — no local lock file needed.
 fn is_remote(url: &str) -> bool {
     ["ws://", "wss://", "http://", "https://"]
@@ -290,12 +365,20 @@ impl Cli {
                  Set both or neither."
             );
         }
+        let space = match self.space {
+            Some(space) => space,
+            // An unreadable cwd is just the far end of the derivation cascade,
+            // not a reason to refuse to serve memory.
+            None => std::env::current_dir()
+                .map(|cwd| derived_space(&cwd))
+                .unwrap_or_else(|_| fallback_space()),
+        };
         Ok(Config {
             data_dir,
             db_url,
             db_user: self.db_user,
             db_pass: self.db_pass,
-            space: self.space,
+            space,
             embedder: self.embedder,
             pool: self.pool,
             max_k: self.max_k,
@@ -363,6 +446,91 @@ mod tests {
     fn invalid_space_is_rejected_at_parse_time() {
         let err = Cli::try_parse_from(["agmem", "--space", "Not A Slug"]);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn an_explicit_space_wins_over_derivation() {
+        let cfg = parse(&["--space", "pinned", "--data", "/tmp/agmem-test"]);
+        assert_eq!(cfg.space.as_str(), "pinned");
+    }
+
+    /// A directory tree to derive spaces from, torn down on drop.
+    fn root() -> tempfile::TempDir {
+        tempfile::tempdir().expect("tempdir")
+    }
+
+    fn derive(from: &std::path::Path) -> String {
+        derived_space(from).as_str().to_owned()
+    }
+
+    #[test]
+    fn space_derives_from_the_repo_root_not_the_subdir() {
+        let root = root();
+        let deep = root.path().join("Alpha/src/deep");
+        std::fs::create_dir_all(&deep).expect("dirs");
+        std::fs::create_dir(root.path().join("Alpha/.git")).expect(".git");
+        assert_eq!(derive(&deep), "alpha");
+    }
+
+    #[test]
+    fn a_linked_worktree_lands_in_its_repos_space() {
+        let root = root();
+        // What `git worktree add ../alpha-fix` leaves behind: a private dir
+        // under the repo's .git whose `commondir` points back at it, and a
+        // one-line `.git` file in the worktree naming that private dir.
+        let private = root.path().join("Alpha/.git/worktrees/fix");
+        std::fs::create_dir_all(&private).expect("dirs");
+        std::fs::write(private.join("commondir"), "../..\n").expect("commondir");
+        let worktree = root.path().join("alpha-fix");
+        std::fs::create_dir(&worktree).expect("worktree");
+        std::fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", private.display()),
+        )
+        .expect(".git file");
+        assert_eq!(derive(&worktree), "alpha");
+    }
+
+    #[test]
+    fn a_bare_layout_names_the_project_root() {
+        let root = root();
+        // The .bare-plus-sibling-worktrees layout: the common dir is
+        // <project>/.bare, so every worktree derives the project's name.
+        let private = root.path().join("Proj/.bare/worktrees/main");
+        std::fs::create_dir_all(&private).expect("dirs");
+        std::fs::write(private.join("commondir"), "../..\n").expect("commondir");
+        let worktree = root.path().join("Proj/main");
+        std::fs::create_dir(&worktree).expect("worktree");
+        std::fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", private.display()),
+        )
+        .expect(".git file");
+        assert_eq!(derive(&worktree), "proj");
+    }
+
+    #[test]
+    fn no_repo_falls_back_to_the_directory_name_slugged() {
+        let root = root();
+        let dir = root.path().join("My Project!");
+        std::fs::create_dir(&dir).expect("dir");
+        assert_eq!(derive(&dir), "my-project");
+    }
+
+    #[test]
+    fn the_reserved_user_space_is_never_derived() {
+        let root = root();
+        let repo = root.path().join("user");
+        std::fs::create_dir_all(repo.join(".git")).expect("dirs");
+        assert_eq!(derive(&repo), "default");
+    }
+
+    #[test]
+    fn a_name_with_nothing_usable_falls_back_to_default() {
+        let root = root();
+        let dir = root.path().join("…—…");
+        std::fs::create_dir(&dir).expect("dir");
+        assert_eq!(derive(&dir), "default");
     }
 
     fn env(pairs: &[(&str, &str)]) -> anyhow::Result<ToolDescriptions> {

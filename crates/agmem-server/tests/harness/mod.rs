@@ -65,6 +65,10 @@ impl Harness {
             // backend a test wants directly.
             "--embedder",
             "none",
+            // Left unset, the space derives from the checkout's own name
+            // (#44); [`space`] and every assertion quoting it expect this one.
+            "--space",
+            "default",
             "--data",
             &data.path().display().to_string(),
         ])

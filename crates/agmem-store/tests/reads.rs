@@ -225,6 +225,55 @@ async fn episode_chunks_compete_only_when_asked_for() {
 }
 
 #[tokio::test]
+async fn an_as_of_recall_excludes_chunks_that_had_not_yet_happened() {
+    let db = seeded().await;
+    // A second episode from long before the seeded one (which defaults to
+    // now), sharing the term "coffee" with one of its chunks.
+    repo::insert_batch(
+        &db,
+        Batch {
+            space: space(),
+            episode: Some(NewEpisode {
+                content: "an older conversation".to_owned(),
+                occurred_at: Some(stamp("2025-05-01T00:00:00Z")),
+                session: None,
+                chunks: vec![NewChunk {
+                    text: "coffee fuelled the all-nighter".to_owned(),
+                    embedding: Some(axis(2)),
+                }],
+            }),
+            memories: vec![],
+        },
+    )
+    .await
+    .expect("older episode");
+
+    let mut search = Search::new(vec![space()]);
+    search.text = Some("coffee".to_owned());
+    search.vector = None;
+
+    let now = repo::search_hybrid(&db, &search).await.expect("live");
+    search.liveness = Liveness::AsOf(stamp("2026-03-01T00:00:00Z"));
+    let then = repo::search_hybrid(&db, &search).await.expect("as of");
+
+    let mut all = contents(&now);
+    all.sort_unstable();
+    assert_eq!(
+        all,
+        [
+            "coffee fuelled the all-nighter",
+            "then somebody made coffee"
+        ],
+        "a live recall reads both episodes"
+    );
+    assert_eq!(
+        contents(&then),
+        ["coffee fuelled the all-nighter"],
+        "text recorded after the instant was not known then"
+    );
+}
+
+#[tokio::test]
 async fn a_closed_memory_is_invisible_until_the_window_asks_for_it() {
     let db = seeded().await;
     let old = live_id(&db, "the user prefers Rust").await;

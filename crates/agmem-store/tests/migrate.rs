@@ -142,6 +142,48 @@ async fn a_correction_written_before_v3_reads_as_a_one_element_list() {
     assert!(chain[0].supersedes.is_empty(), "the oldest closed nothing");
 }
 
+/// Chunks written before v4 carry no `occurred_at` — the column arrives with
+/// that migration — and the as-of clause reads the date off the chunk, so the
+/// upgrade has to copy each episode's date down. A chunk left at NONE would
+/// silently sit out every as-of recall.
+#[tokio::test]
+async fn a_chunk_written_before_v4_takes_its_episodes_date() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    conn.query(include_str!("../src/migrations/v1_schema.surql"))
+        .await
+        .expect("v1")
+        .check()
+        .expect("v1 statements");
+    conn.query(
+        "CREATE episode:01M145SMNET1XRYA713EWAQTE1 SET space = 'test',
+             content = 'an old conversation', content_hash = 'v1-ep',
+             occurred_at = d'2025-05-01T00:00:00Z';
+         CREATE episode_chunk:ulid() SET
+             episode = episode:01M145SMNET1XRYA713EWAQTE1, space = 'test',
+             text = 'an old conversation', position = 0",
+    )
+    .await
+    .expect("seed")
+    .check()
+    .expect("seed statements");
+
+    assert_eq!(
+        migrate::ensure(&conn).await.expect("upgrade"),
+        migrate::SCHEMA_VERSION
+    );
+
+    let mut resp = conn
+        .query("SELECT VALUE <string> occurred_at FROM episode_chunk")
+        .await
+        .expect("read back");
+    let dates: Vec<String> = resp.take(0).expect("dates");
+    assert_eq!(
+        dates,
+        ["2025-05-01T00:00:00Z"],
+        "the backfill copies the episode's date onto its chunk"
+    );
+}
+
 /// A fresh store adopts its first backend's width (issue #29): recording a
 /// 256-wide embedder redefines the HNSW indexes the v1 schema bakes at 384,
 /// so the first write lands instead of failing with "Incorrect vector

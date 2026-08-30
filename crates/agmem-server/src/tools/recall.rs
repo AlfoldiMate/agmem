@@ -60,7 +60,8 @@ pub struct RecallParams {
 
     /// What was believed at this instant, RFC3339 — corrections are dated, so
     /// this returns the claim that was live then rather than the one that
-    /// replaced it.
+    /// replaced it. Verbatim text is dated too: an episode recorded after
+    /// the instant stays out of the answer.
     #[serde(default)]
     pub as_of: Option<String>,
 

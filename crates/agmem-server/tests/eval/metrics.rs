@@ -143,14 +143,20 @@ pub async fn timeline(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Ratio
         }
         let answer = seeded.agmem.recall(arguments).await;
 
-        // `expect_top` is judged on the first *claim*: an episode slice
-        // outranking it is a ranking fact, and ranking has its own column.
-        // Whether the claim layer answers correctly over time is this one's.
-        let top = hits(&answer)
-            .iter()
-            .find(|hit| hit["kind"].as_str() != Some("episode"))
-            .cloned()
-            .unwrap_or(Value::Null);
+        // For a live check, `expect_top` is judged on the first *claim*: an
+        // episode slice outranking it is a ranking fact, and ranking has its
+        // own column. An as-of check judges the raw top instead — chunks are
+        // dated since schema v4, and a chunk surfacing for an instant before
+        // its episode happened is exactly the failure this metric watches.
+        let top = if check.as_of.is_some() {
+            hits(&answer).first().cloned().unwrap_or(Value::Null)
+        } else {
+            hits(&answer)
+                .iter()
+                .find(|hit| hit["kind"].as_str() != Some("episode"))
+                .cloned()
+                .unwrap_or(Value::Null)
+        };
         let mut ok = top["id"].as_str() == Some(seeded.id(check.expect_top.as_str()));
         if let Some(successor) = &check.superseded_by {
             ok = ok

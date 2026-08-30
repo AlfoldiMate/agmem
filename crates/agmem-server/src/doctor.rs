@@ -28,7 +28,7 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
 
     // Not a check — nothing here can fail, `Config` refused an unknown tool
     // long before this. It is on the report because an override is invisible
-    // from the outside: the surface still lists five tools, and the only way
+    // from the outside: the surface still lists seven tools, and the only way
     // to see which words an agent is being handed is to ask.
     if cfg.tool_desc.is_empty() {
         eprintln!("  ok    tool descriptions    agmem's own wording");

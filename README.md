@@ -7,11 +7,12 @@ dates it, ranks it, and shows its work.
 Seven tools — `remember`, `recall`, `context`, `forget`, `inspect`,
 `consolidate`, `reflect` — and two rituals that ask for them.
 
-> Status: Phase 2 complete, and `consolidate` and `reflect` (Phase 3) have
-> landed. The loop, the session-start block, removal, startup pruning, the
-> shared daemon, the rituals, candidate surfacing and cited insights all work
-> end to end from Claude Code. The entity graph and the memory-quality eval
-> are what is left of Phase 3.
+> Status: v0.1.1, backlog empty — Phases 0–4 all landed. The loop, the
+> session-start block, removal, startup pruning, the shared daemon, the
+> rituals, candidate surfacing, cited insights, `ws://` sharing and the
+> offline quality eval all work end to end from Claude Code. The entity
+> graph stayed unbuilt on purpose: `recall` takes the multi-hop itself,
+> seeded from its top hits' entities (#27).
 
 ## Install
 
@@ -119,15 +120,15 @@ claude mcp add agmem --scope project -e AGMEM_SPACE=myproject -- agmem
 This repo checks in no `.mcp.json` of its own: the global registration
 covers it, and the space derives to `agmem` from the folder.
 
-**Cursor** — `.cursor/mcp.json` for one project, `~/.cursor/mcp.json` for all of
-them. Identical shape:
+**Cursor** — `~/.cursor/mcp.json` covers every project, and wants no env:
+the space derives per project there exactly as above.
 
 ```json
-{ "mcpServers": { "agmem": {
-    "command": "agmem",
-    "env": { "AGMEM_SPACE": "myproject" }
-} } }
+{ "mcpServers": { "agmem": { "command": "agmem" } } }
 ```
+
+A project that needs a different name pins `AGMEM_SPACE` in its own
+`.cursor/mcp.json` — identical shape plus the `env` block.
 
 **Claude Desktop** — `claude_desktop_config.json`, reachable from Settings →
 Developer → Edit Config, at
@@ -180,10 +181,7 @@ Point every agmem at a SurrealDB server rather than an embedded file:
 ```json
 { "mcpServers": { "agmem": {
     "command": "agmem",
-    "env": {
-      "AGMEM_SPACE": "myproject",
-      "AGMEM_DB": "ws://memory.internal:8000"
-    }
+    "env": { "AGMEM_DB": "ws://memory.internal:8000" }
 } } }
 ```
 
@@ -550,7 +548,7 @@ rebuild:
 
 The override is the whole description, not an addition, so what the agent reads
 is exactly what you wrote. A variable naming something that is not one of the
-five tools stops the server with a message rather than being ignored — a typo
+seven tools stops the server with a message rather than being ignored — a typo
 here is invisible otherwise. `agmem --doctor` and the startup log both report
 which tools a run is rewording, and each project keeps its own wording even
 when several share one daemon.

@@ -66,8 +66,17 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
         // nothing, so fewer rows back than ids sent means one of them is gone.
         // A ULID is Crockford base32 and cannot break out of the literal, so
         // the ids are baked in to name the offenders in the error.
-        let supersede = if shape.supersedes.is_empty() {
-            String::new()
+        //
+        // The duplicate branch honours `supersedes` too (issue #57): the claim
+        // is already live under `$dup`, so the targets close in *its* favour —
+        // minus `$dup` itself, which would otherwise close the one row that
+        // holds the content. Without this, the retry the tool description asks
+        // for ("re-send yours with the id in supersedes") looped forever on a
+        // word-for-word re-send: the gate fired first and the supersede rode on
+        // a blocked entry. The boundary is the caller's `valid_from`, exactly
+        // as the created branch takes it from the new row.
+        let (supersede, dup_supersede) = if shape.supersedes.is_empty() {
+            (String::new(), String::new())
         } else {
             let count = shape.supersedes.len();
             let named = shape
@@ -76,12 +85,22 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
                 .map(|old| format!("memory:{old}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!(
-                "LET $sup{index} = (UPDATE $old{index} SET superseded_by = $new{index}.id,
-                     invalid_at = $new{index}.valid_from, invalid_reason = 'superseded');
-                 IF array::len($sup{index}) != {count} {{
-                     THROW 'supersedes targets {named} — one of them does not exist'
-                 }};"
+            (
+                format!(
+                    "LET $sup{index} = (UPDATE $old{index} SET superseded_by = $new{index}.id,
+                         invalid_at = $new{index}.valid_from, invalid_reason = 'superseded');
+                     IF array::len($sup{index}) != {count} {{
+                         THROW 'supersedes targets {named} — one of them does not exist'
+                     }};"
+                ),
+                format!(
+                    "LET $keep{index} = array::complement($old{index}, [$dup{index}]);
+                     LET $sup{index} = (UPDATE $keep{index} SET superseded_by = $dup{index},
+                         invalid_at = $row{index}.valid_from, invalid_reason = 'superseded');
+                     IF array::len($sup{index}) != array::len($keep{index}) {{
+                         THROW 'supersedes targets {named} — one of them does not exist'
+                     }};"
+                ),
             )
         };
         builder.push(format!(
@@ -90,6 +109,7 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
         ));
         builder.push(format!(
             "LET $res{index} = IF $dup{index} IS NOT NONE {{
+                 {dup_supersede}
                  {{ id: record::id($dup{index}), created: false }}
              }} ELSE {{
                  LET $new{index} = (CREATE ONLY memory:ulid()

@@ -679,6 +679,65 @@ async fn a_purge_takes_an_episodes_slices_and_leaves_the_claims_drawn_from_it() 
     );
 }
 
+#[tokio::test]
+async fn an_exact_duplicate_with_supersedes_closes_targets_in_favour_of_the_live_row() {
+    let db = store().await;
+    let ids: Vec<MemoryId> = repo::insert_batch(
+        &db,
+        batch(vec![
+            NewMemory::new(Kind::Fact, "the deploy runs from bin/ship.sh"),
+            NewMemory::new(Kind::Fact, "the deploy runs from make deploy"),
+        ]),
+    )
+    .await
+    .expect("write")
+    .memories
+    .into_iter()
+    .map(Written::into_id)
+    .collect();
+    let (live, stale) = (ids[0].clone(), ids[1].clone());
+
+    // The #57 shape: a word-for-word re-send of the live claim, superseding
+    // both the stale claim and the very row it duplicates — which is what a
+    // retry of a half-landed correction looks like.
+    let mut resend = NewMemory::new(Kind::Fact, "the deploy runs from bin/ship.sh");
+    resend.supersedes = vec![live.clone(), stale.clone()];
+    let outcome = repo::insert_batch(&db, batch(vec![resend]))
+        .await
+        .expect("write");
+
+    assert_eq!(
+        outcome.memories,
+        vec![Written::Duplicate(live.clone())],
+        "nothing new was written"
+    );
+    assert_eq!(
+        outcome.superseded,
+        vec![stale.clone()],
+        "the target closed anyway; the row holding the content did not close itself"
+    );
+
+    let rows = all_memories(&db, &space()).await;
+    let row = |id: &MemoryId| {
+        rows.iter()
+            .find(|row| row.id == *id)
+            .expect("the row exists")
+    };
+    assert_eq!(
+        row(&live).invalid_reason,
+        None,
+        "the duplicate stays live — it is the claim"
+    );
+    assert_eq!(
+        (
+            row(&stale).invalid_reason,
+            row(&stale).superseded_by.as_ref()
+        ),
+        (Some(InvalidReason::Superseded), Some(&live)),
+        "closed pointing at the row that already holds the content"
+    );
+}
+
 /// Backdate a row's last use and set the strength a few recalls would have
 /// left it with — the two inputs to the decay curve, and the only two no write
 /// API sets directly.

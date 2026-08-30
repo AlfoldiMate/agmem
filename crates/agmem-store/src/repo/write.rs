@@ -129,6 +129,9 @@ pub struct Batch {
 /// An exact duplicate is a result, not a failure: `remember` reports the id of
 /// the row that already holds the content and leaves the decision — accept the
 /// NOOP, or re-send with `supersedes` — to the calling agent (design §3.1).
+/// A duplicate that itself carried `supersedes` has already closed those
+/// targets in favour of the reported row (issue #57), so that re-send loop
+/// terminates instead of blocking forever on its own success.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Written<I> {
     /// A new row, with the id it was minted with.
@@ -175,7 +178,9 @@ pub struct BatchOutcome {
 /// Exact duplicates (`(space, content_hash)`) are reported, not inserted:
 /// letting one reach the unique index would abort the entire transaction, so
 /// each insert is guarded by a lookup in the same transaction. Two identical
-/// memories *within* one batch collapse the same way.
+/// memories *within* one batch collapse the same way. A duplicate's
+/// `supersedes` still closes its targets — in favour of the row that already
+/// holds the content, minus that row itself (issue #57).
 ///
 /// # Errors
 /// [`StoreError::UnknownMemory`] when a `supersedes` target is not in this
@@ -286,8 +291,13 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
     let superseded = memories
         .iter()
         .zip(&outcomes)
-        .filter(|(_, outcome)| outcome.is_created())
-        .flat_map(|(memory, _)| memory.supersedes.iter().cloned())
+        .flat_map(|(memory, outcome)| {
+            memory.supersedes.iter().filter(move |old| match outcome {
+                Written::Created(_) => true,
+                Written::Duplicate(dup) => *old != dup,
+            })
+        })
+        .cloned()
         .collect();
     Ok(BatchOutcome {
         episode: row

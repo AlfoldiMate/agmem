@@ -26,9 +26,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # tests/ws.rs drives a real SurrealDB server; without the binary those
       # tests skip silently, so CI installs it to keep sharing mode honest.
+      # Pinned direct download: the install.surrealdb.com script double-shifts
+      # its positional argument, which is fatal under dash on ubuntu.
       - name: Install SurrealDB
         run: |
-          curl -sSf https://install.surrealdb.com | sh -s -- "$HOME/.surrealdb"
+          case "$RUNNER_OS" in
+            Linux) asset=surreal-v3.2.3.linux-amd64.tgz ;;
+            macOS) asset=surreal-v3.2.3.darwin-arm64.tgz ;;
+          esac
+          mkdir -p "$HOME/.surrealdb"
+          curl -sSfL "https://download.surrealdb.com/v3.2.3/$asset" | tar -xz -C "$HOME/.surrealdb"
           echo "$HOME/.surrealdb" >> "$GITHUB_PATH"
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings

@@ -28,10 +28,17 @@
 # `recall`, either is the right instinct); `avoid` fails when any of its tools
 # was called at all. A scenario with an empty `want` is testing restraint.
 #
+# Both of those read what was *called*; a scenario's `checks` read what the
+# store *answered* (#51). Each is `{tool, field, expect}` — `nonempty` passes
+# when any call to the tool came back with the field holding something,
+# `seeded` when the field names an id the seed wrote — so a write the
+# near-dup gate swallowed can no longer score as a write that landed.
+#
 # `turns` is a list because a ritual is a slash command with nothing to act on
 # until a session has happened. Every call records which turn made it.
-# How much of a tool's answer each recorded call keeps. Enough to see whether
-# a recall came back with hits; not so much that a saved run is a transcript.
+# How much of a tool's answer a *saved* run keeps. Enough to see whether a
+# recall came back with hits; not so much that a saved run is a transcript.
+# Checks and metrics read the full answer; the cut happens only at the record.
 const ANSWER_CHARS = 700
 
 const CONSOLIDATE_SEED = [
@@ -263,6 +270,9 @@ const SCENARIOS = [
         turns: ["Heads up for future work on this codebase: I want library crates to use thiserror for their error types and binaries to use anyhow, never the other way round. It has bitten us twice."]
         want: ["remember"]
         avoid: []
+        # Called is not stored: a `remember` the near-dup gate blocks answers
+        # `created: []`, and the preference is gone with the session.
+        checks: [{tool: "remember", field: "created", expect: "nonempty"}]
     }
     {
         name: "ritual"
@@ -278,6 +288,7 @@ const SCENARIOS = [
         ]
         want: ["remember"]
         avoid: []
+        checks: [{tool: "remember", field: "created", expect: "nonempty"}]
     }
     {
         name: "ritual_correct"
@@ -299,6 +310,14 @@ const SCENARIOS = [
         ]
         want: ["remember"]
         avoid: []
+        # The two failures `pass` cannot see, told apart: blocked at the gate
+        # (nothing created, nothing closed) and stored as a contradiction
+        # (created, with the black claim still live). `seeded` pins the close
+        # to the planted claim rather than to any id the agent produced.
+        checks: [
+            {tool: "remember", field: "created", expect: "nonempty"}
+            {tool: "remember", field: "superseded", expect: "seeded"}
+        ]
     }
     {
         name: "correct"
@@ -313,6 +332,10 @@ const SCENARIOS = [
         turns: ["I have moved off black — everything is formatted with ruff format now, and black is uninstalled. Note that for later."]
         want: ["remember"]
         avoid: []
+        checks: [
+            {tool: "remember", field: "created", expect: "nonempty"}
+            {tool: "remember", field: "superseded", expect: "seeded"}
+        ]
     }
     {
         name: "consolidate"
@@ -648,6 +671,16 @@ def summarise [] {
             scenario: $scenario
             runs: ($runs | length)
             passed: ($runs | where pass | length)
+            # Runs whose answer checks all held. Blank for a batch recorded
+            # before checks existed and for a scenario that asserts nothing,
+            # so a non-answer never reads as a zero.
+            verified: (
+                if ($runs | all {|run| ($run | get -o verified) == null}) {
+                    null
+                } else {
+                    $runs | where ($it.verified? | default false) | length
+                }
+            )
             # Blank rather than a number for a batch recorded before `served`
             # existed: a default of `true` here would report an unverified run
             # as a verified one, which is the failure this column exists to
@@ -847,6 +880,13 @@ def run-one [
     # And what the store did about it. Only for a scenario that plants: it
     # costs a `surreal` open per run, and nothing else here asks the question.
     let landed = if $plants == null { [] } else { closed-rows $data $seeded }
+    # What the store answered, held against what the scenario said it should
+    # answer. Null when nothing is asserted, the same way `plants` is absent.
+    let checked = if ($scenario | get -o checks | default [] | is-empty) {
+        null
+    } else {
+        check-answers $calls $seeded $scenario.checks
+    }
     let used = ($calls | get tool | uniq)
     let hit = (($scenario.want | is-empty) or ($scenario.want | any {|tool| $tool in $used}))
     let clean = ($scenario.avoid | all {|tool| $tool not-in $used})
@@ -873,6 +913,13 @@ def run-one [
                 | any {|memory| ($memory | supersedes-ids | is-not-empty)}
             }
         )
+        # `pass` counts the call; this counts the reply. A `remember` the
+        # near-dup gate blocked and one that landed are the same `pass` and
+        # opposite `verified` — the 1/3 that hid behind a 3/3 (#51). Null
+        # where the scenario asserts nothing.
+        verified: (
+            if $checked == null { null } else { $checked | all {|check| $check.pass} }
+        )
         # Whether an insight was actually *stored* with its evidence, rather
         # than merely attempted. `pass` counts the call; this counts the write,
         # and #26 measured the two differing 3/3 against 1/3 — a conclusion the
@@ -881,9 +928,8 @@ def run-one [
         # as "already handled". `derived_from` is required and non-empty on
         # every accepted `reflect`, so a create is a citation.
         #
-        # The recorded answer is the tool result as JSON text and its quotes
-        # arrive backslash-escaped, so the backslashes come out before matching
-        # rather than the match being written to expect one depth of escaping.
+        # Read off the parsed answer — the substring match through a layer of
+        # escaped quotes that stood here is what `answer-record` replaced.
         # Null on a scenario that is not asking for a citation, so the
         # summary reads a blank there rather than a zero: `reflect` was never
         # wanted, not wanted and missed.
@@ -894,9 +940,8 @@ def run-one [
                 $calls
                 | where tool == "reflect"
                 | any {|call|
-                    $call.answer
-                    | str replace --all "\\" ""
-                    | str contains (["\"created\"" "true"] | str join ":")
+                    let reply = ($call.answer | answer-record)
+                    $reply != null and ($reply | get -o created | default false)
                 }
             }
         )
@@ -971,6 +1016,9 @@ def run-one [
         # sent and the near-dup gate swallowed.
         closed: $closed
         landed: $landed
+        # Each check with its verdict, so a failed `verified` names the field
+        # that missed instead of sending the reader to the transcript.
+        checked: $checked
         # Whether agmem was there at all. Without it, a server that failed to
         # start reads as an agent that chose not to call anything — which is a
         # pass on `restraint` and a failure everywhere else, both wrong.
@@ -1002,7 +1050,20 @@ def run-one [
             | math sum
         )
         agent_turns: ($result | get -o 0.num_turns | default 0)
-        session: $calls
+        # Answers ride whole through the metrics above; the cut to
+        # `ANSWER_CHARS` happens only here, where the run is written down.
+        session: (
+            $calls
+            | each {|call|
+                $call | update answer {|row|
+                    if ($row.answer | is-empty) {
+                        ""
+                    } else {
+                        $row.answer | to json --raw | str substring 0..$ANSWER_CHARS
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -1027,11 +1088,69 @@ def supersedes-ids [] {
     if (($asked | describe | str starts-with "list")) { $asked } else { [$asked] }
 }
 
+# The record inside one recorded answer, or null when there is nothing to read.
+#
+# An MCP result arrives as content blocks whose text is the server's JSON, so
+# a field is parsed back out rather than substring-matched through a layer of
+# escaped quotes. Null for an errored call or any shape that is not a record —
+# a check against nothing fails rather than guesses.
+def answer-record [] {
+    let content = $in
+    let kind = ($content | describe)
+    let text = if $kind == "string" {
+        $content
+    } else if ($kind | str starts-with "list") or ($kind | str starts-with "table") {
+        $content | each {|block| $block.text? | default ""} | str join ""
+    } else {
+        ""
+    }
+    let parsed = (try { $text | from json } catch { null })
+    if ($parsed | describe | str starts-with "record") { $parsed } else { null }
+}
+
+# One scenario's answer checks, each held against every call the run made.
+#
+# `nonempty` passes when any call to the tool answered with the field holding
+# something — a non-empty list or string, or `true`. `seeded` passes when any
+# call's field names an id the seed wrote, bare or `memory:`-prefixed. A tool
+# that was never called fails its checks: the assertion is about an answer,
+# and there is none. An expectation this does not know is an error rather
+# than a false — a typo in a scenario should stop the batch, not score it.
+def check-answers [calls: list, seeded: list, checks: list] {
+    let planted = ($seeded | each {|row| $row.id})
+    $checks | each {|check|
+        let values = (
+            $calls
+            | where tool == $check.tool
+            | each {|call| $call.answer | answer-record}
+            | compact
+            | each {|reply| $reply | get -o $check.field}
+            | compact
+        )
+        let pass = match $check.expect {
+            "nonempty" => (
+                $values | any {|value|
+                    if ($value | describe) == "bool" { $value } else { $value | is-not-empty }
+                }
+            )
+            "seeded" => (
+                $values
+                | flatten
+                | each {|id| $id | str replace "memory:" ""}
+                | any {|id| $id in $planted}
+            )
+            _ => (error make {msg: $"unknown check expectation ($check.expect)"})
+        }
+        $check | insert pass $pass
+    }
+}
+
 # The agmem tool calls in a session's event stream, in the order they happened.
 def agmem-calls [events: list] {
     # What each call got back, by id. Without this a recall that returned
     # nothing and a recall whose answer the agent ignored look identical in the
-    # record — and those are opposite findings.
+    # record — and those are opposite findings. Kept whole here so checks and
+    # metrics read full fields; the record cuts its copy at `ANSWER_CHARS`.
     let answers = (
         $events
         | where type == "user"
@@ -1039,10 +1158,7 @@ def agmem-calls [events: list] {
         | flatten
         | where ($it.type? | default "") == "tool_result"
         | reduce --fold {} {|block, acc|
-            $acc
-            | insert $block.tool_use_id (
-                $block.content | to json --raw | str substring 0..$ANSWER_CHARS
-            )
+            $acc | insert $block.tool_use_id ($block.content? | default "")
         }
     )
 

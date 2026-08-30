@@ -668,15 +668,24 @@ Changes arrive as pull requests, and CI — fmt, clippy with warnings denied,
 the full suite on Linux and macOS, and the BM25-only build check — must be
 green before merge.
 
-A release is one tag. Bump `[workspace.package] version` in `Cargo.toml`,
-land it, then:
+A release is one merge. release-plz keeps a rolling PR open against `main`
+proposing the next version (patch by default — commit titles here carry no
+conventional-commit markers); merged work accumulates into it, and **merging
+that PR is the release decision**. On the merge, the `release-plz` workflow
+pushes the `vX.Y.Z` tag; the flow is documented in `release-plz.toml`, and
+it authenticates with the `RELEASE_PLZ_TOKEN` repo secret (a fine-grained
+PAT — Contents and Pull requests read+write on this repo).
+
+For a bump the patch default undersells, the old flow still works and lands
+in the same pipe: merge a PR bumping `[workspace.package] version` yourself,
+and the workflow tags it. Hand-pushing the tag also still works:
 
 ```sh
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-The tag fires the cargo-dist workflow: it builds every prebuilt target,
-publishes the GitHub release with the shell installer and build
+Either way, the tag fires the cargo-dist workflow: it builds every prebuilt
+target, publishes the GitHub release with the shell installer and build
 attestations, and pushes the updated formula to `AlfoldiMate/homebrew-tap`
 — `brew upgrade agmem` sees it as soon as that lands. Nothing after the
 tag is manual.

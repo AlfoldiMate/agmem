@@ -1,0 +1,67 @@
+# The rolling release PR (the flow is documented in release-plz.toml).
+#
+# Both jobs authenticate with RELEASE_PLZ_TOKEN — a fine-grained PAT with
+# Contents and Pull requests read+write on this repo. The default GITHUB_TOKEN
+# cannot do this job: a PR it opens never runs the required `check` workflows
+# (so the ruleset makes it unmergeable), and a tag it pushes never triggers
+# cargo-dist's release.yml — GitHub suppresses workflow runs caused by
+# workflow tokens. Until the secret exists, these jobs fail; that is the
+# missing-setup signal, not a code problem.
+
+name: release-plz
+
+permissions: {}
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # Tag when main's version is newer than the last tag — which is what main
+  # looks like right after the release PR (or a manual bump PR) merges. Any
+  # other push is a no-op here. cargo-dist's release.yml reacts to the tag.
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-plz-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          # Change detection verify-builds the last tag's tree in a temp
+          # worktree; a shared, cached target dir is what keeps that to about
+          # a minute instead of a cold surrealdb build per push.
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+
+  # Keep one PR on the tip of main proposing the next version. A push that is
+  # not a release merge updates it; merging it is the release decision.
+  # Runs after `release` so that on a release merge the new tag exists before
+  # this job reads tags to propose the version after it.
+  release-pr:
+    needs: release
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-plz-pr
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target

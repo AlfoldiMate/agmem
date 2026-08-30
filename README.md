@@ -7,7 +7,7 @@ dates it, ranks it, and shows its work.
 Seven tools — `remember`, `recall`, `context`, `forget`, `inspect`,
 `consolidate`, `reflect` — and two rituals that ask for them.
 
-> Status: v0.1.1, backlog empty — Phases 0–4 all landed. The loop, the
+> Status: v0.1.2, backlog empty — Phases 0–4 all landed. The loop, the
 > session-start block, removal, startup pruning, the shared daemon, the
 > rituals, candidate surfacing, cited insights, `ws://` sharing and the
 > offline quality eval all work end to end from Claude Code. The entity

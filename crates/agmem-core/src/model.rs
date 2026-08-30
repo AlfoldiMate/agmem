@@ -470,7 +470,8 @@ pub struct MemoryRecord {
     pub embedding: Option<Vec<f32>>,
     /// How fast this one fades.
     pub decay_class: DecayClass,
-    /// Ebbinghaus stability: raised by every recall that returns this memory.
+    /// Ebbinghaus stability: raised by every recall that returns this memory,
+    /// up to `scoring::MAX_STABILITY`.
     pub strength: f64,
     /// When recall last returned this memory.
     pub last_accessed: Timestamp,

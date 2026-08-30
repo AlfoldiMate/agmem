@@ -21,6 +21,23 @@ pub const WEIGHT_IMPORTANCE: f64 = 0.15;
 /// instead of producing NaN.
 pub const MIN_STABILITY: f64 = 0.01;
 
+/// Ceiling on Ebbinghaus stability (issue #52).
+///
+/// Reinforcement raised `strength` without bound, and since the prune horizon
+/// scales linearly with it, a `fast` note recalled fifty times survived about
+/// three years — outliving the class it was filed under by orders of
+/// magnitude. The cap bounds what use can buy: five times the class's own
+/// horizon, which keeps a hot working note alive for months, not years.
+///
+/// One ceiling for every class, not one per class: the class already sets the
+/// timescale through its rate, and `strength` is the use-multiplier on top of
+/// it — a per-class cap would be a second copy of what `rate()` encodes. A
+/// hard cap rather than a saturating curve for the same reason the curve
+/// lives in one module: the clamp is one expression, and it is repeated
+/// verbatim where the engine evaluates it (`REINFORCE`, `PRUNE_EXPIRED`), so
+/// the three spellings cannot drift apart quietly.
+pub const MAX_STABILITY: f64 = 5.0;
+
 /// Retention below which a `fast` record is closed at startup (`docs/design.md`
 /// §2.3, §5.5).
 ///
@@ -61,8 +78,9 @@ impl DecayClass {
 /// How much of a memory survives, in `(0, 1]`, at `now`.
 ///
 /// `exp(-Δdays · rate / strength)`: reinforcement raises `strength`, which
-/// flattens the curve, so a frequently recalled memory becomes effectively
-/// permanent while an untouched one fades out of the ranking.
+/// flattens the curve, so a frequently recalled memory outlasts an untouched
+/// one — up to [`MAX_STABILITY`], past which more use buys nothing and the
+/// class's own timescale reasserts itself.
 ///
 /// ```
 /// use agmem_core::{DecayClass, scoring};
@@ -85,7 +103,7 @@ pub fn retention(
         return 1.0;
     }
     let days = days_between(last_accessed, now);
-    let stability = strength.max(MIN_STABILITY);
+    let stability = strength.clamp(MIN_STABILITY, MAX_STABILITY);
     (-days * rate / stability).exp()
 }
 
@@ -93,8 +111,8 @@ pub fn retention(
 /// before [`retention`] falls to `threshold`, in seconds.
 ///
 /// The inverse of [`retention`]: `days = −ln(threshold) · strength / rate`, so
-/// a particular row's horizon is this scaled by its own `strength` (floored at
-/// [`MIN_STABILITY`], exactly as `retention` floors it).
+/// a particular row's horizon is this scaled by its own `strength` (clamped to
+/// `[MIN_STABILITY, MAX_STABILITY]`, exactly as `retention` clamps it).
 ///
 /// `None` when there is no such time — a class that never decays never reaches
 /// a threshold below 1, and a threshold outside `(0, 1)` is not one the curve
@@ -325,9 +343,25 @@ mod tests {
     #[test]
     fn reinforcement_slows_decay() {
         let once = retention(DecayClass::Normal, 1.0, days_ago(60), now());
-        let often = retention(DecayClass::Normal, 6.0, days_ago(60), now());
+        let often = retention(DecayClass::Normal, MAX_STABILITY, days_ago(60), now());
         assert!(often > once, "{often} should beat {once}");
-        assert!(often > 0.8, "six recalls make 60 days cheap: {often}");
+        assert!(
+            often > 0.75,
+            "recalls at the cap make 60 days cheap: {often}"
+        );
+    }
+
+    #[test]
+    fn strength_saturates_at_the_cap() {
+        // Fifty recalls and five buy the same curve: past the cap, more use
+        // is worth nothing, and the class's own timescale decides (issue #52).
+        let capped = retention(DecayClass::Fast, MAX_STABILITY, days_ago(120), now());
+        let hot = retention(DecayClass::Fast, 51.0, days_ago(120), now());
+        assert_eq!(hot, capped, "strength above the cap changes nothing");
+        assert!(
+            hot < PRUNE_RETENTION,
+            "a fast note is prunable within months no matter how hot it ran: {hot}"
+        );
     }
 
     #[test]
@@ -338,8 +372,11 @@ mod tests {
 
     #[test]
     fn the_horizon_is_exactly_where_retention_reaches_the_threshold() {
+        // Strengths inside the clamp: the horizon–retention agreement only
+        // holds where the curve actually reads the value, and the prune
+        // selector applies the same clamp before scaling.
         for class in [DecayClass::Fast, DecayClass::Normal, DecayClass::Slow] {
-            for strength in [0.5, 1.0, 7.0] {
+            for strength in [0.5, 1.0, MAX_STABILITY] {
                 let horizon = decay_horizon_secs(class, PRUNE_RETENTION).expect("a decaying class");
                 let idle = SignedDuration::from_secs((horizon * strength) as i64);
                 let at = retention(class, strength, now() - idle, now());

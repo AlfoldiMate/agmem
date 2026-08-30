@@ -2028,11 +2028,12 @@ async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
         }))
         .await;
     let created = ids(&written["created"]);
-    // Recalled thirty times, so `strength` bought it roughly 620 days against
-    // a class whose unreinforced horizon is twenty.
-    age(&agmem.db, created[0], 200, 31.0, 30).await;
-    // Equally idle and never used: the prune closes this one on its own.
-    age(&agmem.db, created[1], 200, 1.0, 1).await;
+    // Recalled thirty times. Uncapped, that strength bought roughly 620 days
+    // against a class whose unreinforced horizon is twenty; the cap holds the
+    // reprieve to five horizons (#52), and 60 days idle sits inside it.
+    age(&agmem.db, created[0], 60, 31.0, 30).await;
+    // Equally overdue and never used: the prune closes this one on its own.
+    age(&agmem.db, created[1], 60, 1.0, 1).await;
 
     let found = agmem.consolidate(json!({})).await;
     let stale = found["stale_contexts"].as_array().expect("an array");
@@ -2046,10 +2047,12 @@ async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
         "{found:#}"
     );
     assert_eq!(stale[0]["claim"]["decay_class"], "fast");
-    assert!(stale[0]["idle_days"].as_f64().expect("a number") > 199.0);
+    assert!(stale[0]["idle_days"].as_f64().expect("a number") > 59.0);
+    let reprieve = stale[0]["expires_in_days"].as_f64().expect("a number");
     assert!(
-        stale[0]["expires_in_days"].as_f64().expect("a number") > 300.0,
-        "the finding is that the sweep will not reach it for a year: {found:#}"
+        (30.0..45.0).contains(&reprieve),
+        "the reprieve reads off the capped strength — five horizons minus the \
+         idle time, not the 559 days the raw strength would claim: {found:#}"
     );
 
     let note = found["note"].as_str().expect("a note");

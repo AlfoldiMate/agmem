@@ -373,8 +373,14 @@ pub(crate) fn nearest_live(count: usize) -> Script {
 ///
 /// An id naming no row is a silent no-op `UPDATE`, which is what makes this
 /// safe to fire and forget; the returned ids are the ones that existed.
+///
+/// `$cap` is `core::scoring::MAX_STABILITY` (issue #52): past it another
+/// recall still updates `access_count` and `last_accessed`, but buys no more
+/// strength — without the ceiling, the prune horizon scaled linearly with use
+/// and a hot `fast` note became effectively permanent.
 pub(crate) const REINFORCE: &str = "UPDATE $ids
-     SET strength += 1.0, access_count += 1, last_accessed = time::now()
+     SET strength = math::min([strength + 1.0, $cap]),
+         access_count += 1, last_accessed = time::now()
      RETURN VALUE record::id(id)";
 
 /// Every registered space, alphabetically.
@@ -439,12 +445,12 @@ pub(crate) fn live_vectors(limit: usize) -> Script {
 /// This is [`crate::queries::write::PRUNE_EXPIRED`]'s selector with the
 /// `strength` factor taken *out*, which is the whole finding: the sweep scales
 /// each row's horizon by its own strength, so reinforcement buys a working
-/// note more time on every recall, and a `fast` note recalled often enough
-/// outlives the class it was filed under by years. Those rows are not a bug —
-/// the scaling is deliberate — but nothing ever revisits them, so they sit in
-/// the `fast` class holding something that turned out to be durable. The fix
-/// is a judgement call (`remember` it again at a slower class, or `forget`
-/// it), which is why this surfaces candidates instead of acting.
+/// note more time on every recall — months at the strength cap, where it was
+/// years before #52 bounded it. Those rows are not a bug — the scaling is
+/// deliberate — but nothing ever revisits them, so they sit in the `fast`
+/// class holding something that turned out to be durable. The fix is a
+/// judgement call (`remember` it again at a slower class, or `forget` it),
+/// which is why this surfaces candidates instead of acting.
 ///
 /// `$min_count` is what separates "reinforcement kept this alive" from "this
 /// is merely a fast note nobody has touched yet"; the latter is the prune's

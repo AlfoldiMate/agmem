@@ -27,7 +27,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use agmem_core::{MemoryRecord, SpaceName, dedup};
+use agmem_core::{MemoryRecord, SpaceName, dedup, scoring};
 use agmem_store::repo::{self, Embedded};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -364,9 +364,10 @@ fn shared_entities(left: &MemoryRecord, right: &MemoryRecord) -> Vec<String> {
 /// How far past its class one reinforced note has been carried.
 ///
 /// `expires_in_days` is the reprieve strength bought it: the sweep's own
-/// comparison is `last_accessed + horizon · strength < now`, so this is what
-/// is left of that, and a large number means the automatic prune will not
-/// reach this row for a long time yet.
+/// comparison is `last_accessed + horizon · clamp(strength) < now`, so this
+/// is what is left of that — strength clamped exactly as the sweep clamps it
+/// (issue #52), or a row reinforced past the cap would be reported with a
+/// reprieve the prune no longer grants.
 fn overdue(claim: MemoryRecord) -> StaleContext {
     let idle = Timestamp::now()
         .duration_since(claim.last_accessed)
@@ -376,9 +377,12 @@ fn overdue(claim: MemoryRecord) -> StaleContext {
     // zero is a safe reading if that ever stops being true, and reports the
     // row as due rather than inventing a reprieve for it.
     let horizon = repo::prune_horizon_secs().unwrap_or(0.0);
+    let stability = claim
+        .strength
+        .clamp(scoring::MIN_STABILITY, scoring::MAX_STABILITY);
     StaleContext {
         idle_days: idle / SECONDS_PER_DAY,
-        expires_in_days: (horizon * claim.strength - idle).max(0.0) / SECONDS_PER_DAY,
+        expires_in_days: (horizon * stability - idle).max(0.0) / SECONDS_PER_DAY,
         claim: claim.into(),
     }
 }

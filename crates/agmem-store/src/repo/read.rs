@@ -474,11 +474,11 @@ pub async fn live_vectors(
 ///
 /// The sweep scales each row's horizon by its own `strength`, so every recall
 /// buys a working note more time — deliberately, and it is the same
-/// reinforcement that flattens the decay curve at read time. The consequence
-/// is that a `fast` note recalled often enough stops being a note with a TTL,
-/// and nothing revisits the class it was filed under. This finds those rows so
-/// an agent can: re-`remember` the claim at a slower class if it turned out to
-/// be durable, or `forget` it if it did not.
+/// reinforcement that flattens the decay curve at read time. Capped at
+/// `scoring::MAX_STABILITY` (issue #52), that still leaves a reinforced note
+/// alive up to five horizons past its class with nothing revisiting it. This
+/// finds those rows so an agent can: re-`remember` the claim at a slower
+/// class if it turned out to be durable, or `forget` it if it did not.
 ///
 /// Selection is the prune's own, with the `strength` factor removed — see
 /// `queries::read::stale_contexts`. Most overdue first.
@@ -526,10 +526,12 @@ pub fn prune_horizon_secs() -> Option<f64> {
 /// Reinforce every memory a recall returned, in one statement.
 ///
 /// Raising `strength` flattens that memory's decay curve, which is the whole
-/// mechanism by which use keeps a memory alive (design §2.3). Ids that name
-/// nothing are skipped rather than refused — this runs after the hits are
-/// already on their way to the agent, so it must not be able to fail a
-/// recall. Returns how many rows were actually touched.
+/// mechanism by which use keeps a memory alive (design §2.3) — up to
+/// `scoring::MAX_STABILITY`, past which a recall refreshes `last_accessed`
+/// but buys no more (issue #52). Ids that name nothing are skipped rather
+/// than refused — this runs after the hits are already on their way to the
+/// agent, so it must not be able to fail a recall. Returns how many rows were
+/// actually touched.
 ///
 /// # Errors
 /// [`StoreError::Db`] for anything the engine rejects.
@@ -538,7 +540,12 @@ pub async fn reinforce(db: &Db, ids: &[MemoryId]) -> Result<usize, StoreError> {
         return Ok(0);
     }
     let refs: Vec<RecordId> = ids.iter().map(types::memory_ref).collect();
-    let mut resp = checked(db.query(queries::REINFORCE).bind(("ids", refs)).await?)?;
+    let mut resp = checked(
+        db.query(queries::REINFORCE)
+            .bind(("ids", refs))
+            .bind(("cap", scoring::MAX_STABILITY))
+            .await?,
+    )?;
     let touched: Vec<String> = resp.take(0)?;
     Ok(touched.len())
 }

@@ -116,7 +116,8 @@ or, without editing a file:
 claude mcp add agmem --scope project -e AGMEM_SPACE=myproject -- agmem
 ```
 
-This repo's own `.mcp.json` is the working example.
+This repo checks in no `.mcp.json` of its own: the global registration
+covers it, and the space derives to `agmem` from the folder.
 
 **Cursor** — `.cursor/mcp.json` for one project, `~/.cursor/mcp.json` for all of
 them. Identical shape:
@@ -646,6 +647,26 @@ over raw JSON-RPC, all passing:
 - **Starting over** — delete the data directory. Everything agmem wrote is
   under it, and the next start recreates the schema. Keep `models/` if you do
   not want the download again.
+
+## Contributing and releasing
+
+`main` is protected: nothing pushes to it directly, maintainers included.
+Changes arrive as pull requests, and CI — fmt, clippy with warnings denied,
+the full suite on Linux and macOS, and the BM25-only build check — must be
+green before merge.
+
+A release is one tag. Bump `[workspace.package] version` in `Cargo.toml`,
+land it, then:
+
+```sh
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+The tag fires the cargo-dist workflow: it builds every prebuilt target,
+publishes the GitHub release with the shell installer and build
+attestations, and pushes the updated formula to `AlfoldiMate/homebrew-tap`
+— `brew upgrade agmem` sees it as soon as that lands. Nothing after the
+tag is manual.
 
 ## Docs
 

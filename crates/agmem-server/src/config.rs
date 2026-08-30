@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use agmem_core::SpaceName;
 use anyhow::{Context, bail};
-use clap::{Parser, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 
 /// Prefix of the environment variables that override a tool description.
@@ -109,6 +109,42 @@ pub struct Cli {
         value_name = "SECONDS"
     )]
     pub idle_timeout: u64,
+
+    /// One-shot mode instead of serving MCP.
+    #[command(subcommand)]
+    pub command: Option<CliCommand>,
+}
+
+/// A run that does one thing, prints it, and exits — the shell-facing surface
+/// (issue #46), as opposed to the MCP one the flags above configure.
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum CliCommand {
+    /// Print the session-start context block to stdout and exit.
+    ///
+    /// Same output and semantics as the MCP `context` tool, so a shell hook
+    /// can inject the briefing into a session instead of hoping the model
+    /// asks for it.
+    Context(ContextArgs),
+}
+
+/// What `agmem context` passes through to the `context` tool, one flag per
+/// tool parameter.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+pub struct ContextArgs {
+    /// What the session is about; aims the Relevant section. Omit for a
+    /// general orientation.
+    #[arg(long)]
+    pub query: Option<String>,
+
+    /// Where to look: `current`, `user`, `all`, or a space name. Defaults to
+    /// `current` and `user` together. (The project `current` means comes from
+    /// the top-level --space / AGMEM_SPACE, derived from the cwd when unset.)
+    #[arg(long)]
+    pub space: Option<String>,
+
+    /// How many characters the block may take, 6000 by default.
+    #[arg(long, value_name = "N")]
+    pub budget_chars: Option<u32>,
 }
 
 /// Embedding backend selector (`docs/design.md` §6).
@@ -245,6 +281,8 @@ pub struct Config {
     pub no_daemon: bool,
     pub daemon_serve: bool,
     pub idle_timeout: u64,
+    /// The one-shot subcommand this run is, if it is one.
+    pub command: Option<CliCommand>,
 }
 
 /// The space served when nothing names one (issue #44): the enclosing git
@@ -390,6 +428,7 @@ impl Cli {
             no_daemon: self.no_daemon,
             daemon_serve: self.daemon_serve,
             idle_timeout: self.idle_timeout,
+            command: self.command,
         })
     }
 }
@@ -452,6 +491,47 @@ mod tests {
     fn an_explicit_space_wins_over_derivation() {
         let cfg = parse(&["--space", "pinned", "--data", "/tmp/agmem-test"]);
         assert_eq!(cfg.space.as_str(), "pinned");
+    }
+
+    #[test]
+    fn a_run_with_no_subcommand_is_the_server() {
+        let cfg = parse(&["--data", "/tmp/agmem-test"]);
+        assert_eq!(cfg.command, None);
+    }
+
+    #[test]
+    fn the_context_subcommand_carries_the_tool_parameters() {
+        let cfg = parse(&[
+            "--data",
+            "/tmp/agmem-test",
+            "context",
+            "--query",
+            "release work",
+            "--space",
+            "all",
+            "--budget-chars",
+            "500",
+        ]);
+        assert_eq!(
+            cfg.command,
+            Some(CliCommand::Context(ContextArgs {
+                query: Some("release work".to_owned()),
+                space: Some("all".to_owned()),
+                budget_chars: Some(500),
+            }))
+        );
+    }
+
+    #[test]
+    fn the_subcommands_space_selects_scope_and_the_flags_name_the_project() {
+        // Two different `--space`s on purpose: before the subcommand it is the
+        // project (what `current` resolves to), after it the tool's scope.
+        let cfg = parse(&["--space", "pinned", "--data", "/tmp/agmem-test", "context"]);
+        assert_eq!(cfg.space.as_str(), "pinned");
+        assert_eq!(
+            cfg.command,
+            Some(CliCommand::Context(ContextArgs::default()))
+        );
     }
 
     /// A directory tree to derive spaces from, torn down on drop.

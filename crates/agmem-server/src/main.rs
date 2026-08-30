@@ -3,20 +3,22 @@
 //! stdout is the MCP wire: nothing in this binary may write to stdout except
 //! the protocol transport (enforced by `clippy::print_stdout = deny`).
 //!
-//! Three ways to run, decided here and nowhere else:
+//! Four ways to run, decided here and nowhere else:
 //!
 //! - `--daemon-serve` — be the process that owns the store (issue #37).
 //! - the default on Unix — attach to that daemon, starting it if needed, and
 //!   pump stdio into it, so several sessions share one embedded store.
 //! - `--no-daemon`, a remote `--db`, or a non-Unix platform — open the store
 //!   in this process, which is what agmem always did.
+//! - a subcommand (`agmem context`, issue #46) — answer once on stdout and
+//!   exit, choosing between the two shapes above the same way.
 
 use std::sync::Arc;
 
 #[cfg(unix)]
 use agmem_server::daemon;
 use agmem_server::service::{self, AgmemService};
-use agmem_server::{config, doctor, embedder, lock, reindex, startup, telemetry};
+use agmem_server::{config, doctor, embedder, lock, oneshot, reindex, startup, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -39,6 +41,13 @@ async fn main() -> anyhow::Result<()> {
     // already serving sessions from it.
     if cfg.reindex {
         return reindex::run(&cfg).await;
+    }
+
+    // One-shot subcommands print their answer and exit. They route through
+    // the daemon the way a session would (or open the store where a session
+    // would), so they never contend with a running daemon for the store.
+    if let Some(config::CliCommand::Context(args)) = cfg.command.clone() {
+        return oneshot::context(cfg, args).await;
     }
 
     // A failure on the shared path exits non-zero rather than falling back to

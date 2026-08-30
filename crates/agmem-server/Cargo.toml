@@ -41,13 +41,13 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 directories = { workspace = true }
 jiff = { workspace = true }
-rmcp.workspace = true
+# `client` is not only for tests: `agmem context` (issue #46) speaks MCP to
+# the shared daemon from the client side, over the same socket a session uses.
+rmcp = { workspace = true, features = ["client"] }
 
 [dev-dependencies]
 insta = { workspace = true }
 tempfile = { workspace = true }
-# The protocol tests drive the server with a real rmcp client, in-process.
-rmcp = { workspace = true, features = ["client"] }
 
 [lints]
 workspace = true

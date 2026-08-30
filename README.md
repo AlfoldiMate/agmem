@@ -15,7 +15,8 @@ Seven tools — `remember`, `recall`, `context`, `forget`, `inspect`,
 
 ## Install
 
-Prebuilt binaries cover macOS and Linux, arm64 and x86_64, and carry both
+Prebuilt binaries cover macOS on Apple silicon and Linux on arm64 and
+x86_64 (glibc 2.38+, e.g. Ubuntu 24.04 / Debian 13), and carry both
 embedders — the default ONNX one and the pure-Rust `--embedder static`
 fallback:
 
@@ -29,7 +30,10 @@ or, without Homebrew:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AlfoldiMate/agmem/releases/latest/download/agmem-server-installer.sh | sh
 ```
 
-Building from source instead requires Rust 1.89+. The crate is
+Intel macs have no prebuilt onnxruntime upstream, so they build from source
+like any other platform without a prebuilt — Rust 1.89+; add
+`--no-default-features --features static` for the pure-Rust embedder if ONNX
+Runtime is a problem locally. The crate is
 `agmem-server`; the binary it installs is `agmem`.
 
 ```sh

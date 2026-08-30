@@ -12,12 +12,12 @@ ci = "github"
 installers = ["shell", "homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "AlfoldiMate/homebrew-tap"
-# Homebrew formula name: users install `agmem`, not `agmem-server`
+# Customize the Homebrew formula name
 formula = "agmem"
 # Publish jobs to run in CI
 publish-jobs = ["homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
 # Features to pass to cargo build
 features = ["static"]
 # Whether to install an updater program
@@ -30,3 +30,5 @@ install-path = "CARGO_HOME"
 [dist.github-custom-runners]
 # Native arm runner: ort ships no easy cross toolchain for aarch64-linux.
 aarch64-unknown-linux-gnu = "ubuntu-24.04-arm"
+# ort's prebuilt onnxruntime needs glibc >= 2.38; 22.04 has 2.35 and fails to link.
+x86_64-unknown-linux-gnu = "ubuntu-24.04"

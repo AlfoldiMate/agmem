@@ -726,6 +726,72 @@ async fn a_correction_closes_the_memory_it_supersedes() {
     agmem.shutdown().await;
 }
 
+/// Issue #57: a word-for-word re-send with `supersedes` used to block at the
+/// exact-hash gate with the supersede riding on the blocked entry — so the
+/// retry the description asks for ("re-send yours with the id in supersedes")
+/// looped forever whenever the correction was identical to an already-live
+/// claim. The duplicate must close the targets anyway, in favour of the row
+/// that already holds the content.
+#[tokio::test]
+async fn a_duplicate_carrying_supersedes_still_closes_its_targets() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let seeded = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The user formats Python with ruff" },
+                { "content": "The user formats Python with black" },
+            ]
+        }))
+        .await;
+    let created = ids(&seeded["created"]);
+    let (live, stale) = (created[0].to_owned(), created[1].to_owned());
+
+    let diff = agmem
+        .remember(json!({
+            "memories": [{
+                "content": "The user formats Python with ruff",
+                "supersedes": [live, stale],
+            }]
+        }))
+        .await;
+
+    let duplicates = diff["duplicates"].as_array().expect("an array");
+    assert_eq!(duplicates.len(), 1, "{diff}");
+    assert_eq!(
+        duplicates[0]["id"], live,
+        "reported against the row that already holds the claim: {diff}"
+    );
+    assert!(ids(&diff["created"]).is_empty(), "{diff}");
+    assert_eq!(
+        ids(&diff["superseded"]),
+        [stale.as_str()],
+        "the target closed even though nothing was written — the retry terminates: {diff}"
+    );
+
+    let memories = agmem.memories().await;
+    let closed = memories
+        .iter()
+        .find(|memory| memory.id.as_str() == stale)
+        .expect("the closed claim is still readable");
+    assert_eq!(
+        (
+            closed.invalid_reason.map(|reason| reason.as_str()),
+            closed.superseded_by.as_ref().map(|id| id.as_str())
+        ),
+        (Some("superseded"), Some(live.as_str())),
+        "closed pointing forward at the already-stored claim"
+    );
+    let survivor = memories
+        .iter()
+        .find(|memory| memory.id.as_str() == live)
+        .expect("the live claim");
+    assert_eq!(
+        survivor.invalid_reason, None,
+        "naming the duplicate row in `supersedes` does not close it against itself"
+    );
+    agmem.shutdown().await;
+}
+
 /// Issue #42: a duplicate cluster is merged by one call, not by one
 /// supersession and N `forget`s. `supersedes` takes a list precisely so the
 /// rest of a cluster keeps its history — `forget` would take it away.

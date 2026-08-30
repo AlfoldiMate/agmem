@@ -669,6 +669,10 @@ remember(params)
     exact dup? (space, hash) unique index         → report as duplicate (NOOP)
     …but the check runs *inside* the transaction of step 5: a unique-index
     conflict aborts the whole transaction, so a duplicate must never reach it
+    …and a duplicate carrying `supersedes` still closes those targets, in
+    favour of the row that already holds the content, minus that row itself
+    (issue #57) — otherwise the documented retry ("re-send with the id in
+    supersedes") loops forever on a word-for-word re-send
  3. embed all new contents + episode chunks in one batch
                                                    (spawn_blocking, passage: prefix)
  4. near-dup gate: HNSW top-4 among live memories in space — one pass, two answers

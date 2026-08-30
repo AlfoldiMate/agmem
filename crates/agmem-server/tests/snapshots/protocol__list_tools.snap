@@ -1097,7 +1097,7 @@ expression: "&tools.tools"
       "properties": {
         "as_of": {
           "default": null,
-          "description": "What was believed at this instant, RFC3339 — corrections are dated, so\nthis returns the claim that was live then rather than the one that\nreplaced it.",
+          "description": "What was believed at this instant, RFC3339 — corrections are dated, so\nthis returns the claim that was live then rather than the one that\nreplaced it. Verbatim text is dated too: an episode recorded after\nthe instant stays out of the answer.",
           "type": [
             "string",
             "null"

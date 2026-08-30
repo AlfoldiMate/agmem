@@ -44,7 +44,8 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
                  FOR $chunk IN $ep_chunks {
                      CREATE episode_chunk:ulid() CONTENT {
                          episode: $ep_new.id, space: $space, text: $chunk.text,
-                         position: $chunk.position, embedding: $chunk.embedding
+                         position: $chunk.position, embedding: $chunk.embedding,
+                         occurred_at: $ep_new.occurred_at
                      }
                  };
                  { id: $ep_new.id, created: true }

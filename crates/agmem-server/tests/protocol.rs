@@ -1080,6 +1080,42 @@ async fn as_of_returns_the_claim_that_was_live_then() {
 }
 
 #[tokio::test]
+async fn as_of_reads_only_episodes_that_had_already_happened() {
+    // Episodes have no supersession, so before schema v4 they sat outside
+    // as-of entirely: a chunk stored today came back — ranked first — for an
+    // instant years before its episode occurred.
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [],
+            "episode": {
+                "content": "the deploy ran from a laptop",
+                "occurred_at": "2026-01-01T00:00:00Z"
+            }
+        }))
+        .await;
+    agmem
+        .remember(json!({
+            "memories": [],
+            "episode": {
+                "content": "the deploy runs from CI now",
+                "occurred_at": "2026-06-01T00:00:00Z"
+            }
+        }))
+        .await;
+
+    let then = agmem
+        .recall(json!({ "query": "deploy", "as_of": "2026-03-01T00:00:00Z" }))
+        .await;
+    assert_eq!(
+        hit_contents(&then),
+        ["the deploy ran from a laptop"],
+        "text recorded after the instant was not known then: {then}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn a_filters_only_recall_ranks_on_decay_alone() {
     let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
     agmem

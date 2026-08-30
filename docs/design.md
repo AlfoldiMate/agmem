@@ -170,6 +170,9 @@ DEFINE FIELD space     ON episode_chunk TYPE string;
 DEFINE FIELD text      ON episode_chunk TYPE string;
 DEFINE FIELD position  ON episode_chunk TYPE int;
 DEFINE FIELD embedding ON episode_chunk TYPE option<array<float>>;
+-- the episode's occurred_at, denormalised like space (v4): as_of filters
+-- chunks without dereferencing a link per candidate
+DEFINE FIELD occurred_at ON episode_chunk TYPE option<datetime>;
 DEFINE INDEX ec_ft  ON episode_chunk COLUMNS text FULLTEXT ANALYZER english BM25 HIGHLIGHTS;
 DEFINE INDEX ec_vec ON episode_chunk FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
@@ -717,7 +720,8 @@ recall(q)
  4. rescore in Rust (core::scoring):
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
       norm  = min–max over the pool: (rrf − min) / (max − min)
-      as_of? → filter valid_from ≤ T < invalid_at (walk chains for history)
+      as_of? → filter valid_from ≤ T < invalid_at (walk chains for history);
+              chunks filter on their denormalised occurred_at ≤ T (v4)
  5. take k — the last slot reserved for the best hop-voted row when the cut
     would otherwise drop every one (issue #43, hop::reserve_tail);
     fire-and-forget reinforcement UPDATE (strength+1, last_accessed)

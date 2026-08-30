@@ -193,14 +193,17 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
         arms.push("$vs");
     }
     // Episodes are verbatim and append-only: they are never superseded, so
-    // liveness and the memory-side filters have nothing to say about them.
+    // the memory-side filters have nothing to say about them. Liveness has
+    // exactly one thing to say: text that had not yet been recorded was not
+    // known at `$as_of`, read off the chunk's own `occurred_at` (schema v4).
+    let chunks = chunk_where(search.liveness);
     if search.episodes && !terms.is_empty() {
         // The references restart at 1: they are scoped to the statement, and
         // this is a different statement over a different table.
         let (matches, scores) = fulltext("text", terms);
         builder.push(format!(
             "LET $ftc = (SELECT id, {scores} AS s FROM episode_chunk
-                 WHERE space IN $spaces AND ({matches})
+                 WHERE {chunks} AND ({matches})
                  ORDER BY s DESC LIMIT {pool})"
         ));
         arms.push("$ftc");
@@ -209,9 +212,9 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
         let inner = pool * OVER_FETCH;
         builder.push(format!(
             "LET $vsc = (SELECT id, d FROM
-                 (SELECT id, space, vector::distance::knn() AS d FROM episode_chunk
+                 (SELECT id, space, occurred_at, vector::distance::knn() AS d FROM episode_chunk
                   WHERE embedding <|{inner},{EF_SEARCH}|> $vector)
-                 WHERE space IN $spaces ORDER BY d LIMIT {pool})"
+                 WHERE {chunks} ORDER BY d LIMIT {pool})"
         ));
         arms.push("$vsc");
     }
@@ -485,6 +488,20 @@ fn memory_where(filters: &Filters, liveness: Liveness) -> String {
     clauses.join(" AND ")
 }
 
+/// The `WHERE` clauses every `episode_chunk` read shares.
+///
+/// Chunks carry none of the memory-side filters, so this is spaces plus at
+/// most one clause: a chunk whose episode had not yet occurred was not known
+/// at `$as_of`. A pre-v4 row the backfill missed reads `occurred_at = NONE`,
+/// which fails the comparison and drops out — conservative, never wrong
+/// about the date. `Any` matches everything, as it does for memories.
+fn chunk_where(liveness: Liveness) -> String {
+    match liveness {
+        Liveness::AsOf(_) => "space IN $spaces AND occurred_at <= $as_of".to_owned(),
+        Liveness::Live | Liveness::Any => "space IN $spaces".to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use agmem_core::Kind;
@@ -584,6 +601,34 @@ mod tests {
             assert!(
                 !clause.contains(" AND "),
                 "a predicate rides the gate's scan: {clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn as_of_dates_the_chunk_arms_and_stays_off_the_scan() {
+        let mut request = Search::new(vec!["test".parse().expect("slug")]);
+        request.vector = Some(vec![0.0; 384]);
+        request.liveness = Liveness::AsOf("2026-03-01T00:00:00Z".parse().expect("timestamp"));
+
+        let script = search(&request, &["red".to_owned()]).text;
+        let chunk_arms: Vec<&str> = script
+            .split("LET ")
+            .filter(|arm| arm.starts_with("$ftc") || arm.starts_with("$vsc"))
+            .collect();
+        assert_eq!(chunk_arms.len(), 2, "{script}");
+        for arm in chunk_arms {
+            assert!(
+                arm.contains("occurred_at <= $as_of"),
+                "an as-of read must date the verbatim side too: {arm}"
+            );
+        }
+        // And the clause filters the scan's result, never the scan itself
+        // (issue #40).
+        for clause in knn_clauses(&script) {
+            assert!(
+                !clause.contains(" AND "),
+                "a predicate rides the scan: {clause}"
             );
         }
     }

@@ -272,6 +272,49 @@ async fn each_session_reads_its_own_projects_wording() {
 }
 
 #[tokio::test]
+async fn a_one_shot_context_reads_through_the_live_daemon() {
+    let shared = Shared::start().await;
+    let session = shared.attach("hook").await;
+    call(
+        &session,
+        "remember",
+        json!({ "memories": [{ "content": "The deploy target is Fly.io." }] }),
+    )
+    .await;
+
+    // What `agmem context` runs after parsing (issue #46): same data dir, so
+    // the one-shot finds the daemon above instead of starting one.
+    let cfg = config(shared.data.path(), "hook");
+    let block = agmem_server::oneshot::fetch(&cfg, agmem_server::config::ContextArgs::default())
+        .await
+        .expect("the one-shot answers through the daemon");
+    assert!(
+        block.starts_with("# Memory context (spaces: hook + user)"),
+        "{block}"
+    );
+    assert!(block.contains("The deploy target is Fly.io."), "{block}");
+
+    let tight = agmem_server::oneshot::fetch(
+        &cfg,
+        agmem_server::config::ContextArgs {
+            budget_chars: Some(200),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("the budget flag flows through to the tool");
+    assert!(tight.chars().count() <= 200, "{tight}");
+
+    // The one-shot detached; the session that was already attached still is.
+    let found = call(&session, "recall", json!({})).await;
+    assert_eq!(
+        found["hits"].as_array().expect("hits").len(),
+        1,
+        "the daemon keeps serving after a one-shot came and went: {found}"
+    );
+}
+
+#[tokio::test]
 async fn a_probe_that_says_nothing_does_not_wedge_the_daemon() {
     let shared = Shared::start().await;
     // Connect and leave — what `--doctor` does to find out whether a daemon

@@ -38,12 +38,29 @@ const POLL: Duration = Duration::from_millis(50);
 /// that rather than opening the store here — a second writer on an embedded
 /// store is exactly what this exists to prevent.
 pub async fn run(cfg: &Config) -> anyhow::Result<()> {
+    let stream = attach(cfg).await?;
+    pump(stream).await
+}
+
+/// A connection to the shared daemon — found, or started — with this
+/// configuration's [`Handshake`] already sent. What flows next is MCP;
+/// [`run`] pumps stdio into it, `agmem context` (issue #46) speaks it itself.
+///
+/// # Errors
+/// When no daemon can be reached or started, or the handshake will not land.
+pub async fn attach(cfg: &Config) -> anyhow::Result<UnixStream> {
     let path = socket_path(&cfg.data_dir)?;
-    let stream = match connect(&path).await {
+    let mut stream = match connect(&path).await {
         Some(stream) => stream,
         None => start_one(cfg, &path).await?,
     };
-    pump(stream, cfg).await
+    let mut handshake = serde_json::to_vec(&Handshake::new(cfg))?;
+    handshake.push(b'\n');
+    stream
+        .write_all(&handshake)
+        .await
+        .context("the shared store closed before the handshake landed")?;
+    Ok(stream)
 }
 
 /// A daemon that answers, or nothing. Every failure is "not there" — the
@@ -178,15 +195,8 @@ async fn wait_until_ready(cfg: &Config, path: &Path) -> anyhow::Result<UnixStrea
 
 /// Move bytes between this process's stdio and the daemon, until either end
 /// stops.
-async fn pump(stream: UnixStream, cfg: &Config) -> anyhow::Result<()> {
+async fn pump(stream: UnixStream) -> anyhow::Result<()> {
     let (mut from_daemon, mut to_daemon) = stream.into_split();
-    let mut handshake = serde_json::to_vec(&Handshake::new(cfg))?;
-    handshake.push(b'\n');
-    to_daemon
-        .write_all(&handshake)
-        .await
-        .context("the shared store closed before the handshake landed")?;
-
     let mut stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
 

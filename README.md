@@ -361,6 +361,19 @@ one chunk would eat a quarter of the budget, and `recall` is the way to it.
 Nothing is reinforced either: the block is read on a schedule, so being in it is
 no evidence a memory was useful.
 
+The same block is one shell command away, no MCP session needed:
+
+```sh
+agmem context --query "release work" --budget-chars 4000
+```
+
+That is the push path for hooks: a session-start hook can inject the briefing
+before the first token instead of hoping the model calls the tool. It answers
+through the shared daemon — attaching to the running one, or starting one the
+session about to begin then reuses — and never opens the store directly while
+a daemon could hold it. `--space` after the subcommand selects scope
+(`current`, `user`, `all`, or a name), exactly like the tool's parameter.
+
 **`forget`** — removal, with the scope confirmed before anything moves. By
 default it *closes* a memory rather than deleting it: it stops answering
 `recall` and `context`, and stays readable through `inspect`, dated and marked
@@ -524,9 +537,11 @@ The numbers and the harness behind them are in `docs/tool-descriptions.md`.
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process; one session at a time |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it |
 | `--doctor` | — | Self-check, then exit |
+| `context` subcommand | — | Print the session-start block to stdout, then exit — the shell-hook surface (`agmem context --help`) |
 
 stdout is the MCP wire: all logging goes to stderr or `--log-file`, never
-stdout. `agmem --help` is the same list with the exact spellings.
+stdout. The one exception is `agmem context`, which serves no MCP — its block
+*is* the stdout. `agmem --help` is the same list with the exact spellings.
 
 ### Rewording a tool
 

@@ -1,0 +1,85 @@
+{
+  "name": "formatter-switch",
+  "about": "A tooling history with one correction: the Python formatter moved from black to ruff. Probes share as few words as possible with their targets, so the vector arm has to do the work; the gate cases pit a genuine paraphrase and a same-shaped-but-different claim against the 0.95 threshold.",
+  "seeds": [
+    {
+      "label": "fmt-black",
+      "content": "The project formats Python with black.",
+      "valid_from": "2025-01-01T00:00:00Z"
+    },
+    {
+      "label": "fmt-ruff",
+      "content": "The project switched its Python formatter to ruff format; black is retired.",
+      "valid_from": "2025-06-01T00:00:00Z",
+      "supersedes": ["fmt-black"]
+    },
+    {
+      "label": "editor",
+      "content": "The user edits in Helix, not VS Code."
+    },
+    {
+      "label": "test-runner",
+      "content": "CI runs the test suite with pytest under tox."
+    },
+    {
+      "label": "lesson-cache",
+      "content": "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.",
+      "kind": "lesson"
+    },
+    {
+      "label": "distractor-lunch",
+      "content": "The team orders Neapolitan pizza for Friday lunch."
+    },
+    {
+      "label": "distractor-plant",
+      "content": "A fiddle-leaf fig sits by the office window and needs weekly watering."
+    }
+  ],
+  "probes": [
+    {
+      "query": "which tool tidies up our source code layout?",
+      "k": 5,
+      "relevant": ["fmt-ruff"]
+    },
+    {
+      "query": "what does the developer write code in?",
+      "k": 5,
+      "relevant": ["editor"]
+    },
+    {
+      "query": "how are the automated checks executed?",
+      "k": 5,
+      "relevant": ["test-runner"]
+    }
+  ],
+  "timeline": [
+    {
+      "query": "python formatter",
+      "as_of": "2025-03-01T00:00:00Z",
+      "expect_top": "fmt-black",
+      "superseded_by": "fmt-ruff"
+    },
+    {
+      "query": "python formatter",
+      "expect_top": "fmt-ruff",
+      "absent": ["fmt-black"]
+    }
+  ],
+  "gate": [
+    {
+      "candidate": "The Python formatter is now ruff format, with black no longer used.",
+      "expect": "gated",
+      "original": "fmt-ruff"
+    },
+    {
+      "candidate": "The project formats Rust with rustfmt.",
+      "expect": "stored"
+    },
+    {
+      "candidate": "the project SWITCHED its python formatter to ruff format;  black is retired.",
+      "expect": "gated",
+      "original": "fmt-ruff"
+    }
+  ],
+  "context": []
+}

@@ -122,3 +122,103 @@ fn regenerate_knn_fixture() {
     std::fs::create_dir_all(path.parent().expect("fixture dir")).expect("create fixture dir");
     std::fs::write(&path, document).expect("write fixture");
 }
+
+/// Regenerates the eval harness's recorded vectors (issue #32).
+///
+/// The quality eval in `agmem-server/tests/eval.rs` replays scripted sessions
+/// through a `RecordedEmbedder` so its numbers carry real BGE semantics while
+/// staying bit-stable and offline. This is the recorder: it walks the eval
+/// scenario fixtures, embeds every passage and query they use, and commits
+/// the result as one JSON map. Run it after any edit to a scenario file —
+/// an unrecorded string makes `RecordedEmbedder` panic, deliberately, rather
+/// than fall back to a zero vector that would read as a scoring regression.
+///
+/// Run with `cargo test -p agmem-embed --test fastembed -- --ignored
+/// regenerate_eval_vectors`.
+#[test]
+#[ignore = "writes a committed fixture from real model output"]
+fn regenerate_eval_vectors() {
+    use std::collections::BTreeMap;
+
+    /// Shortest-round-tripping decimal for each component, so f32 → text →
+    /// f64 → f32 is exact both ways.
+    fn json_vector(vector: &[f32]) -> String {
+        let components: Vec<String> = vector.iter().map(|x| format!("{x}")).collect();
+        format!("[{}]", components.join(","))
+    }
+
+    fn strings_of(section: &serde_json::Value, field: &str) -> Vec<String> {
+        section
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry[field].as_str())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    let eval_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../agmem-server/tests/fixtures/eval");
+    let mut scenarios: Vec<std::path::PathBuf> = std::fs::read_dir(eval_dir.join("scenarios"))
+        .expect("read the scenario dir")
+        .map(|entry| entry.expect("dir entry").path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    scenarios.sort();
+    assert!(!scenarios.is_empty(), "no scenario fixtures to record");
+
+    // BTreeMaps so the committed file is ordered by text, not by scenario —
+    // a fixture edit diffs as the strings it touched.
+    let mut passages: BTreeMap<String, Vec<f32>> = BTreeMap::new();
+    let mut queries: BTreeMap<String, Vec<f32>> = BTreeMap::new();
+    for path in &scenarios {
+        let raw = std::fs::read_to_string(path).expect("read scenario");
+        let scenario: serde_json::Value = serde_json::from_str(&raw).expect("parse scenario");
+        for text in strings_of(&scenario["seeds"], "content")
+            .into_iter()
+            .chain(strings_of(&scenario["seeds"], "episode"))
+            .chain(strings_of(&scenario["gate"], "candidate"))
+        {
+            passages.insert(text, Vec::new());
+        }
+        for text in strings_of(&scenario["probes"], "query")
+            .into_iter()
+            .chain(strings_of(&scenario["timeline"], "query"))
+            .chain(strings_of(&scenario["context"], "query"))
+        {
+            queries.insert(text, Vec::new());
+        }
+    }
+
+    let cache = std::env::temp_dir().join("agmem-model-cache");
+    let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+
+    let passage_texts: Vec<String> = passages.keys().cloned().collect();
+    let vectors = embedder
+        .embed_passages(&passage_texts)
+        .expect("embed passages");
+    for (text, vector) in passage_texts.iter().zip(vectors) {
+        passages.insert(text.clone(), vector);
+    }
+    for (text, slot) in &mut queries {
+        *slot = embedder.embed_query(text).expect("embed query");
+    }
+
+    let entry = |(text, vector): (&String, &Vec<f32>)| {
+        format!(
+            "    {}: {}",
+            serde_json::to_string(text).expect("encode text"),
+            json_vector(vector)
+        )
+    };
+    let passage_entries: Vec<String> = passages.iter().map(entry).collect();
+    let query_entries: Vec<String> = queries.iter().map(entry).collect();
+    let document = format!(
+        "{{\n  \"model\": \"BGE-small-en-v1.5-q\",\n  \"dim\": {},\n  \
+         \"passages\": {{\n{}\n  }},\n  \"queries\": {{\n{}\n  }}\n}}\n",
+        DIM,
+        passage_entries.join(",\n"),
+        query_entries.join(",\n")
+    );
+    std::fs::write(eval_dir.join("vectors.json"), document).expect("write fixture");
+}

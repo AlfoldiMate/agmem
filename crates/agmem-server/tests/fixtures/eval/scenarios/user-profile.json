@@ -1,0 +1,90 @@
+{
+  "name": "user-profile",
+  "about": "Facts about a person with deliberately adjacent distractors: the sister in Manchester sits next to the old London home, a 2019 Lisbon holiday sits next to the Lisbon move. Retrieval has to pick the fact over its neighbour, and the gate cases test a real paraphrase against a same-entity different-fact claim.",
+  "seeds": [
+    {
+      "label": "home-london",
+      "content": "The user lives in London.",
+      "valid_from": "2024-05-01T00:00:00Z"
+    },
+    {
+      "label": "home-lisbon",
+      "content": "The user relocated to Lisbon in the spring.",
+      "valid_from": "2026-03-01T00:00:00Z",
+      "supersedes": ["home-london"]
+    },
+    {
+      "label": "diet",
+      "content": "The user is vegetarian and allergic to peanuts."
+    },
+    {
+      "label": "language-pref",
+      "content": "The user prefers Rust for systems tools and reaches for it by default.",
+      "tags": ["identity"]
+    },
+    {
+      "label": "pet",
+      "content": "A grey cat named Miso lives with the user."
+    },
+    {
+      "label": "distractor-sister",
+      "content": "The user's sister lives in Manchester."
+    },
+    {
+      "label": "distractor-travel",
+      "content": "The user visited Lisbon on holiday in 2019."
+    }
+  ],
+  "probes": [
+    {
+      "query": "where is the user based these days?",
+      "k": 5,
+      "relevant": ["home-lisbon"]
+    },
+    {
+      "query": "what food restrictions should dinner plans respect?",
+      "k": 5,
+      "relevant": ["diet"]
+    },
+    {
+      "query": "what animal shares the user's home?",
+      "k": 5,
+      "relevant": ["pet"]
+    }
+  ],
+  "timeline": [
+    {
+      "query": "where does the user live",
+      "as_of": "2025-01-01T00:00:00Z",
+      "expect_top": "home-london",
+      "superseded_by": "home-lisbon"
+    },
+    {
+      "query": "where does the user live",
+      "expect_top": "home-lisbon",
+      "absent": ["home-london"]
+    }
+  ],
+  "gate": [
+    {
+      "candidate": "The user is based in Lisbon now, having moved there in the spring.",
+      "expect": "gated",
+      "original": "home-lisbon"
+    },
+    {
+      "candidate": "The user's brother lives in Porto.",
+      "expect": "stored"
+    },
+    {
+      "candidate": "The user keeps a grey cat called Miso at home.",
+      "expect": "gated",
+      "original": "pet"
+    }
+  ],
+  "context": [
+    {
+      "query": "what should I know about this person?",
+      "must_contain": ["language-pref", "diet"]
+    }
+  ]
+}

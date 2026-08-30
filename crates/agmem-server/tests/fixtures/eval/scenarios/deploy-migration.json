@@ -1,0 +1,81 @@
+{
+  "name": "deploy-migration",
+  "about": "An infra picture with a superseded deploy flow, an episode behind the correction, and the memory kinds the context block routes: an instruction, an identity fact, a lesson. The context cases are where the budget and section checklist get measured.",
+  "seeds": [
+    {
+      "label": "deploy-laptop",
+      "content": "Deployments are run by hand from the lead developer's laptop.",
+      "valid_from": "2025-02-01T00:00:00Z"
+    },
+    {
+      "label": "deploy-ci",
+      "content": "Deployments run from the CI pipeline on every tagged release.",
+      "valid_from": "2025-08-01T00:00:00Z",
+      "supersedes": ["deploy-laptop"],
+      "episode": "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead."
+    },
+    {
+      "label": "gateway",
+      "content": "The API gateway lives in the infra repository and is deployed separately."
+    },
+    {
+      "label": "rule-forcepush",
+      "content": "Never force-push to the main branch.",
+      "kind": "instruction"
+    },
+    {
+      "label": "identity-tz",
+      "content": "The user works from the Europe/Budapest timezone.",
+      "tags": ["identity"]
+    },
+    {
+      "label": "lesson-migrations",
+      "content": "Database migrations must run before the new pods roll out, or the old schema panics.",
+      "kind": "lesson"
+    },
+    {
+      "label": "distractor-coffee",
+      "content": "The espresso machine on the third floor is broken again."
+    }
+  ],
+  "probes": [
+    {
+      "query": "who or what pushes new versions to production?",
+      "k": 5,
+      "relevant": ["deploy-ci"]
+    },
+    {
+      "query": "where does the service that routes external traffic live?",
+      "k": 5,
+      "relevant": ["gateway"]
+    }
+  ],
+  "timeline": [
+    {
+      "query": "how do releases go out",
+      "as_of": "2025-04-01T00:00:00Z",
+      "expect_top": "deploy-laptop",
+      "superseded_by": "deploy-ci"
+    },
+    {
+      "query": "how do releases go out",
+      "expect_top": "deploy-ci",
+      "absent": ["deploy-laptop"]
+    }
+  ],
+  "gate": [],
+  "context": [
+    {
+      "must_contain": ["rule-forcepush", "identity-tz", "lesson-migrations"],
+      "must_not_contain_text": ["SSH keys"]
+    },
+    {
+      "query": "how deployments work",
+      "must_contain": ["deploy-ci"]
+    },
+    {
+      "budget_chars": 200,
+      "must_contain": ["rule-forcepush"]
+    }
+  ]
+}

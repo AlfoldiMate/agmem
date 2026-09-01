@@ -1,8 +1,7 @@
 //! agmem embedding backends.
 //!
 //! A narrow [`Embedder`] trait with local implementations: fastembed/ONNX
-//! (feature `onnx`, default), model2vec static embeddings (feature `static`),
-//! and a no-op backend for BM25-only mode. Nothing here touches the network
+//! (feature `onnx`, default) and a no-op backend for BM25-only mode. Nothing here touches the network
 //! at runtime once the model is cached; see `docs/design.md` §4.
 //!
 //! Backends are synchronous — ONNX inference is CPU-bound, and pretending
@@ -19,8 +18,6 @@ pub mod fastembed;
 pub mod noop;
 #[cfg(feature = "rerank")]
 pub mod rerank;
-#[cfg(feature = "static")]
-pub mod static_m2v;
 
 pub use noop::NoopEmbedder;
 

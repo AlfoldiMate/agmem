@@ -17,9 +17,6 @@ default = ["onnx"]
 # The local ONNX embedder. Without it the binary still runs, BM25-only, and
 # needs no ONNX Runtime at build time.
 onnx = ["agmem-embed/onnx"]
-# The pure-Rust static embedder (model2vec potion-base-8M); off by default,
-# it is the no-ONNX contingency and the zero-network bundle path.
-static = ["agmem-embed/static"]
 
 [dependencies]
 # `schema` puts core's enums, and their variant docs, into the tool schemas

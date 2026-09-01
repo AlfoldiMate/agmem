@@ -153,8 +153,6 @@ pub struct ContextArgs {
 pub enum EmbedderKind {
     /// fastembed/ONNX local model (default).
     Fastembed,
-    /// model2vec static embeddings (pure Rust).
-    Static,
     /// No embeddings; BM25-only degraded mode.
     None,
 }
@@ -165,7 +163,6 @@ impl EmbedderKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Fastembed => "fastembed",
-            Self::Static => "static",
             Self::None => "none",
         }
     }

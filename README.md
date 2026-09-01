@@ -40,7 +40,7 @@ what the agent said. agmem does neither.
 ## Install
 
 Prebuilt binaries cover macOS on Apple silicon and Linux on arm64 and x86_64
-(glibc 2.38+). They carry both embedders, ONNX and the pure-Rust fallback.
+(glibc 2.38+).
 
 ```sh
 brew install AlfoldiMate/tap/agmem
@@ -52,9 +52,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 ```
 
 Anywhere else, build from source with Rust 1.89 or newer. The crate is
-`agmem-server`; the binary is `agmem`. Add
-`--no-default-features --features static` if ONNX Runtime is not available
-for your platform.
+`agmem-server`; the binary is `agmem`.
 
 ```sh
 cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
@@ -277,7 +275,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--data` / `AGMEM_DATA` | platform data dir | Store, lock file, model cache |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine. `mem://` for scratch, `ws://host` to share |
 | `--space` / `AGMEM_SPACE` | derived from cwd | This instance's space |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` (ONNX), `static` (pure Rust), `none` (BM25 only) |
+| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` (ONNX), or `none` (BM25 only) |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session |
@@ -309,9 +307,9 @@ effect of the built-in wording and the harness that measures it.
 - **The first run stalls on the model download.** It pulls 65 MB from Hugging
   Face into `<data dir>/models`. Behind a proxy, copy that directory from a
   machine that has it, or point `FASTEMBED_CACHE_DIR` at one that does.
-- **No ONNX Runtime for the platform.** `--embedder none` runs BM25-only, and
-  `--features static` builds the pure-Rust embedder. A store written with one
-  model refuses to open under a different one; `--reindex` converts it.
+- **No ONNX Runtime for the platform.** `--embedder none` runs BM25-only. A
+  store written with one model refuses to open under a different one;
+  `--reindex` converts it.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 
@@ -324,8 +322,8 @@ cargo check --workspace --no-default-features --all-targets   # the BM25-only bu
 ```
 
 Four crates: `agmem-core` (records, scoring, dedup, chunking; no I/O),
-`agmem-store` (SurrealDB schema and queries), `agmem-embed` (ONNX, static and
-no-op backends) and `agmem-server` (the MCP service and the `agmem` binary).
+`agmem-store` (SurrealDB schema and queries), `agmem-embed` (ONNX and no-op
+backends) and `agmem-server` (the MCP service and the `agmem` binary).
 CI never downloads a model; tests that need one are gated.
 
 Retrieval quality is measured, not asserted. An offline, deterministic eval

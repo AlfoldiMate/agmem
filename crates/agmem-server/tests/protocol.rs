@@ -3617,35 +3617,3 @@ async fn a_full_page_reserves_its_last_slot_for_the_hop() {
     );
     agmem.shutdown().await;
 }
-
-/// Issue #29's acceptance, minus the doctor half: a remember → recall
-/// roundtrip through the real static model on a fresh store, exercising the
-/// 256-wide vector space end to end (every other test runs at a stub's
-/// width). Ignored: the first run downloads ~30 MB. Run with
-/// `cargo test -p agmem-server --features static --test protocol -- --ignored`.
-#[cfg(feature = "static")]
-#[tokio::test]
-#[ignore = "downloads the static model on first run"]
-async fn recall_roundtrips_through_the_static_embedder() {
-    let embedder =
-        Arc::new(agmem_embed::static_m2v::StaticBackend::new(None).expect("load the static model"));
-    let agmem = Harness::start(embedder).await;
-
-    agmem
-        .remember(json!({
-            "memories": [
-                { "content": "The user prefers Rust over Python for CLI tools" },
-                { "content": "The kitchen tap drips at night" }
-            ]
-        }))
-        .await;
-
-    let found = agmem
-        .recall(json!({ "query": "which language does this person like writing command line programs in" }))
-        .await;
-    assert_eq!(
-        hit_contents(&found).first(),
-        Some(&"The user prefers Rust over Python for CLI tools"),
-        "the language memory should rank first: {found}"
-    );
-}

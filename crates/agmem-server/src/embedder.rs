@@ -22,24 +22,15 @@ pub fn build(cfg: &Config) -> anyhow::Result<Arc<dyn Embedder>> {
         EmbedderKind::Fastembed => anyhow::bail!(
             "this agmem was built without the ONNX backend; rebuild with the `onnx` feature or run with --embedder none"
         ),
-        #[cfg(feature = "static")]
-        EmbedderKind::Static => Ok(Arc::new(agmem_embed::static_m2v::StaticBackend::new(
-            Some(model_cache_dir(cfg).join("potion-base-8M")),
-        )?)),
-        #[cfg(not(feature = "static"))]
-        EmbedderKind::Static => anyhow::bail!(
-            "this agmem was built without the static backend; rebuild with the `static` feature or run with --embedder fastembed or none"
-        ),
     }
 }
 
 /// Where models live unless `FASTEMBED_CACHE_DIR` says otherwise: under the
 /// data directory, so everything agmem wrote sits in one place to move or
-/// delete. The static backend looks here too, but only for a pre-placed
-/// bundle — its hub downloads cache under `HF_HOME` instead.
+/// delete.
 #[cfg_attr(
-    not(any(feature = "onnx", feature = "static")),
-    expect(dead_code, reason = "only model-loading backends want a cache dir")
+    not(feature = "onnx"),
+    expect(dead_code, reason = "only the model-loading backend wants a cache dir")
 )]
 fn model_cache_dir(cfg: &Config) -> PathBuf {
     cfg.data_dir.join("models")

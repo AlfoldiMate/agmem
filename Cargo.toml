@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -21,10 +21,10 @@ homepage = "https://github.com/AlfoldiMate/agmem"
 # dependency with no version requirement. Local builds resolve by path either
 # way, and a caret requirement stays satisfied across the bumps release-plz
 # makes.
-agmem-core = { path = "crates/agmem-core", version = "0.1.4" }
-agmem-store = { path = "crates/agmem-store", version = "0.1.4" }
+agmem-core = { path = "crates/agmem-core", version = "0.1.5" }
+agmem-store = { path = "crates/agmem-store", version = "0.1.5" }
 # default-features off so a BM25-only build can drop the ONNX half entirely
-agmem-embed = { path = "crates/agmem-embed", version = "0.1.4", default-features = false }
+agmem-embed = { path = "crates/agmem-embed", version = "0.1.5", default-features = false }
 
 # MCP + storage + embeddings (pinned per docs/design.md §4.1)
 rmcp = { version = "3.1", features = ["server", "macros", "transport-io"] }

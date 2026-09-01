@@ -60,6 +60,8 @@ async fn count_matching_cost_by_store_size() {
         let elapsed = started.elapsed();
 
         assert_eq!(counted, rows as u64, "the probe count must be exact");
-        println!("count_matching over {rows} rows: {elapsed:?}");
+        // Stderr: stdout is the MCP wire and denied workspace-wide, and a
+        // probe's numbers must survive the harness either way.
+        eprintln!("count_matching over {rows} rows: {elapsed:?}");
     }
 }

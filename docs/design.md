@@ -143,8 +143,9 @@ Design stances behind this shape (evidence in idea.md §3):
 -- meta: one row; guards schema + embedder compatibility
 DEFINE TABLE meta SCHEMAFULL;
 DEFINE FIELD schema_version ON meta TYPE int;
-DEFINE FIELD embedder_model ON meta TYPE string;        -- e.g. "bge-small-en-v1.5-q"
-DEFINE FIELD embedder_dim   ON meta TYPE int;           -- e.g. 384
+DEFINE FIELD embedder_model ON meta TYPE option<string>; -- e.g. "bge-small-en-v1.5-q";
+DEFINE FIELD embedder_dim   ON meta TYPE option<int>;    --   none until a run that
+                                                         --   could write a vector
 DEFINE FIELD created_at     ON meta TYPE datetime DEFAULT time::now();
 
 DEFINE TABLE space SCHEMAFULL;
@@ -201,7 +202,10 @@ DEFINE FIELD source        ON memory TYPE object;   -- { kind: "episode"|"agent"
 -- schema v2: what a `reflect` insight was drawn from; empty for every other write
 DEFINE FIELD derived_from  ON memory TYPE array<record<memory | episode>> DEFAULT [];
 DEFINE FIELD created_at    ON memory TYPE datetime DEFAULT time::now();
-DEFINE INDEX mem_hash     ON memory COLUMNS space, content_hash UNIQUE;
+-- v5: 'live' while invalid_at is NONE, the close time once set — recomputed
+-- on every write, so a close moves the row out of the 'live' slot itself
+DEFINE FIELD dedup_key     ON memory TYPE string VALUE <string>(invalid_at ?? 'live');
+DEFINE INDEX mem_hash_live ON memory COLUMNS space, content_hash, dedup_key UNIQUE;
 DEFINE INDEX mem_entities ON memory COLUMNS entities.*;   -- .* = per element
 DEFINE INDEX mem_tags     ON memory COLUMNS tags.*;
 DEFINE INDEX mem_ft  ON memory COLUMNS content FULLTEXT ANALYZER english BM25 HIGHLIGHTS;
@@ -218,9 +222,13 @@ Notes:
   `field CONTAINS $x`. Without the `.*` the index covers the whole array, and
   the planner then serves `field = $x` from it — returning nothing, silently
   (verified on 3.2.4).
-- The unique `(space, content_hash)` index is the exact-dup gate; the
-  semantic near-dup gate (cosine ≥ 0.95 against top-1 neighbor) runs in Rust
-  during `remember` because it needs the query-side embedding anyway.
+- The unique `(space, content_hash, dedup_key)` index is the exact-dup gate:
+  every live row shares the `'live'` key, so one live claim per hash stays
+  enforced while closed rows coexist keyed by their close time — superseding
+  a claim frees its wording for re-assertion (issue #61). The semantic
+  near-dup gate (cosine ≥ 0.95 against each of the probe's live in-space
+  neighbours, not only the nearest) runs in Rust during `remember` because
+  it needs the query-side embedding anyway.
 - Dimension 384 matches the default embedder. The dimension is recorded in
   `meta`; switching embedders requires an explicit `agmem --reindex`
   maintenance pass — startup refuses a model/dim mismatch with a clear
@@ -245,8 +253,10 @@ rate: pinned = 0        slow = 0.005      normal = 0.02     fast = 0.15
 
 Reinforcement: when `recall` returns a memory, the server bumps
 `strength += 1` (capped at `MAX_STABILITY = 5`, issue #52), `access_count += 1`,
-`last_accessed = now` (batched, fire-and-forget) — MemoryBank's Ebbinghaus
-model; frequently used memories outlast untouched ones, which fade in ranking.
+`last_accessed = now` — one awaited `UPDATE` for the whole page of hits, whose
+failure is logged and dropped rather than failing the read — MemoryBank's
+Ebbinghaus model; frequently used memories outlast untouched ones, which fade
+in ranking.
 The cap is uniform across classes — the class sets the timescale through its
 rate, strength is the use-multiplier on top — and it bounds what use can buy
 at five times the class's own horizon: without it a `fast` note recalled fifty
@@ -307,9 +317,18 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
     "content": "…", "occurred_at": "RFC3339", "session": "…"
   }
 }
-// → { created: [ids],                       // in request order, minus the duplicates
-//     duplicates: [{ id, of, similarity }], // `of` = index into memories[]
-//     superseded: [ids], episode: id|null } // the episode id, written or reused
+// → { created: [ids],                // in request order, minus the duplicates
+//     duplicates: [{ id, of, content, similarity }],  // ≥0.95 — not inserted;
+//                                     // `of` = index into memories[]
+//     related:    [{ id, of, content, similarity }],  // 0.75–0.95 — inserted
+//                                     // anyway; the correction candidates.
+//                                     // Both carry the neighbour's content:
+//                                     // an id and a number cannot be judged
+//                                     // (#38)
+//     superseded: [ids],
+//     already_closed: [{ id, reason, superseded_by }], // supersede targets
+//                                     // whose earlier close stood (#62)
+//     episode: id|null }              // the episode id, written or reused
 
 // recall
 {
@@ -516,8 +535,10 @@ client that shows prompts scopes them by server — Claude Code renders them
 Resources (`memory://` URIs) are a phase-4 progressive enhancement —
 tools-first, since resources have uneven client support; everything a resource
 serves is also a `recall` or `inspect` answer, and no feature may depend on
-them. The grammar is two forms: `memory://<space>` reads the index (every live
-claim, slim, each entry carrying its own URI), and `memory://<space>/<id>`
+them. The grammar is two forms: `memory://<space>` reads the index — one page
+of the strongest live claims, slim, each entry carrying its own URI, with a
+`truncated` note naming what the page left out whenever the space holds more
+than one page (#69) — and `memory://<space>/<id>`
 reads the full `inspect` answer for whatever the id names. `resources/list`
 serves one entry per registered space; the record form is published as a URI
 template rather than enumerated, so a large store never pushes thousands of
@@ -545,45 +566,58 @@ agmem/
 │   │       ├── chunk.rs          # episode chunking (~1500 chars, para-aware)
 │   │       └── error.rs          # thiserror taxonomy (CoreError)
 │   ├── agmem-store/              # SurrealDB repository
-│   │   └── src/
-│   │       ├── db.rs             # any::connect, engine selection, lockfile
-│   │       ├── migrate.rs        # DEFINE-set + meta.schema_version gate,
-│   │       │                     #   embedder/dim compatibility check
-│   │       ├── queries.rs        # const SurrealQL strings (bound params only)
-│   │       ├── repo.rs           # insert_batch, search_hybrid, direct_lookup,
-│   │       │                     #   supersede, invalidate, reinforce,
-│   │       │                     #   history_chain, stats, startup_prune
-│   │       └── types.rs          # row structs (serde) ↔ core model mapping
+│   │   ├── src/
+│   │   │   ├── db.rs             # any::connect, engine selection
+│   │   │   ├── migrate.rs        # bootstrap + versioned batches below,
+│   │   │   │                     #   embedder/dim compatibility check
+│   │   │   ├── migrations/       # v1_schema … v5_live_dedup (.surql)
+│   │   │   ├── queries/          # const SurrealQL strings (bound params only),
+│   │   │   │                     #   one module per path: read / write / forget
+│   │   │   ├── repo/             # insert_batch, search_hybrid, direct_lookup,
+│   │   │   │                     #   supersede, invalidate, reinforce, reindex,
+│   │   │   │                     #   history_chain, stats, startup_prune
+│   │   │   ├── types.rs          # row structs (serde) ↔ core model mapping
+│   │   │   └── error.rs          # StoreError
+│   │   └── tests/                # engine-backed integration tests (mem://)
 │   ├── agmem-embed/              # embedding backends
-│   │   └── src/
-│   │       ├── lib.rs            # trait Embedder { dim(), model_id(),
-│   │       │                     #   embed_passages(), embed_query() }
-│   │       ├── fastembed.rs      # BGESmallENV15Q 384d, spawn_blocking wrapper,
-│   │       │                     #   cache dir mgmt   [feature "onnx", default]
-│   │       ├── static_m2v.rs     # model2vec potion-base-8M 256d [feature "static"]
-│   │       └── noop.rs           # BM25-only mode (dim 0)
+│   │   ├── src/
+│   │   │   ├── lib.rs            # trait Embedder { dim(), model_id(),
+│   │   │   │                     #   embed_passages(), embed_query() };
+│   │   │   │                     #   slices batches of 128 so a shared
+│   │   │   │                     #   backend is free between slices (#67)
+│   │   │   ├── fastembed.rs      # BGESmallENV15Q 384d, spawn_blocking wrapper,
+│   │   │   │                     #   cache dir mgmt   [feature "onnx", default]
+│   │   │   ├── static_m2v.rs     # model2vec potion-base-8M 256d [feature "static"]
+│   │   │   └── noop.rs           # BM25-only mode (dim 0)
+│   │   └── tests/                # recorded-vector fixtures + regeneration
 │   └── agmem-server/             # the binary: `agmem`
-│       └── src/
-│           ├── main.rs           # clap → config → telemetry → one of three
-│           │                     #   routes: be the daemon, attach to it,
-│           │                     #   or own the store here
-│           ├── daemon/           # the shared store (#37), unix only
-│           │   ├── mod.rs        #   socket path, handshake, wanted()
-│           │   ├── serve.rs      #   owns the store, one service per session
-│           │   └── client.rs     #   find or start it, then pump stdio
-│           ├── config.rs         # flags + AGMEM_* env; --doctor self-check
-│           ├── service.rs        # AgmemService { repo, embedder, cfg,
-│           │                     #   tool_router, prompt_router }
-│           ├── tools/
-│           │   ├── remember.rs   # one file per tool: schema struct +
-│           │   ├── recall.rs     #   description text + handler
-│           │   ├── context.rs
-│           │   ├── forget.rs
-│           │   └── inspect.rs
-│           ├── prompts.rs        # checkpoint / recall_first rituals
-│           └── telemetry.rs      # tracing → stderr (or AGMEM_LOG_FILE)
-├── docs/                         # idea.md, design.md, feature specs
-└── tests/                        # workspace integration tests (see §7)
+│       ├── src/
+│       │   ├── main.rs           # clap → config → telemetry → one of three
+│       │   │                     #   routes: be the daemon, attach to it,
+│       │   │                     #   or own the store here
+│       │   ├── daemon/           # the shared store (#37), unix only
+│       │   │   ├── mod.rs        #   socket path, handshake, wanted()
+│       │   │   ├── serve.rs      #   owns the store, one service per session
+│       │   │   └── client.rs     #   find or start it, then pump stdio
+│       │   ├── config.rs         # flags + AGMEM_* env + `context` subcommand
+│       │   ├── startup.rs        # steps 4–9 of §5.1, shared by every route
+│       │   ├── lock.rs           # the single-writer advisory lock
+│       │   ├── doctor.rs         # --doctor self-check
+│       │   ├── reindex.rs        # --reindex re-embedding pass
+│       │   ├── oneshot.rs        # `agmem context`: one briefing, no server
+│       │   ├── embedder.rs       # backend selection from Config
+│       │   ├── service.rs        # AgmemService { repo, embedder, cfg,
+│       │   │                     #   tool_router, prompt_router }
+│       │   ├── tools/            # one file per tool: schema struct +
+│       │   │                     #   description text + handler —
+│       │   │                     #   remember / recall / context / forget /
+│       │   │                     #   inspect / consolidate / reflect
+│       │   ├── resources.rs      # memory://<space> index resources
+│       │   ├── prompts.rs        # checkpoint / recall_first rituals
+│       │   └── telemetry.rs      # tracing → stderr (or AGMEM_LOG_FILE)
+│       └── tests/                # protocol, eval, harness, daemon, knn_probe
+├── docs/                         # idea.md, design.md, eval batches
+└── scripts/                      # desc-eval.nu (LLM-driven description eval)
 ```
 
 Dependency rule: `server → {core, store, embed}`, `store → core`,
@@ -631,7 +665,14 @@ main()
             socket, spawn `argv[0] --daemon-serve` in its own process group,
             wait for it to accept
          send one JSON handshake line
-            { version, db_url, embedder, space, pool, max_k }
+            { version, release, db_url, embedder, space, pool, max_k,
+              tool_desc }
+         read the one-line Ack { ok, error?, retiring } it answers with
+         (protocol v3, #60): a daemon from another release refuses with
+         retiring: true and shuts down — the client waits for the socket
+         to vanish and starts a fresh daemon from its own binary, exactly
+         once; other refusals (wrong store, wrong embedder) exit with the
+         daemon's message. The newest attacher's binary wins the socket.
          then pump stdio ↔ socket, and decide nothing else
          └─ unreachable → stderr naming <data_dir>/daemon.log, exit 1. Never
             fall back to opening the store: that is the second writer.
@@ -664,7 +705,9 @@ main()
 
 ```
 remember(params)
- 1. validate: space slug, kinds, non-empty contents, supersedes ids exist
+ 1. validate: space slug, kinds, non-empty contents ≤ 10k chars each, an
+    episode ≤ 100k (#67 — a paste is refused whole, never truncated silently),
+    supersedes ids exist
  2. per memory: normalize content → blake3
     exact dup? (space, hash) unique index         → report as duplicate (NOOP)
     …but the check runs *inside* the transaction of step 5: a unique-index
@@ -674,8 +717,11 @@ remember(params)
     (issue #57) — otherwise the documented retry ("re-send with the id in
     supersedes") loops forever on a word-for-word re-send
  3. embed all new contents + episode chunks in one batch
-                                                   (spawn_blocking, passage: prefix)
- 4. near-dup gate: HNSW top-4 among live memories in space — one pass, two answers
+    (spawn_blocking, passage: prefix; sliced 128 texts at a time so a shared
+    daemon's backend is free between slices, #67)
+ 4. near-dup gate: per memory, one bare 256-candidate HNSW probe, narrowed to
+    the space's live rows outside the scan (#40, #73); its top-4 are one pass
+    with two answers
     cosine ≥ 0.95        → duplicates: {id, of, content, similarity}; skip insert
     0.75 ≤ cosine < 0.95 → related:    {id, of, content, similarity}; insert anyway
     both carry `content`, because the agent's decision is between a no-op and a
@@ -952,16 +998,18 @@ rather than details:
 |---|---|---|
 | `--data` / `AGMEM_DATA` | `ProjectDirs("dev","agmem","agmem")` data dir | Home of DB file, lock file |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
-| `AGMEM_DB_USER` / `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
+| `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `static` \| `none` |
-| `AGMEM_POOL` / `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
+| `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
-| `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
+| `--log`, `--log-file` / `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process instead of through the shared daemon (#37) |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it until reboot |
 | `--daemon-serve` | — | Be the daemon. Started automatically; hidden from `--help` |
-| `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip; prints report, exits |
+| `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip, vector coverage; prints report, exits |
+| `--reindex` | — | Re-embed every row under the configured backend and record its model/dim pair — the one sanctioned way to change embedders; exits |
+| `context` subcommand | — | Print one session-start briefing to stdout and exit (`--query`, `--space`, `--budget-chars`) — the shell-hook surface, no MCP served |
 
 Client registration (the entire install story):
 

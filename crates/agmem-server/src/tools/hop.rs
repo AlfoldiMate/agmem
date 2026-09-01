@@ -206,6 +206,7 @@ fn merge(candidates: &mut Vec<Candidate>, rows: Vec<MemoryRecord>) -> Vec<Memory
             None => candidates.push(Candidate {
                 rrf: vote,
                 similarity: None,
+                text_score: None,
                 hit: Hit::Memory(Box::new(row)),
             }),
         }

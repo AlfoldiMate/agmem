@@ -93,6 +93,13 @@ pub struct Search {
     pub pool: usize,
     /// Whether verbatim episode chunks compete alongside distilled memories.
     pub episodes: bool,
+    /// Measurement-only fusion override (issue #80): `Some(α)` replaces the
+    /// engine's RRF order with a fixed convex blend — `α` on the min–maxed
+    /// fulltext score, `1 − α` on cosine similarity — affine-mapped back
+    /// onto the pool's own RRF range so everything downstream (the hop's
+    /// additive vote included) stays in one currency. `None`, the default
+    /// everywhere in production, is the engine's `search::rrf` untouched.
+    pub fusion: Option<f64>,
 }
 
 impl Search {
@@ -108,6 +115,7 @@ impl Search {
             liveness: Liveness::Live,
             pool: DEFAULT_POOL,
             episodes: true,
+            fusion: None,
         }
     }
 }
@@ -161,6 +169,10 @@ pub struct Candidate {
     /// when no vector arm ran, or when only a text arm returned the row:
     /// the absence of a measurement is not evidence of irrelevance.
     pub similarity: Option<f64>,
+    /// The fulltext arms' summed `search::score` for this row, when one
+    /// matched it. Store-internal measurement plumbing for the offline
+    /// fusion sweep (issue #80); nothing downstream ranks on it today.
+    pub text_score: Option<f64>,
     /// The row itself.
     pub hit: Hit,
 }
@@ -269,6 +281,12 @@ pub async fn search_hybrid(db: &Db, search: &Search) -> Result<Vec<Candidate>, S
         })
         .collect();
 
+    let text_scores: HashMap<(String, String), f64> = row
+        .texts
+        .into_iter()
+        .map(|text| ((text.table, text.id), text.s))
+        .collect();
+
     let mut candidates = Vec::with_capacity(row.scored.len());
     for scored in row.scored {
         // The fused ids and the rows come from the same request, so every
@@ -276,6 +294,9 @@ pub async fn search_hybrid(db: &Db, search: &Search) -> Result<Vec<Candidate>, S
         // structs have drifted apart.
         let missing = StoreError::UnexpectedResponse("the search scored a row it did not return");
         let similarity = similarities
+            .get(&(scored.table.clone(), scored.id.clone()))
+            .copied();
+        let text_score = text_scores
             .get(&(scored.table.clone(), scored.id.clone()))
             .copied();
         let hit = match scored.table.as_str() {
@@ -290,10 +311,77 @@ pub async fn search_hybrid(db: &Db, search: &Search) -> Result<Vec<Candidate>, S
         candidates.push(Candidate {
             rrf: scored.rrf,
             similarity,
+            text_score,
             hit,
         });
     }
+    if let Some(alpha) = search.fusion {
+        blend_fusion(&mut candidates, alpha);
+    }
     Ok(candidates)
+}
+
+/// Replace the RRF order with a fixed convex blend of the raw arm signals
+/// (issue #80, measurement only — see [`Search::fusion`]).
+///
+/// The fulltext sum is min–maxed per table, because each table is its own
+/// arm and its own score distribution; cosine similarity is already absolute
+/// and is only clamped at zero. An arm that did not return a row contributes
+/// zero for it. The blended order is affine-mapped onto the pool's own RRF
+/// range: `core::scoring`'s min–max normalisation is invariant under that
+/// map, so the rescore sees identical `rrf_normalized` either way, and the
+/// hop's additive `0.5/(60+rank)` vote keeps the scale it was designed
+/// against instead of vanishing under `[0, 1]` blend units.
+fn blend_fusion(candidates: &mut [Candidate], alpha: f64) {
+    fn min_max(values: impl Iterator<Item = f64>) -> Option<(f64, f64)> {
+        values.fold(None, |range, value| {
+            let (lo, hi) = range.unwrap_or((value, value));
+            Some((lo.min(value), hi.max(value)))
+        })
+    }
+
+    let is_memory = |candidate: &Candidate| matches!(candidate.hit, Hit::Memory(_));
+    let text_range = |memory: bool, candidates: &[Candidate]| {
+        min_max(
+            candidates
+                .iter()
+                .filter(|candidate| is_memory(candidate) == memory)
+                .filter_map(|candidate| candidate.text_score),
+        )
+    };
+    let ranges = (
+        text_range(true, candidates),
+        text_range(false, candidates),
+    );
+
+    let rrf_range = min_max(candidates.iter().map(|candidate| candidate.rrf));
+    let blended: Vec<f64> = candidates
+        .iter()
+        .map(|candidate| {
+            let range = if is_memory(candidate) { ranges.0 } else { ranges.1 };
+            // Variant check (pre-registered): shared-max instead of min–max,
+            // so the arm's weakest row is not zeroed into looking absent.
+            let text = match (candidate.text_score, range) {
+                (Some(score), Some((_, hi))) if hi > 0.0 => score / hi,
+                (Some(_), Some(_)) => 1.0,
+                _ => 0.0,
+            };
+            let cosine = candidate.similarity.unwrap_or(0.0).max(0.0);
+            alpha * text + (1.0 - alpha) * cosine
+        })
+        .collect();
+
+    let blend_range = min_max(blended.iter().copied());
+    if let (Some((b_lo, b_hi)), Some((r_lo, r_hi))) = (blend_range, rrf_range) {
+        for (candidate, blend) in candidates.iter_mut().zip(&blended) {
+            candidate.rrf = if b_hi > b_lo {
+                r_lo + (blend - b_lo) / (b_hi - b_lo) * (r_hi - r_lo)
+            } else {
+                candidate.rrf
+            };
+        }
+    }
+    candidates.sort_by(|a, b| b.rrf.total_cmp(&a.rrf));
 }
 
 /// Tier-1 retrieval: indexed filters only, strongest first.

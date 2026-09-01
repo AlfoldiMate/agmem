@@ -260,6 +260,7 @@ async fn search_section(
     search.text = Some(text.to_owned());
     search.pool = usize::from(service.config().pool);
     search.episodes = false;
+    search.fusion = service.config().fusion;
     let candidates = repo::search_hybrid(service.db(), &search)
         .await
         .map_err(|error| store_error(&error))?;

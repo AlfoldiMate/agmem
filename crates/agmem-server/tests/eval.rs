@@ -51,7 +51,7 @@ fn recorded_block(doc: &str) -> &str {
 #[tokio::test]
 async fn quality_matches_the_recorded_baseline() {
     let scenarios = scenario::all();
-    let scored = metrics::scorecard(&scenarios, Arc::new(RecordedEmbedder)).await;
+    let scored = metrics::scorecard(&scenarios, Arc::new(RecordedEmbedder), None).await;
     let doc = std::fs::read_to_string(quality_doc_path()).expect("read docs/eval/quality.md");
     let recorded: metrics::Scorecard =
         serde_json::from_str(recorded_block(&doc)).expect("the recorded scorecard parses");
@@ -75,10 +75,10 @@ async fn retrieval_without_vectors_scores_strictly_worse() {
     let mut with_vectors = 0;
     let mut without = 0;
     for scenario in &scenarios {
-        with_vectors += metrics::retrieval(scenario, Arc::new(RecordedEmbedder))
+        with_vectors += metrics::retrieval(scenario, Arc::new(RecordedEmbedder), None)
             .await
             .found;
-        without += metrics::retrieval(scenario, Arc::new(NoopEmbedder))
+        without += metrics::retrieval(scenario, Arc::new(NoopEmbedder), None)
             .await
             .found;
     }
@@ -138,13 +138,64 @@ async fn calibrate_abstention() {
     }
 }
 
+/// The offline fusion sweep (issue #80): the full scorecard at each fixed
+/// convex blend — `α` on the min–maxed fulltext score, `1 − α` on cosine
+/// similarity — against the RRF baseline the committed scorecard records.
+///
+/// Decision rule, fixed before any number is read: hard gates are
+/// `found` 10/10, `staleness.stale_hits` 0 everywhere,
+/// `abstention.false_abstentions` 0, timeline ≥ 3/4 and `context`
+/// passed = total; the objective is ΣMRR across the four scenarios (RRF
+/// baseline 2.1527), tie-broken by lower Σ`returned`, then by RRF. A blend
+/// wins only at ΣMRR ≥ +0.10 that also holds at both neighbouring α —
+/// a single-α spike over nine probes is overfit. Anything else closes #80
+/// as "RRF kept, measured".
+#[tokio::test]
+#[ignore = "measurement: runs the scorecard at eleven fusion weights"]
+async fn sweep_fusion_weights() {
+    let scenarios = scenario::all();
+    for step in 0..=10 {
+        let alpha = f64::from(step) / 10.0;
+        let start = std::time::Instant::now();
+        let scored =
+            metrics::scorecard(&scenarios, Arc::new(RecordedEmbedder), Some(alpha)).await;
+        let elapsed = start.elapsed().as_secs_f64();
+        let mut mrr_sum = 0.0;
+        let mut returned_sum = 0;
+        for (name, score) in &scored.scenarios {
+            mrr_sum += score.retrieval.mrr;
+            returned_sum += score.retrieval.returned;
+            eprintln!(
+                "alpha={alpha:.1} [{name}] found {}/{} returned {} mrr {:.4} \
+                 timeline {}/{} stale {}/{} abstain {}/{} false {} context {}/{} gate {}/{}",
+                score.retrieval.found,
+                score.retrieval.expected,
+                score.retrieval.returned,
+                score.retrieval.mrr,
+                score.timeline.passed,
+                score.timeline.total,
+                score.staleness.stale_hits,
+                score.staleness.pages,
+                score.abstention.fired,
+                score.abstention.expected,
+                score.abstention.false_abstentions,
+                score.context.passed,
+                score.context.total,
+                score.gate.correct,
+                score.gate.total,
+            );
+        }
+        eprintln!("alpha={alpha:.1} TOTAL mrr_sum {mrr_sum:.4} returned_sum {returned_sum} ({elapsed:.0}s)");
+    }
+}
+
 /// Rewrites the scorecard block in `docs/eval/quality.md` from a fresh run.
 /// Deliberate: run it, read the diff, commit both or neither.
 #[tokio::test]
 #[ignore = "rewrites the committed baseline in docs/eval/quality.md"]
 async fn record_baseline() {
     let scenarios = scenario::all();
-    let scored = metrics::scorecard(&scenarios, Arc::new(RecordedEmbedder)).await;
+    let scored = metrics::scorecard(&scenarios, Arc::new(RecordedEmbedder), None).await;
     let path = quality_doc_path();
     let doc = std::fs::read_to_string(&path).expect("read docs/eval/quality.md");
     let (head, tail) = doc

@@ -94,18 +94,18 @@ pub struct Abstention {
 }
 
 /// Scores every scenario with the given embedder.
-pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>) -> Scorecard {
+pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Scorecard {
     let mut scores = BTreeMap::new();
     for scenario in scenarios {
         scores.insert(
             scenario.name.clone(),
             ScenarioScore {
-                retrieval: retrieval(scenario, embedder.clone()).await,
-                timeline: timeline(scenario, embedder.clone()).await,
-                gate: gate(scenario, embedder.clone()).await,
-                context: context(scenario, embedder.clone()).await,
-                staleness: staleness(scenario, embedder.clone()).await,
-                abstention: abstention(scenario, embedder.clone()).await,
+                retrieval: retrieval(scenario, embedder.clone(), fusion).await,
+                timeline: timeline(scenario, embedder.clone(), fusion).await,
+                gate: gate(scenario, embedder.clone(), fusion).await,
+                context: context(scenario, embedder.clone(), fusion).await,
+                staleness: staleness(scenario, embedder.clone(), fusion).await,
+                abstention: abstention(scenario, embedder.clone(), fusion).await,
             },
         );
     }
@@ -121,13 +121,13 @@ fn hit_ids(found: &Value) -> Vec<&str> {
 }
 
 /// recall@k and MRR over the probes, each on a fresh store.
-pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retrieval {
+pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Retrieval {
     let mut found = 0;
     let mut expected = 0;
     let mut returned_total = 0;
     let mut reciprocal_sum = 0.0;
     for probe in &scenario.probes {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let answer = seeded
             .agmem
             .recall(json!({ "query": probe.query, "k": probe.k }))
@@ -163,10 +163,10 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
 /// Abstention over the labelled unanswerables, and its false-positive check
 /// over every probe: an empty page where the fixture labels hits relevant is
 /// a wrong abstention wherever the mechanism that emptied it lives.
-pub async fn abstention(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Abstention {
+pub async fn abstention(scenario: &Scenario, embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Abstention {
     let mut fired = 0;
     for case in &scenario.abstain {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let answer = seeded
             .agmem
             .recall(json!({ "query": case.query, "k": case.k }))
@@ -176,7 +176,7 @@ pub async fn abstention(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Abs
     }
     let mut false_abstentions = 0;
     for probe in &scenario.probes {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let answer = seeded
             .agmem
             .recall(json!({ "query": probe.query, "k": probe.k }))
@@ -199,10 +199,10 @@ fn round4(value: f64) -> f64 {
 /// Supersession correctness: what answers live, what answers as-of, and how
 /// a closed claim is annotated. One pass/fail per timeline entry — every
 /// condition it states must hold.
-pub async fn timeline(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Ratio {
+pub async fn timeline(scenario: &Scenario, embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Ratio {
     let mut passed = 0;
     for check in &scenario.timeline {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let mut arguments = json!({ "query": check.query, "k": 10 });
         if let Some(as_of) = &check.as_of {
             arguments["as_of"] = json!(as_of);
@@ -246,7 +246,7 @@ pub async fn timeline(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Ratio
 /// counts hits that are claims some later seed superseded. Ground truth is
 /// the fixture's `supersedes` graph, not the hit's own annotation: a closed
 /// claim that leaks unannotated still counts.
-pub async fn staleness(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Staleness {
+pub async fn staleness(scenario: &Scenario, embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Staleness {
     let mut pages: Vec<(&str, u16)> = scenario
         .probes
         .iter()
@@ -261,7 +261,7 @@ pub async fn staleness(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Stal
     );
     let mut stale_hits = 0;
     for (query, k) in &pages {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let answer = seeded.agmem.recall(json!({ "query": query, "k": k })).await;
         let superseded: HashSet<&str> = scenario
             .superseded_labels()
@@ -283,7 +283,7 @@ pub async fn staleness(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Stal
 /// The duplicate gate, one fresh store per candidate so cases never see each
 /// other's writes. Gated means the answer's `duplicates` names it and
 /// nothing was created.
-pub async fn gate(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Gate {
+pub async fn gate(scenario: &Scenario, embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Gate {
     let mut score = Gate {
         correct: 0,
         total: scenario.gate.len() as u32,
@@ -292,7 +292,7 @@ pub async fn gate(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Gate {
         wrong_original: 0,
     };
     for case in &scenario.gate {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let answer = seeded
             .agmem
             .remember(json!({ "memories": [{ "content": case.candidate }] }))
@@ -329,11 +329,11 @@ const DEFAULT_BUDGET_CHARS: usize = 6_000;
 /// The context-block checklist: one pass/fail unit per structural property
 /// and per fixture expectation, so the ratio says how much of the contract
 /// held rather than which call happened to fail first.
-pub async fn context(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Ratio {
+pub async fn context(scenario: &Scenario, embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Ratio {
     let mut passed = 0;
     let mut total = 0;
     for case in &scenario.context {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_fused(scenario, embedder.clone(), fusion).await;
         let mut arguments = Map::new();
         if let Some(query) = &case.query {
             arguments.insert("query".into(), json!(query));

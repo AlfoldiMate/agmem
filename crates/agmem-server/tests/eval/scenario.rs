@@ -191,7 +191,18 @@ impl Seeded {
 /// store: `recall` reinforces what it returns, so two probes on one store
 /// would couple — the second measured against strengths the first shifted.
 pub async fn seed(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Seeded {
-    let agmem = Harness::start(embedder).await;
+    seed_fused(scenario, embedder, None).await
+}
+
+/// [`seed`], with the measurement-only fusion override (issue #80) set on
+/// the server the store comes up in. The sweep is the only caller with
+/// `Some`.
+pub async fn seed_fused(
+    scenario: &Scenario,
+    embedder: Arc<dyn Embedder>,
+    fusion: Option<f64>,
+) -> Seeded {
+    let agmem = Harness::start_fused(embedder, fusion).await;
     let mut id_of: HashMap<String, String> = HashMap::new();
     for seed in &scenario.seeds {
         let mut memory = Map::new();

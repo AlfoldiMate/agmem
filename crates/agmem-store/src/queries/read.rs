@@ -182,6 +182,7 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
     let mut builder = Builder::plain();
     let mut arms: Vec<&str> = Vec::new();
     let mut vector_arms: Vec<&str> = Vec::new();
+    let mut text_arms: Vec<&str> = Vec::new();
 
     if !terms.is_empty() {
         let (matches, scores) = fulltext("content", terms);
@@ -191,6 +192,7 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
                  ORDER BY s DESC LIMIT {pool})"
         ));
         arms.push("$ft");
+        text_arms.push("$ft");
     }
     if search.vector.is_some() {
         let inner = pool * OVER_FETCH;
@@ -218,6 +220,7 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
                  ORDER BY s DESC LIMIT {pool})"
         ));
         arms.push("$ftc");
+        text_arms.push("$ftc");
     }
     if search.episodes && search.vector.is_some() {
         let inner = pool * OVER_FETCH;
@@ -257,11 +260,30 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
             .collect();
         format!("array::flatten([{}])", lists.join(", "))
     };
+    // The fulltext arms' summed scores, projected out like `nearest`: the
+    // offline fusion sweep (issue #80) blends the raw arm signals, and the
+    // sums are already computed — throwing them away would force a second
+    // query whose scan the #40 pathology could bend.
+    let texts = if text_arms.is_empty() {
+        "[]".to_owned()
+    } else {
+        let lists: Vec<String> = text_arms
+            .iter()
+            .map(|arm| {
+                format!(
+                    "{arm}.map(|$row| {{ id: record::id($row.id),
+                         table: record::tb($row.id), s: <float> $row.s }})"
+                )
+            })
+            .collect();
+        format!("array::flatten([{}])", lists.join(", "))
+    };
     builder.finish(format!(
         "RETURN {{
              scored: $fused.map(|$hit| {{ id: record::id($hit.id),
                  table: record::tb($hit.id), rrf: <float> $hit.rrf_score }}),
              nearest: {nearest},
+             texts: {texts},
              memories: (SELECT {MEMORY_FIELDS} FROM $mids),
              chunks: (SELECT {CHUNK_FIELDS} FROM $cids)
          }}"

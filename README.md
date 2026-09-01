@@ -7,12 +7,14 @@ dates it, ranks it, and shows its work.
 Seven tools — `remember`, `recall`, `context`, `forget`, `inspect`,
 `consolidate`, `reflect` — and two rituals that ask for them.
 
-> Status: v0.1.2, backlog empty — Phases 0–4 all landed. The loop, the
-> session-start block, removal, startup pruning, the shared daemon, the
-> rituals, candidate surfacing, cited insights, `ws://` sharing and the
-> offline quality eval all work end to end from Claude Code. The entity
-> graph stayed unbuilt on purpose: `recall` takes the multi-hop itself,
-> seeded from its top hits' entities (#27).
+> Status: Phases 0–5 all landed. The loop, the session-start block, removal,
+> startup pruning, the shared daemon, the rituals, candidate surfacing,
+> cited insights, `ws://` sharing, the offline quality eval and the
+> hardening pass behind them (daemon lifecycle, write-path integrity,
+> destructive-op honesty) all work end to end from Claude Code. What comes
+> next sits in the Phase 6–8 milestones. The entity graph stayed unbuilt on
+> purpose: `recall` takes the multi-hop itself, seeded from its top hits'
+> entities (#27).
 
 ## Install
 
@@ -55,12 +57,13 @@ agmem doctor
   ok    data dir writable    ~/Library/Application Support/dev.agmem.agmem
   ok    tool descriptions    agmem's own wording
   ok    shared daemon        not running; the next session starts one
-  ok    single-writer lock   held by this process
+  ok    single-writer lock    held by this process
   ok    database open        surrealkv://…/agmem.db
-  ok    schema               v1
+  ok    schema               v5
   ok    write/read roundtrip scratch record created and removed
   ok    embedder             bge-small-en-v1.5-q (384d)
   ok    embedder vs store    same model and width
+  ok    vector coverage      every row carries a vector
 doctor: all checks passed
 ```
 
@@ -528,7 +531,7 @@ The numbers and the harness behind them are in `docs/tool-descriptions.md`.
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine; `mem://` for scratch, `ws://host` to share one store |
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`; a pair, ignored by embedded engines |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else directory name, else `default` | This instance's space |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed`, or `none` for BM25-only |
+| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed`, `static` (pure-Rust fallback), or `none` for BM25-only |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `AGMEM_TOOL_DESC_<TOOL>` | agmem's own wording | Replace one tool's description — see below |
@@ -537,6 +540,7 @@ The numbers and the harness behind them are in `docs/tool-descriptions.md`.
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process; one session at a time |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it |
 | `--doctor` | — | Self-check, then exit |
+| `--reindex` | — | Re-embed every row under the configured embedder, then exit — the one sanctioned way to change models |
 | `context` subcommand | — | Print the session-start block to stdout, then exit — the shell-hook surface (`agmem context --help`) |
 
 stdout is the MCP wire: all logging goes to stderr or `--log-file`, never
@@ -629,8 +633,8 @@ over raw JSON-RPC, all passing:
 - **Claude Desktop shows the server as failed** — almost always the `PATH`: it
   needs the absolute path to the binary, not `agmem`. Its own log names the
   spawn error.
-- **`--doctor` says `skip` on three lines** — that is a healthy report with a
-  daemon running. The lock, the database and the schema belong to the daemon,
+- **`--doctor` says `skip` on two lines** — that is a healthy report with a
+  daemon running. The lock and the database + schema belong to the daemon,
   and checking them from here would open the second copy of the store the whole
   design exists to prevent. Stop the sessions (or add `--no-daemon`) for the
   full report.

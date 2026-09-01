@@ -5,112 +5,107 @@
   "tools": [
     "recall",
     "consolidate",
-    "inspect",
     "remember",
     "forget"
   ],
-  "calls": 12,
+  "calls": 7,
   "superseded": true,
   "verified": null,
   "cited": null,
   "answered": null,
   "bridged": null,
   "misled": null,
-  "reads": 2,
-  "on_target": true,
-  "touched": 4,
+  "reads": 1,
+  "on_target": false,
+  "touched": 3,
   "purged": false,
   "closed": [
     {
-      "id": "01M1ETRZKV2E856XMT139117J8",
+      "id": "01M1EW1PPTS5GK6HJ13SPBH9NV",
       "content": "Tests in atlas are run through cargo nextest run; plain cargo test is not used."
     },
     {
-      "id": "01M1ETRZFVZY78GHXGTMXPTDJ",
-      "content": ""
-    },
-    {
-      "id": "01M1ETRZEW3K5EXYQ3BP6P19QR",
-      "content": "Project atlas is deployed by running bin/ship.sh from the repository root."
-    },
-    {
-      "id": "01M1ETRZNG6JR0C6N4BNGP49C6",
-      "content": "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone."
-    },
-    {
-      "id": "01M1ETRZJQSXE76NYXXJJKVK3B",
-      "content": "Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand."
-    },
-    {
-      "id": "01M1ETRZFVZY78GHHXGTMXPTDJ",
+      "id": "01M1EW1PJVVGANEE7M8SY5DGTW",
       "content": "The atlas test suite is run with cargo nextest run, not cargo test."
     },
     {
-      "id": "01M1ETRZHM8Z545HQ8571GBXYR",
+      "id": "01M1EW1PMG7W1X9HRW4YKRRFA1",
       "content": "To ship atlas you run the bin/ship.sh script at the top of the repo."
     },
     {
-      "id": "01M1ETVS2X5RPR0272NBBFQTCA",
-      "content": ""
+      "id": "01M1EW1PHPCYB1BMYAX6WHJAB9",
+      "content": "Project atlas is deployed by running bin/ship.sh from the repository root."
     },
     {
-      "id": "01M1ETRZPEGBH6J3QAZNM0M4F9",
+      "id": "01M1EW1PR9X6Y1TE2C0VBCXV5E",
+      "content": "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone."
+    },
+    {
+      "id": "01M1EW1Q1K6JSVTE67CY8SDFQG",
+      "content": "Breaking SDK changes for atlas wait for the next major release."
+    },
+    {
+      "id": "01M1EW1PMBJ2K8M4728AFT53M4",
+      "content": "atlas follows semver strictly, so a breaking change to atlas-core is a major bump."
+    },
+    {
+      "id": "01M1EW1PS2MSYN230TDAPWWCH3",
       "content": "The branch under review is spike/consolidate."
     },
     {
-      "id": "01M1ETRZPMVYFVDPMB7BR8XQA6",
+      "id": "01M1EW1PS7KCRQSH5Q0J8V1M8W",
       "content": "The flaky test being chased this week is pagination_ordering in atlas-api."
     }
   ],
   "landed": [
     {
-      "id": "01M1ETRZEW3K5EXYQ3BP6P19QR",
+      "id": "01M1EW1PHPCYB1BMYAX6WHJAB9",
       "content": "Project atlas is deployed by running bin/ship.sh from the repository root.",
       "reason": "superseded"
     },
     {
-      "id": "01M1ETRZFVZY78GHHXGTMXPTDJ",
+      "id": "01M1EW1PJVVGANEE7M8SY5DGTW",
       "content": "The atlas test suite is run with cargo nextest run, not cargo test.",
       "reason": "superseded"
     },
     {
-      "id": "01M1ETRZHM8Z545HQ8571GBXYR",
+      "id": "01M1EW1PMBJ2K8M4728AFT53M4",
+      "content": "atlas follows semver strictly, so a breaking change to atlas-core is a major bump.",
+      "reason": "superseded"
+    },
+    {
+      "id": "01M1EW1PMG7W1X9HRW4YKRRFA1",
       "content": "To ship atlas you run the bin/ship.sh script at the top of the repo.",
       "reason": "superseded"
     },
     {
-      "id": "01M1ETRZJQSXE76NYXXJJKVK3B",
-      "content": "Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.",
-      "reason": "superseded"
-    },
-    {
-      "id": "01M1ETRZKV2E856XMT139117J8",
-      "content": "Tests in atlas are run through cargo nextest run; plain cargo test is not used.",
-      "reason": "superseded"
-    },
-    {
-      "id": "01M1ETRZNG6JR0C6N4BNGP49C6",
+      "id": "01M1EW1PR9X6Y1TE2C0VBCXV5E",
       "content": "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.",
       "reason": "superseded"
     },
     {
-      "id": "01M1ETRZPEGBH6J3QAZNM0M4F9",
+      "id": "01M1EW1PS2MSYN230TDAPWWCH3",
       "content": "The branch under review is spike/consolidate.",
       "reason": "forgotten"
     },
     {
-      "id": "01M1ETRZPMVYFVDPMB7BR8XQA6",
+      "id": "01M1EW1PS7KCRQSH5Q0J8V1M8W",
       "content": "The flaky test being chased this week is pagination_ordering in atlas-api.",
       "reason": "forgotten"
+    },
+    {
+      "id": "01M1EW1Q1K6JSVTE67CY8SDFQG",
+      "content": "Breaking SDK changes for atlas wait for the next major release.",
+      "reason": "superseded"
     }
   ],
   "checked": null,
   "served": true,
   "rival_memory": false,
-  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.lvgbrCKFTd",
-  "answer": "Cleaned up. Summary of what changed in the `atlas` memory:\n\n**Merged duplicates** (kept one consolidated claim, old ones superseded and still readable in history):\n- Two identical claims about running tests via `cargo nextest run` (not `cargo test`) → one fact.\n- Four overlapping claims about deployment → one fact: *\"atlas is deployed by running bin/ship.sh from the repository root; staging deploys use bin/ship.sh --staging and are always run by hand, never automatic. The old make deploy target is gone.\"*\n\n**Removed stale, session-scoped notes** (forgotten, not just superseded — these were never meant to be durable):\n- \"The branch under review is spike/consolidate.\"\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\"\n\nBoth were 40+ days idle despite being tagged as short-lived working context, and no longer apply.\n\n**Left alone after review:** the consolidation scan also flagged a bunch of other pairs as \"contradictions\" or \"near-duplicates\" (container registry vs. distroless base image, Postgres schema-location vs. search-index-rebuild, connection-pool size vs. readiness probe, billing-per-seat vs. billing-support-routing, etc.). I checked each — they're genuinely distinct facts that just share vocabulary, not real duplicates. One worth flagging to you specifically: \"feature flags are an environment variable map\" vs. \"feature flags are additive only, so `cargo check --all-features` has to pass\" — these could be describing two different things (runtime flags vs. Cargo build features) rather than contradicting each other, so I didn't overwrite either. If you know these actually conflict, let me know which is correct and I'll fix it.",
-  "cost_usd": 0.5663871999999999,
-  "agent_turns": 16,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.V4bWxIYUIM",
+  "answer": "Cleanup done. Summary of what I found and changed in the atlas memory (space: `eval`, 117 live claims → 114):\n\n**Merged genuine duplicates** (same fact stated twice, different wording):\n- Two claims about `cargo nextest run` being the test runner → collapsed to one.\n- Three overlapping claims about deploying via `bin/ship.sh` → merged into one: *\"atlas is deployed by running bin/ship.sh from the repository root; the old make deploy target has been removed.\"*\n- Two claims about breaking changes needing a major version → merged into one: *\"atlas follows semver strictly, so breaking SDK changes only ship in the next major release.\"*\n\n**Removed as stale/out of date** (session-scoped scratch notes that had gone idle 40 days past their \"fast decay\" expectation, clearly no longer relevant):\n- \"The branch under review is spike/consolidate.\"\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\"\n\n**Left alone:** the memory tool's automated similarity scan flagged a lot of other pairs (e.g. \"images pushed to GHCR\" vs \"container image is distroless,\" or a big chain linking billing/support/docs/email facts), but on inspection these are distinct facts that just share vocabulary — merging them would have destroyed real information, so I didn't touch them.\n\nNothing else in the atlas store looked genuinely contradictory or duplicated. Let me know if you want me to also sweep other entities before handoff.",
+  "cost_usd": 0.3817138,
+  "agent_turns": 11,
   "session": [
     {
       "turn": 0,
@@ -123,7 +118,7 @@
         "space": "all",
         "k": 50
       },
-      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1ETS04S63SM83H961CWHM4R\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.633331Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1ETS0406R89QVHP68VWTCJH\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1EW1QA6ZT5KYTJFAZCJYJDZ\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T16:15:14.995188Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1EW1Q9RZWCMNYFJT5VY4B2G\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
     },
     {
       "turn": 0,
@@ -131,25 +126,7 @@
       "input": {
         "space": "eval"
       },
-      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-09-01T15:53:00.795193Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1ETRZKV2E856XMT139117J8\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T15:53:01.79341Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.632736Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"17999-1788277980180965000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, "
-    },
-    {
-      "turn": 0,
-      "tool": "inspect",
-      "input": {
-        "ref": "memory:01M1ETRZZ9F0JVWF00ZJXVTBK5",
-        "space": "eval"
-      },
-      "answer": "\"{\\\"found\\\":{\\\"chain\\\":[{\\\"access_count\\\":9,\\\"content\\\":\\\"Feature flags in atlas are an environment variable map and nothing more.\\\",\\\"created_at\\\":\\\"2026-09-01T15:53:01.161635Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1ETRZZ9F0JVWF00ZJXVTBK5\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-09-01T15:53:06.656496Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":4,\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.633154Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"17999-1788277980180965000\\\",\\\"tool\\\":\\\"remember\\\"}}],\\\"kind\\\":\\\"memory\\\",\\\"memory\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"Feature flags in atlas are an environment variable map "
-    },
-    {
-      "turn": 0,
-      "tool": "inspect",
-      "input": {
-        "ref": "memory:01M1ETRZHSQ98DN5W3D0H6WZX8",
-        "space": "eval"
-      },
-      "answer": "\"{\\\"found\\\":{\\\"chain\\\":[{\\\"access_count\\\":8,\\\"content\\\":\\\"Feature flags in atlas are additive only, so cargo check --all-features has to pass.\\\",\\\"created_at\\\":\\\"2026-09-01T15:53:00.729097Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"build\\\"],\\\"id\\\":\\\"01M1ETRZHSQ98DN5W3D0H6WZX8\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T15:53:01.788724Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.632642Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"17999-1788277980180965000\\\",\\\"tool\\\":\\\"remember\\\"}}],\\\"kind\\\":\\\"memory\\\",\\\"memory\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Feature flags in atlas are additi"
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-09-01T16:15:15.162959Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1EW1PPTS5GK6HJ13SPBH9NV\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T16:15:16.512601Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-01T16:15:14.994726Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"23862-1788279314500004000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run,"
     },
     {
       "turn": 0,
@@ -158,8 +135,7 @@
         "space": "eval",
         "memories": [
           {
-            "content": "The atlas test suite is run with cargo nextest run; plain cargo test is not used.",
-            "kind": "fact",
+            "content": "Tests in atlas are run through cargo nextest run; plain cargo test is not used.",
             "entities": [
               "atlas",
               "ci"
@@ -168,13 +144,13 @@
               "testing"
             ],
             "supersedes": [
-              "01M1ETRZKV2E856XMT139117J8",
-              "01M1ETRZFVZY78GHXGTMXPTDJ"
+              "01M1EW1PPTS5GK6HJ13SPBH9NV",
+              "01M1EW1PJVVGANEE7M8SY5DGTW"
             ]
           }
         ]
       },
-      "answer": "\"memories[0].supersedes[1]: invalid record id: \\\"01M1ETRZFVZY78GHXGTMXPTDJ\\\"; expected a 26-character ULID\""
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"id\\\":\\\"01M1EW1PPTS5GK6HJ13SPBH9NV\\\",\\\"of\\\":0,\\\"similarity\\\":1}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1EW1PJVVGANEE7M8SY5DGTW\\\"]}\""
     },
     {
       "turn": 0,
@@ -183,8 +159,7 @@
         "space": "eval",
         "memories": [
           {
-            "content": "atlas is deployed by running bin/ship.sh from the repository root; staging deploys use bin/ship.sh --staging and are always run by hand, never automatic. The old make deploy target is gone.",
-            "kind": "fact",
+            "content": "atlas is deployed by running bin/ship.sh from the repository root; the old make deploy target has been removed.",
             "entities": [
               "atlas",
               "deploy"
@@ -193,24 +168,14 @@
               "deploy"
             ],
             "supersedes": [
-              "01M1ETRZEW3K5EXYQ3BP6P19QR",
-              "01M1ETRZNG6JR0C6N4BNGP49C6",
-              "01M1ETRZJQSXE76NYXXJJKVK3B"
+              "01M1EW1PMG7W1X9HRW4YKRRFA1",
+              "01M1EW1PHPCYB1BMYAX6WHJAB9",
+              "01M1EW1PR9X6Y1TE2C0VBCXV5E"
             ]
           }
         ]
       },
-      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1ETVS2X5RPR0272NBBFQTCA\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1ETRZEW3K5EXYQ3BP6P19QR\\\",\\\"01M1ETRZNG6JR0C6N4BNGP49C6\\\",\\\"01M1ETRZJQSXE76NYXXJJKVK3B\\\"]}\""
-    },
-    {
-      "turn": 0,
-      "tool": "recall",
-      "input": {
-        "query": "atlas test suite cargo nextest run not cargo test",
-        "space": "eval",
-        "k": 5
-      },
-      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1ETRZMJA2SW3KGMYGBFVFP6\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.9602415056208159,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03125763125763126,\\\"rrf_normalized\\\":0.9337358427013599,\\\"similarity\\\":0.7854803289128189},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.632772Z\\\"},{\\\"content\\\":\\\"cargo-deny runs in atlas CI and blocks copyleft licences.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1ETS016E0MZT762YK9VRW35\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8727317885817124,\\\"signals\\\":{\\\"import"
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1EW444GV8ZECY825B36MCJ6\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1EW1PMG7W1X9HRW4YKRRFA1\\\",\\\"01M1EW1PHPCYB1BMYAX6WHJAB9\\\",\\\"01M1EW1PR9X6Y1TE2C0VBCXV5E\\\"]}\""
     },
     {
       "turn": 0,
@@ -219,35 +184,32 @@
         "space": "eval",
         "memories": [
           {
-            "content": "The atlas test suite is run with cargo nextest run; plain cargo test is not used.",
-            "kind": "fact",
+            "content": "atlas follows semver strictly, so breaking SDK changes only ship in the next major release.",
             "entities": [
               "atlas",
-              "ci"
-            ],
-            "tags": [
-              "testing"
+              "sdk",
+              "release"
             ],
             "supersedes": [
-              "01M1ETRZKV2E856XMT139117J8",
-              "01M1ETRZFVZY78GHHXGTMXPTDJ"
+              "01M1EW1Q1K6JSVTE67CY8SDFQG",
+              "01M1EW1PMBJ2K8M4728AFT53M4"
             ]
           }
         ]
       },
-      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1ETW42J6KMNEHAQ6YXDXG0S\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1ETRZKV2E856XMT139117J8\\\",\\\"01M1ETRZFVZY78GHHXGTMXPTDJ\\\"]}\""
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1EW455QCNGW9WTFYTDJY25W\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1EW1Q1K6JSVTE67CY8SDFQG\\\",\\\"01M1EW1PMBJ2K8M4728AFT53M4\\\"]}\""
     },
     {
       "turn": 0,
       "tool": "forget",
       "input": {
         "ids": [
-          "01M1ETRZPEGBH6J3QAZNM0M4F9",
-          "01M1ETRZPMVYFVDPMB7BR8XQA6"
+          "01M1EW1PS2MSYN230TDAPWWCH3",
+          "01M1EW1PS7KCRQSH5Q0J8V1M8W"
         ],
         "space": "eval"
       },
-      "answer": "\"{\\\"chunks_purged\\\":0,\\\"dry_run\\\":false,\\\"invalidated\\\":[\\\"01M1ETRZPEGBH6J3QAZNM0M4F9\\\",\\\"01M1ETRZPMVYFVDPMB7BR8XQA6\\\"],\\\"matched\\\":[{\\\"content\\\":\\\"The branch under review is spike/consolidate.\\\",\\\"id\\\":\\\"01M1ETRZPEGBH6J3QAZNM0M4F9\\\",\\\"kind\\\":\\\"memory\\\",\\\"space\\\":\\\"eval\\\"},{\\\"content\\\":\\\"The flaky test being chased this week is pagination_ordering in atlas-api.\\\",\\\"id\\\":\\\"01M1ETRZPMVYFVDPMB7BR8XQA6\\\",\\\"kind\\\":\\\"memory\\\",\\\"space\\\":\\\"eval\\\"}],\\\"purge\\\":false,\\\"purged\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+      "answer": "\"{\\\"chunks_purged\\\":0,\\\"dry_run\\\":false,\\\"invalidated\\\":[\\\"01M1EW1PS2MSYN230TDAPWWCH3\\\",\\\"01M1EW1PS7KCRQSH5Q0J8V1M8W\\\"],\\\"matched\\\":[{\\\"content\\\":\\\"The branch under review is spike/consolidate.\\\",\\\"id\\\":\\\"01M1EW1PS2MSYN230TDAPWWCH3\\\",\\\"kind\\\":\\\"memory\\\",\\\"space\\\":\\\"eval\\\"},{\\\"content\\\":\\\"The flaky test being chased this week is pagination_ordering in atlas-api.\\\",\\\"id\\\":\\\"01M1EW1PS7KCRQSH5Q0J8V1M8W\\\",\\\"kind\\\":\\\"memory\\\",\\\"space\\\":\\\"eval\\\"}],\\\"purge\\\":false,\\\"purged\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
     },
     {
       "turn": 0,
@@ -255,40 +217,7 @@
       "input": {
         "space": "eval"
       },
-      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Images for atlas are pushed to the GitHub Container Registry.\\\",\\\"created_at\\\":\\\"2026-09-01T15:53:00.971635Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"infra\\\"],\\\"id\\\":\\\"01M1ETRZSBPG8TPK0TGQD268B2\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T15:53:01.803563Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.632955Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"17999-1788277980180965000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas container image is built from a distroless base.\\\",\\\"created_at\\\":\\"
-    },
-    {
-      "turn": 0,
-      "tool": "remember",
-      "input": {
-        "space": "eval",
-        "memories": [
-          {
-            "content": "atlas is deployed by running bin/ship.sh from the repository root; staging deploys use bin/ship.sh --staging and are always run by hand, never automatic. The old make deploy target is gone.",
-            "kind": "fact",
-            "entities": [
-              "atlas",
-              "deploy"
-            ],
-            "tags": [
-              "deploy"
-            ],
-            "supersedes": [
-              "01M1ETRZHM8Z545HQ8571GBXYR",
-              "01M1ETVS2X5RPR0272NBBFQTCA"
-            ]
-          }
-        ]
-      },
-      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[],\\\"duplicates\\\":[{\\\"content\\\":\\\"atlas is deployed by running bin/ship.sh from the repository root; staging deploys use bin/ship.sh --staging and are always run by hand, never automatic. The old make deploy target is gone.\\\",\\\"id\\\":\\\"01M1ETVS2X5RPR0272NBBFQTCA\\\",\\\"of\\\":0,\\\"similarity\\\":1}],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1ETRZHM8Z545HQ8571GBXYR\\\"]}\""
-    },
-    {
-      "turn": 0,
-      "tool": "consolidate",
-      "input": {
-        "space": "eval"
-      },
-      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Images for atlas are pushed to the GitHub Container Registry.\\\",\\\"created_at\\\":\\\"2026-09-01T15:53:00.971635Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"infra\\\"],\\\"id\\\":\\\"01M1ETRZSBPG8TPK0TGQD268B2\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T15:53:01.803563Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:53:00.632955Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"17999-1788277980180965000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas container image is built from a distroless base.\\\",\\\"created_at\\\":\\"
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Images for atlas are pushed to the GitHub Container Registry.\\\",\\\"created_at\\\":\\\"2026-09-01T16:15:15.367521Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"infra\\\"],\\\"id\\\":\\\"01M1EW1PX7R9MFF11J7XBGV8VP\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T16:15:16.522304Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T16:15:14.994898Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"23862-1788279314500004000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas container image is built from a distroless base.\\\",\\\"created_at\\\":\\"
     }
   ]
 }

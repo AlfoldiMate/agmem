@@ -55,6 +55,10 @@ pub struct NewMemory {
     /// belongs to in the first place ([`super::locate`]), and a purge is
     /// allowed to leave a citation pointing at text that is gone.
     pub derived_from: Vec<Derivation>,
+    /// What the dup-gate measured this claim adding over its nearest live
+    /// neighbour (issue #83); `None` when the gate never ran — a correction,
+    /// or a space holding no vectors.
+    pub novelty: Option<f64>,
 }
 
 impl NewMemory {
@@ -71,6 +75,7 @@ impl NewMemory {
             supersedes: Vec::new(),
             source: None,
             derived_from: Vec::new(),
+            novelty: None,
         }
     }
 }
@@ -341,6 +346,7 @@ async fn insert_batch_once(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreE
                     .map(types::derivation_ref)
                     .collect(),
                 writer: WriterRow::new(&writer),
+                novelty: memory.novelty,
             },
         ));
         if !shapes[index].source_is_batch_episode {

@@ -274,6 +274,13 @@ pub async fn run(
     let mut related: Vec<Related> = Vec::new();
     let mut blocked = vec![false; new_memories.len()];
     for (index, neighbours) in gated.into_iter().zip(neighbours) {
+        // The gate's measurement rides along on what survives it (issue #83):
+        // neighbours come back closest-first, so the first one is the row the
+        // gate itself ruled on. No neighbours means a space with no vectors —
+        // nothing was measured, so nothing is recorded.
+        new_memories[index].novelty = neighbours
+            .first()
+            .map(|neighbour| dedup::novelty(neighbour.similarity));
         for neighbour in neighbours {
             if dedup::is_near_duplicate(neighbour.similarity) {
                 blocked[index] = true;

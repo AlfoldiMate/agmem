@@ -33,6 +33,26 @@ pub const WEIGHT_TEMPORAL: f64 = 0.15;
 /// February, which is usually exactly the claim the question is about.
 pub const TEMPORAL_TAU_DAYS: f64 = 30.0;
 
+/// Weight of the novelty prior (issue #83) — **measured dead for ranking;
+/// held at zero on purpose** (`docs/eval/novelty-prior.md`). At 0.05 the
+/// recorded eval moved on nothing recall measures and *regressed* the
+/// briefing: write-time novelty is highest for the *first* claim on a topic
+/// — measured when the store had not heard of it yet — so inside a same-tag
+/// flood the term is anti-recency, and it dragged the earliest playbook
+/// lessons back past the #82 cap's most-recent-first tie-break
+/// (playbook-flood 11/11 → 9/11). The signal keeps being persisted — it
+/// records the store as it stood at write time, which no later measurement
+/// can recover — and the term stays wired so a future non-zero weight is one
+/// constant away, but it earns that weight in the eval first.
+///
+/// Shape, for that future reader: like [`WEIGHT_TEMPORAL`], a bonus term
+/// outside the unit sum, so the three main weights stay pinned by the
+/// baseline. Unlike it, *pool-centred* — `WEIGHT_NOVELTY · (novelty − pool
+/// mean)` — because absence here is per-row, not per-call: a pre-v7 row or a
+/// correction carries no measurement, and `unwrap_or(0.0)` would pin it to
+/// the floor forever while centring makes it exactly neutral.
+pub const WEIGHT_NOVELTY: f64 = 0.0;
+
 /// Floor on Ebbinghaus stability, so a zero or corrupt `strength` decays fast
 /// instead of producing NaN.
 pub const MIN_STABILITY: f64 = 0.01;
@@ -254,6 +274,12 @@ pub struct Signals {
     /// untouched.
     #[serde(default)]
     pub temporal: Option<f64>,
+    /// What the claim added over the store when it was written (issue #83),
+    /// in `[0, 1]`. `None` when nothing measured it — a pre-v7 row, a
+    /// correction, a chunk, or a BM25-only deployment — which ranks as
+    /// exactly neutral, never as a penalty.
+    #[serde(default)]
+    pub novelty: Option<f64>,
     /// Retention at query time; 1.0 for anything that does not decay.
     pub retention: f64,
     /// Standing importance of the decay class.
@@ -267,6 +293,7 @@ impl Signals {
             rrf,
             similarity: None,
             temporal: None,
+            novelty: memory.novelty,
             retention: retention(
                 memory.decay_class,
                 memory.strength,
@@ -287,6 +314,7 @@ impl Signals {
             rrf,
             similarity: None,
             temporal: None,
+            novelty: None,
             retention: 1.0,
             importance: DecayClass::Normal.importance(),
         }
@@ -324,7 +352,9 @@ pub struct Ranked {
 /// `score = 0.6·norm(rrf) + 0.25·retention + 0.15·importance` (design §5.3),
 /// where `norm` is min–max across the pool — plus `0.15·temporal` when the
 /// call carried a window (issue #78), a bonus that is exactly zero on the
-/// everyday path.
+/// everyday path, and `WEIGHT_NOVELTY·(novelty − pool mean)` for rows that
+/// carry a write-time novelty measurement (issue #83) — a term wired but held
+/// at weight zero, having measured anti-recency on the recorded eval.
 ///
 /// RRF barely spreads: `1/(60 + rank)` differs by 3% between the first hit and
 /// the fourth, so dividing by the best candidate — the obvious normalisation,
@@ -344,13 +374,26 @@ pub struct Ranked {
 /// The sort is stable: equal scores keep the order the store returned them in.
 pub fn rank<T>(candidates: impl IntoIterator<Item = (T, Signals)>) -> Vec<(T, Ranked)> {
     let candidates: Vec<(T, Signals)> = candidates.into_iter().collect();
-    let (worst, best) = candidates
-        .iter()
-        .map(|(_, signals)| signals.rrf)
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), rrf| {
-            (lo.min(rrf), hi.max(rrf))
-        });
+    let (worst, best, novelty_sum, novelty_count) = candidates.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY, 0.0_f64, 0usize),
+        |(lo, hi, sum, count), (_, signals)| {
+            (
+                lo.min(signals.rrf),
+                hi.max(signals.rrf),
+                sum + signals.novelty.unwrap_or(0.0),
+                count + usize::from(signals.novelty.is_some()),
+            )
+        },
+    );
     let spread = best - worst;
+    // The novelty origin is this pool's own mean, so an unmeasured row and an
+    // exactly average one both add nothing — the term reorders within a page,
+    // it never shifts one against the paths that carry no measurements.
+    let novelty_mean = if novelty_count > 0 {
+        novelty_sum / novelty_count as f64
+    } else {
+        0.0
+    };
 
     let mut ranked: Vec<(T, Ranked)> = candidates
         .into_iter()
@@ -365,7 +408,11 @@ pub fn rank<T>(candidates: impl IntoIterator<Item = (T, Signals)>) -> Vec<(T, Ra
             let score = WEIGHT_RRF * rrf_normalized
                 + WEIGHT_RETENTION * signals.retention
                 + WEIGHT_IMPORTANCE * signals.importance
-                + WEIGHT_TEMPORAL * signals.temporal.unwrap_or(0.0);
+                + WEIGHT_TEMPORAL * signals.temporal.unwrap_or(0.0)
+                + WEIGHT_NOVELTY
+                    * signals
+                        .novelty
+                        .map_or(0.0, |novelty| novelty - novelty_mean);
             (
                 item,
                 Ranked {
@@ -413,6 +460,7 @@ mod tests {
             valid_from: days_ago(100),
             invalid_at: None,
             invalid_reason: None,
+            novelty: None,
             supersedes: Vec::new(),
             superseded_by: None,
             source: crate::model::Source::Agent,
@@ -681,6 +729,60 @@ mod tests {
         let ranked = rank([("only", Signals::for_episode_chunk(0.0))]);
         assert_eq!(ranked[0].1.rrf_normalized, 0.0);
         assert!((ranked[0].1.score - (0.25 + 0.15 * 0.5)).abs() < 1e-9);
+    }
+
+    /// Issue #83: a lone measurement is its own pool mean, so it adds exactly
+    /// nothing — and an unmeasured row beside it is untouched too. The
+    /// unweighted formulas asserted throughout this module double as the
+    /// proof that an all-`None` pool scores as if the term did not exist.
+    #[test]
+    fn a_single_novelty_measurement_is_its_own_neutral() {
+        let mut measured = memory(DecayClass::Normal, 1.0, now());
+        measured.novelty = Some(0.9);
+        let ranked = rank([
+            ("measured", Signals::for_memory(0.03, &measured, now())),
+            (
+                "unmeasured",
+                Signals::for_memory(0.03, &memory(DecayClass::Normal, 1.0, now()), now()),
+            ),
+        ]);
+        for (name, ranked) in &ranked {
+            assert!(
+                (ranked.score - (0.6 + 0.25 + 0.15 * 0.5)).abs() < 1e-9,
+                "{name} scores as if the term did not exist: {ranked:?}"
+            );
+        }
+    }
+
+    /// The term is wired but the weight is zero (see [`WEIGHT_NOVELTY`]):
+    /// even the widest measured spread must move nothing, so a re-tread and a
+    /// maximally novel claim tie and keep the store's order. A future
+    /// non-zero weight flips exactly this test — the gap it must then assert
+    /// is `WEIGHT_NOVELTY · (their pool-centred difference)`.
+    #[test]
+    fn the_novelty_term_carries_no_weight_until_it_earns_one() {
+        let mut novel = memory(DecayClass::Normal, 1.0, now());
+        novel.novelty = Some(1.0);
+        let mut retread = memory(DecayClass::Normal, 1.0, now());
+        retread.novelty = Some(0.0);
+        let ranked = rank([
+            ("retread", Signals::for_memory(0.03, &retread, now())),
+            ("novel", Signals::for_memory(0.03, &novel, now())),
+        ]);
+
+        assert_eq!(
+            ranked[0].1.score, ranked[1].1.score,
+            "at weight zero the measurement reorders nothing: {ranked:?}"
+        );
+        assert_eq!(
+            ranked[0].0, "retread",
+            "so ties keep the store's order, as everywhere else"
+        );
+        assert_eq!(
+            (ranked[0].1.signals.novelty, ranked[1].1.signals.novelty),
+            (Some(0.0), Some(1.0)),
+            "while the signal itself still reaches the caller"
+        );
     }
 
     /// What `search::rrf` hands back for a hit at `position` in one list.

@@ -515,6 +515,12 @@ pub struct MemoryRecord {
     pub source: Source,
     /// Who wrote the row; `None` on rows from before the store recorded it.
     pub writer: Option<Writer>,
+    /// How much this claim added over its nearest live neighbour at write
+    /// time (issue #83): `1 − similarity`, in `[0, 1]`. `None` when nothing
+    /// measured it — a pre-v7 row, a correction (which skips the gate), or a
+    /// write into a space holding no vectors. Never recomputed: it records
+    /// the store as it stood when the claim arrived.
+    pub novelty: Option<f64>,
     /// The memories and episodes this claim was reflected out of. Empty for
     /// everything a `reflect` call did not write.
     pub derived_from: Vec<Derivation>,
@@ -738,6 +744,7 @@ mod tests {
                 session: "1234-5678".to_owned(),
                 tool: "remember".to_owned(),
             }),
+            novelty: Some(0.42),
             derived_from: vec![Derivation::Memory(
                 MemoryId::new("01M145SMNET1XRYA713EWAQTD4").unwrap(),
             )],

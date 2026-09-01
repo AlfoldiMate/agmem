@@ -280,6 +280,51 @@ async fn a_row_written_before_v6_reads_with_no_writer_and_still_closes() {
     );
 }
 
+/// A row written before v7 carries no `novelty` column, and never gains one —
+/// the measurement records the store as it stood at write time, which is gone
+/// (issue #83). It must read as `None`, and because a SurrealDB UPDATE
+/// re-coerces every field (the v3 lesson), reinforcement must still reach it.
+#[tokio::test]
+async fn a_row_written_before_v7_reads_with_no_novelty_and_still_reinforces() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    conn.query(include_str!("../src/migrations/v1_schema.surql"))
+        .await
+        .expect("v1")
+        .check()
+        .expect("v1 statements");
+    conn.query(
+        "CREATE memory:01M145SMNET1XRYA713EWAQTD7 SET space = 'test', kind = 'fact',
+             content_hash = 'v1-n', content = 'recorded before novelty existed',
+             source = { kind: 'agent' }",
+    )
+    .await
+    .expect("seed")
+    .check()
+    .expect("seed statement");
+
+    assert_eq!(
+        migrate::ensure(&conn).await.expect("upgrade"),
+        migrate::SCHEMA_VERSION
+    );
+
+    let space: SpaceName = "test".parse().expect("valid slug");
+    let rows = repo::direct_lookup(&conn, &Lookup::new(vec![space.clone()]))
+        .await
+        .expect("lookup");
+    assert_eq!(rows.len(), 1, "the upgrade keeps the row");
+    assert!(
+        rows[0].novelty.is_none(),
+        "a pre-v7 row records no novelty, and reading it must not fail"
+    );
+
+    // Reinforcement is the UPDATE that re-coerces the row; it has to land.
+    let id = "01M145SMNET1XRYA713EWAQTD7".parse().expect("a ULID");
+    let touched = repo::reinforce(&conn, std::slice::from_ref(&id))
+        .await
+        .expect("reinforce a noveltyless row");
+    assert_eq!(touched, 1, "the update reached the pre-v7 row");
+}
+
 /// Chunks written before v4 carry no `occurred_at` — the column arrives with
 /// that migration — and the as-of clause reads the date off the chunk, so the
 /// upgrade has to copy each episode's date down. A chunk left at NONE would

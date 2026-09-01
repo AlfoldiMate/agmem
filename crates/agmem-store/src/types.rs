@@ -96,6 +96,7 @@ pub(crate) struct MemoryRow {
     pub(crate) supersedes: Vec<RecordId>,
     pub(crate) derived_from: Vec<RecordId>,
     pub(crate) writer: WriterRow,
+    pub(crate) novelty: Option<f64>,
 }
 
 /// The `writer` object: who performed the write (issue #75).
@@ -230,6 +231,7 @@ pub(crate) struct MemoryReadRow {
     pub(crate) source_kind: String,
     pub(crate) source_ref: Option<String>,
     pub(crate) writer: Option<WriterRow>,
+    pub(crate) novelty: Option<f64>,
     pub(crate) derived_from: Vec<DerivationRow>,
     pub(crate) created_at: Datetime,
 }
@@ -299,6 +301,10 @@ impl MemoryReadRow {
             superseded_by: self.superseded_by.map(MemoryId::new).transpose()?,
             source: to_source(&self.source_kind, self.source_ref)?,
             writer: self.writer.map(WriterRow::into_writer),
+            // The write path clamps; this guards a hand-edited row, whose
+            // out-of-range value would otherwise skew every pool mean it
+            // enters.
+            novelty: self.novelty.map(|novelty| novelty.clamp(0.0, 1.0)),
             derived_from: self
                 .derived_from
                 .into_iter()

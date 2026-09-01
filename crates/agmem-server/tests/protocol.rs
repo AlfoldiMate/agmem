@@ -654,6 +654,91 @@ async fn a_restatement_comes_back_as_the_id_that_already_holds_it() {
     agmem.shutdown().await;
 }
 
+/// Issue #83: the dup-gate's measurement is kept on every row that survives
+/// it — high for a claim about something the store had never heard of, low
+/// for a re-tread of what it held — and absent where nothing measured: the
+/// very first write into an empty space, and `signals` of hits that carry no
+/// measurement.
+#[tokio::test]
+async fn a_write_keeps_the_novelty_the_gate_measured() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [{ "content": "The user prefers Rust" }] }))
+        .await;
+    agmem
+        .remember(json!({
+            "memories": [
+                // Shares the rust axis with the first claim: cosine 0.707,
+                // under the 0.95 gate, so it lands — a partial re-tread.
+                { "content": "Rust and Python both appeal to the user" },
+                // Orthogonal to everything stored: maximally novel.
+                { "content": "The kitchen tap drips at night" }
+            ]
+        }))
+        .await;
+
+    let by_content = |memories: &[agmem_core::MemoryRecord], prefix: &str| {
+        memories
+            .iter()
+            .find(|memory| memory.content.starts_with(prefix))
+            .expect("the row")
+            .novelty
+    };
+    let memories = agmem.memories().await;
+    assert_eq!(
+        by_content(&memories, "The user prefers"),
+        None,
+        "an empty space measured nothing, and nothing is recorded"
+    );
+    let retread = by_content(&memories, "Rust and Python").expect("measured");
+    assert!(
+        (retread - (1.0 - 0.5_f64.sqrt())).abs() < 1e-6,
+        "novelty is one minus the nearest neighbour's similarity: {retread}"
+    );
+    assert_eq!(
+        by_content(&memories, "The kitchen tap"),
+        Some(1.0),
+        "a claim orthogonal to the whole store is maximally novel"
+    );
+
+    // And recall shows the measurement exactly where one exists.
+    let found = agmem
+        .recall(json!({ "query": "what does the kitchen tap do at night" }))
+        .await;
+    let hit = hits(&found)
+        .iter()
+        .find(|hit| {
+            hit["content"]
+                .as_str()
+                .is_some_and(|content| content.starts_with("The kitchen"))
+        })
+        .cloned()
+        .expect("the novel claim is on the page");
+    assert_eq!(
+        hit["signals"]["novelty"].as_f64(),
+        Some(1.0),
+        "a measured hit reports its write-time novelty: {hit}"
+    );
+
+    let found = agmem
+        .recall(json!({ "query": "does the user prefer Rust" }))
+        .await;
+    let hit = hits(&found)
+        .iter()
+        .find(|hit| {
+            hit["content"]
+                .as_str()
+                .is_some_and(|content| content.starts_with("The user prefers"))
+        })
+        .cloned()
+        .expect("the unmeasured claim is on the page");
+    assert!(
+        hit["signals"].get("novelty").is_none(),
+        "no measurement, no field — absence is not a zero: {hit}"
+    );
+    agmem.shutdown().await;
+}
+
 #[tokio::test]
 async fn without_an_embedder_the_exact_gate_still_holds() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;

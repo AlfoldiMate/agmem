@@ -75,6 +75,14 @@
       "absent": ["home-london"]
     }
   ],
+  "temporal": [
+    {
+      "query": "where does the user live",
+      "until": "2025-06-01T00:00:00Z",
+      "include_invalidated": true,
+      "expect_top": "home-london"
+    }
+  ],
   "gate": [
     {
       "candidate": "The user is based in Lisbon now, having moved there in the spring.",

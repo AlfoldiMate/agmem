@@ -138,6 +138,60 @@ async fn calibrate_abstention() {
     }
 }
 
+/// Prints every temporal check's full page — rank, score, temporal fit,
+/// label-ish content — for tuning issue #78's checks and weight. Diagnostic
+/// only, like `calibrate_abstention`.
+#[tokio::test]
+#[ignore = "diagnostic: prints the pages behind the temporal checks"]
+async fn calibrate_temporal() {
+    use serde_json::json;
+    for scenario in scenario::all() {
+        for check in &scenario.temporal {
+            let seeded = scenario::seed(&scenario, Arc::new(RecordedEmbedder)).await;
+            let mut arguments = json!({ "query": check.query, "k": 10 });
+            for (field, value) in [
+                ("since", &check.since),
+                ("until", &check.until),
+                ("changed_since", &check.changed_since),
+            ] {
+                if let Some(stamp) = value {
+                    arguments[field] = json!(stamp);
+                }
+            }
+            if check.include_invalidated {
+                arguments["include_invalidated"] = json!(true);
+            }
+            let answer = seeded.agmem.recall(arguments).await;
+            eprintln!(
+                "[{}] {:?} since={:?} until={:?} changed={:?} expect_top={}",
+                scenario.name,
+                check.query,
+                check.since,
+                check.until,
+                check.changed_since,
+                check.expect_top
+            );
+            for hit in answer["hits"].as_array().into_iter().flatten() {
+                eprintln!(
+                    "  score {:.4} rrf_n {:.3} sim {:?} fit {:?} imp {:.2} | {}",
+                    hit["score"].as_f64().unwrap_or(f64::NAN),
+                    hit["signals"]["rrf_normalized"]
+                        .as_f64()
+                        .unwrap_or(f64::NAN),
+                    hit["signals"]["similarity"].as_f64(),
+                    hit["signals"]["temporal"].as_f64(),
+                    hit["signals"]["importance"].as_f64().unwrap_or(f64::NAN),
+                    hit["content"].as_str().unwrap_or("?"),
+                );
+            }
+            if !answer["cut"].is_null() {
+                eprintln!("  cut: {}", answer["cut"]);
+            }
+            seeded.shutdown().await;
+        }
+    }
+}
+
 /// Rewrites the scorecard block in `docs/eval/quality.md` from a fresh run.
 /// Deliberate: run it, read the diff, commit both or neither.
 #[tokio::test]

@@ -67,6 +67,10 @@ cap covers exactly the flood the gate lets through.
         "expected": 2,
         "false_abstentions": 0,
         "pages": 2
+      },
+      "temporal": {
+        "passed": 1,
+        "total": 2
       }
     },
     "episode-flood": {
@@ -100,6 +104,10 @@ cap covers exactly the flood the gate lets through.
         "expected": 2,
         "false_abstentions": 0,
         "pages": 1
+      },
+      "temporal": {
+        "passed": 0,
+        "total": 0
       }
     },
     "formatter-switch": {
@@ -133,6 +141,10 @@ cap covers exactly the flood the gate lets through.
         "expected": 2,
         "false_abstentions": 0,
         "pages": 3
+      },
+      "temporal": {
+        "passed": 2,
+        "total": 2
       }
     },
     "user-profile": {
@@ -166,6 +178,10 @@ cap covers exactly the flood the gate lets through.
         "expected": 2,
         "false_abstentions": 0,
         "pages": 3
+      },
+      "temporal": {
+        "passed": 1,
+        "total": 1
       }
     }
   }
@@ -204,6 +220,24 @@ Reading it:
   measure inside BGE-small's relevant band (0.655–0.691 against a weakest
   relevant page of 0.656), and a floor that caught them would abstain on
   real answers. `false_abstentions` is the number that must stay zero.
+- **temporal** — time-aware ranking (issue #78): soft-window checks
+  (`since`/`until`/`changed_since` rescore, never filter), each judged on
+  the top claim as `timeline`'s live rule is. The baseline's 4-of-5 splits
+  three ways, and the split is the finding. Two checks the term itself
+  carries (the counterfactuals below flip them): a past window lifts the
+  retired formatter claim over its successor, and a bounded recent window
+  fixes deploy-migration's standing live miss — the migrations *lesson*
+  outranks the deploy claim on retrieval, and the window is what puts the
+  claim on top. Two more pass with the term merely consistent. The one
+  miss is the bound working as designed: deploy-laptop retrieves at
+  `rrf_normalized` 0.05 against the release question, and a 0.15 bonus
+  must not bridge a 0.55 retrieval deficit — a window that could override
+  relevance would be a filter wearing a rescore's clothes. Checks whose
+  window covers every live claim (an open `since` on a live read) are
+  deliberately absent: every fit is 1.0 there and the check would measure
+  the plain ranking twice. The pages behind all of this are one run away:
+  `cargo test -p agmem-server --test eval -- --ignored calibrate_temporal
+  --nocapture`.
 
 ## Re-running
 
@@ -281,6 +315,15 @@ Two mechanisms answer "would this harness notice a broken scoring change":
   `found` and `mrr` did not move in either direction: the shipped floor and
   trim give back no labelled answer, and the new columns are the only ones
   watching what they add.
+
+  Setting `WEIGHT_TEMPORAL` (`agmem-core/src/scoring.rs`) to 0.0 — the
+  window parsed, reported, and worth nothing — moved exactly two fields
+  (run 2026-09-01): deploy-migration temporal 1/2 → 0/2 and
+  formatter-switch temporal 2/2 → 1/2. Pinning `temporal_fit` to 1.0
+  instead — the weight paid, the discrimination gone — moved the same two
+  and nothing else; in particular no `retrieval` field, which is also true
+  by construction, since probes carry no window. Together they say the two
+  term-driven checks ride on the fit's *shape*, not on the bonus existing.
 
 A third mechanism ran once rather than continuously: the fusion-weight
 sweep (issue #80, `docs/eval/fusion-sweep.md`) measured fixed convex blends

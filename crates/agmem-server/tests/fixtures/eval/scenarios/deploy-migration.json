@@ -73,6 +73,21 @@
       "absent": ["deploy-laptop"]
     }
   ],
+  "temporal": [
+    {
+      "query": "how do releases go out",
+      "until": "2025-05-01T00:00:00Z",
+      "include_invalidated": true,
+      "expect_top": "deploy-laptop"
+    },
+    {
+      "query": "how do releases go out",
+      "since": "2025-08-15T00:00:00Z",
+      "until": "2025-10-01T00:00:00Z",
+      "include_invalidated": true,
+      "expect_top": "deploy-ci"
+    }
+  ],
   "gate": [],
   "context": [
     {

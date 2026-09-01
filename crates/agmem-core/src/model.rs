@@ -564,6 +564,10 @@ pub struct EpisodeChunk {
     pub text: String,
     /// Zero-based position within the episode.
     pub position: u32,
+    /// When the sliced text's events happened, denormalized from the episode
+    /// (schema v4). `None` on a pre-v4 row the backfill missed — undatable,
+    /// and treated conservatively wherever time matters.
+    pub occurred_at: Option<jiff::Timestamp>,
     /// Absent in BM25-only mode, or until the embedder catches up.
     pub embedding: Option<Vec<f32>>,
 }

@@ -784,9 +784,20 @@ recall(q)
               violated) or when the seeds come up empty
  4. rescore in Rust (core::scoring):
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
+              [+ 0.15·temporal_fit when the call carried a window — issue #78]
       norm  = min–max over the pool: (rrf − min) / (max − min)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history);
               chunks filter on their denormalised occurred_at ≤ T (v4)
+      since/until/changed_since? → soft, never a filter: fit is 1.0 on any
+              overlap between the claim's validity and the window (a chunk
+              is an event at its occurred_at), decaying exp(−gap/30d)
+              outside it, worst sub-fit deciding; rows the arms did not
+              date score 0 on the term and lose nothing else. The bonus
+              sits outside the unit sum so the no-window path's arithmetic
+              is untouched, and the answer carries a `dated` block — the
+              window echoed, the page's best fit, and the one thing a soft
+              window cannot do (a live read cannot surface claims corrected
+              since; `include_invalidated` or `as_of` reach those)
  5. occupancy cap (issue #76, tools::occupancy): no source — episode or
     external origin; agent-sourced rows are uncapped — may hold more than
     ceil(k/2) (min 2) of the page; the surplus defers to the next-ranked

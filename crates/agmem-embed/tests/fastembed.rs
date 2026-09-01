@@ -184,6 +184,7 @@ fn regenerate_eval_vectors() {
         for text in strings_of(&scenario["probes"], "query")
             .into_iter()
             .chain(strings_of(&scenario["abstain"], "query"))
+            .chain(strings_of(&scenario["temporal"], "query"))
             .chain(strings_of(&scenario["timeline"], "query"))
             .chain(strings_of(&scenario["context"], "query"))
         {

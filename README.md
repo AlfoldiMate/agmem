@@ -275,7 +275,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--data` / `AGMEM_DATA` | platform data dir | Store, lock file, model cache |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine. `mem://` for scratch, `ws://host` to share |
 | `--space` / `AGMEM_SPACE` | derived from cwd | This instance's space |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` (ONNX), or `none` (BM25 only) |
+| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only backend |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session |
@@ -307,9 +307,9 @@ effect of the built-in wording and the harness that measures it.
 - **The first run stalls on the model download.** It pulls 65 MB from Hugging
   Face into `<data dir>/models`. Behind a proxy, copy that directory from a
   machine that has it, or point `FASTEMBED_CACHE_DIR` at one that does.
-- **No ONNX Runtime for the platform.** `--embedder none` runs BM25-only. A
-  store written with one model refuses to open under a different one;
-  `--reindex` converts it.
+- **A different model.** A store written with one model refuses to open under
+  a different one; `--reindex` converts it. There is no model-less mode:
+  recall is BM25 *and* vectors, and ONNX Runtime is a hard requirement.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 
@@ -318,13 +318,14 @@ effect of the built-in wording and the harness that measures it.
 ```sh
 cargo test --workspace                                   # unit, integration and the offline quality eval
 cargo clippy --workspace --all-targets -- -D warnings
-cargo check --workspace --no-default-features --all-targets   # the BM25-only build must keep compiling
 ```
 
 Four crates: `agmem-core` (records, scoring, dedup, chunking; no I/O),
 `agmem-store` (SurrealDB schema and queries), `agmem-embed` (ONNX and no-op
 backends) and `agmem-server` (the MCP service and the `agmem` binary).
-CI never downloads a model; tests that need one are gated.
+CI never downloads a model: tests that need real semantics replay recorded
+BGE vectors (`tests/fixtures/`), and tests that need the live model are
+`#[ignore]`d.
 
 Retrieval quality is measured, not asserted. An offline, deterministic eval
 rides `cargo test` against a recorded baseline in

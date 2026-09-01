@@ -4,8 +4,6 @@
 //! is not something CI should do on every push. Run it deliberately with
 //! `cargo test -p agmem-embed --test fastembed -- --ignored`.
 
-#![cfg(feature = "onnx")]
-
 use agmem_embed::Embedder;
 use agmem_embed::fastembed::{DIM, FastembedBackend};
 

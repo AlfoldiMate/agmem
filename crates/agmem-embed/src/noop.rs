@@ -1,10 +1,12 @@
-//! The backend for `--embedder none`: BM25-only, degraded on purpose.
+//! A test double that produces no vectors.
 //!
-//! Useful where a model download is unwelcome (CI, a locked-down box, a first
-//! five-minute try) — recall still works through the fulltext index, it just
-//! loses semantic matching. Rows written in this mode carry no vector, and
-//! the HNSW indexes skip them, so switching a backend on later costs a
-//! re-embed of the old rows but breaks nothing.
+//! Not a supported deployment — agmem is BM25 plus a local model, always. It
+//! exists for tests that need a running server where a model download is
+//! forbidden (CI): the subprocess tests reach it as the hidden
+//! `--embedder none`, and the in-process protocol harness replays recorded
+//! real-model vectors instead. Rows written through it carry no vector, and
+//! the HNSW indexes skip them, so a later backend costs a re-embed of the old
+//! rows but breaks nothing.
 
 use crate::{EmbedError, Embedder};
 

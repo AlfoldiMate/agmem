@@ -226,8 +226,8 @@ Record IDs: `memory:ulid()`, `episode:ulid()` — ULIDs are temporally sortable,
 which makes "recent N" range scans and stable pagination free.
 
 Notes:
-- `embedding` is `option<…>` so `--embedder none` (BM25-only degraded mode)
-  and deferred embedding both work; HNSW ignores rows without vectors.
+- `embedding` is `option<…>` so deferred embedding and the no-vector test
+  double both work; HNSW ignores rows without vectors.
 - Array indexes need `COLUMNS <field>.*` and are only used by
   `field CONTAINS $x`. Without the `.*` the index covers the whole array, and
   the planner then serves `field = $x` from it — returning nothing, silently
@@ -606,8 +606,8 @@ agmem/
 │   │   │   │                     #   slices batches of 128 so a shared
 │   │   │   │                     #   backend is free between slices (#67)
 │   │   │   ├── fastembed.rs      # BGESmallENV15Q 384d, spawn_blocking wrapper,
-│   │   │   │                     #   cache dir mgmt   [feature "onnx", default]
-│   │   │   └── noop.rs           # BM25-only mode (dim 0)
+│   │   │   │                     #   cache dir mgmt — the one real backend
+│   │   │   └── noop.rs           # test double, no vectors (dim 0)
 │   │   └── tests/                # recorded-vector fixtures + regeneration
 │   └── agmem-server/             # the binary: `agmem`
 │       ├── src/
@@ -1132,12 +1132,14 @@ Each phase is releasable; later phases only add.
 
 ## 9. Risks & open questions
 
-1. **ort is still 2.0-rc** under fastembed — pin exact versions; a
-   `--no-default-features` BM25-only build is the contingency if ONNX linking
-   breaks on a platform. (A pure-Rust model2vec `static` backend filled this
-   role until v0.1.7; it was removed unexercised — never built in CI, never
-   needed on a shipped platform, and it doubled the tokenizers/ndarray/hf-hub
-   dependency tree at mismatched major versions.)
+1. **ort is still 2.0-rc** under fastembed — pin exact versions. There is
+   no contingency build any more: the local ONNX model is a hard requirement,
+   and if linking breaks on a platform the fix is in fastembed/ort, not a
+   degraded mode. (A pure-Rust model2vec `static` backend and a
+   `--no-default-features` BM25-only build both filled this role until v0.1.7;
+   both were removed unexercised — never built in CI, never needed on a
+   shipped platform — and every retrieval behaviour tuned against the
+   vector-less path was tuning for a deployment nobody runs.)
 2. **SurrealKV cross-process behavior undocumented** — mitigated by the
    lockfile; revisit if SurrealDB documents multi-process embedded access.
    **Confirmed a real limit at #18**: Claude Code runs one stdio server per

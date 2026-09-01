@@ -15,8 +15,6 @@
 //!
 //! Run with `cargo test -p agmem-server --test knn_probe -- --ignored`.
 
-#![cfg(feature = "onnx")]
-
 use agmem_core::{Kind, SpaceName, Writer};
 use agmem_embed::Embedder;
 use agmem_embed::fastembed::FastembedBackend;

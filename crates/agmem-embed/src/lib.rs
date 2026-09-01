@@ -1,8 +1,8 @@
 //! agmem embedding backends.
 //!
-//! A narrow [`Embedder`] trait with local implementations: fastembed/ONNX
-//! (feature `onnx`, default) and a no-op backend for BM25-only mode. Nothing here touches the network
-//! at runtime once the model is cached; see `docs/design.md` §4.
+//! A narrow [`Embedder`] trait with one real implementation, fastembed/ONNX,
+//! and a no-op test double that produces no vectors. Nothing here touches the
+//! network at runtime once the model is cached; see `docs/design.md` §4.
 //!
 //! Backends are synchronous — ONNX inference is CPU-bound, and pretending
 //! otherwise would only hide it. The async wrappers [`embed_passages`] and
@@ -13,7 +13,6 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "onnx")]
 pub mod fastembed;
 pub mod noop;
 #[cfg(feature = "rerank")]
@@ -28,8 +27,9 @@ pub use noop::NoopEmbedder;
 pub trait Embedder: Send + Sync + 'static {
     /// Width of the vectors this backend produces.
     ///
-    /// Zero means the backend produces none at all (BM25-only mode) — callers
-    /// store `embedding: NONE` and skip the vector half of retrieval.
+    /// Zero means the backend produces none at all (the [`NoopEmbedder`] test
+    /// double) — callers store `embedding: NONE` and skip the vector half of
+    /// retrieval.
     fn dim(&self) -> usize;
 
     /// Stable model identifier, recorded in `meta` so a later run cannot

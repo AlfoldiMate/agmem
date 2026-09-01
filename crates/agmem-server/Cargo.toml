@@ -12,12 +12,6 @@ homepage.workspace = true
 name = "agmem"
 path = "src/main.rs"
 
-[features]
-default = ["onnx"]
-# The local ONNX embedder. Without it the binary still runs, BM25-only, and
-# needs no ONNX Runtime at build time.
-onnx = ["agmem-embed/onnx"]
-
 [dependencies]
 # `schema` puts core's enums, and their variant docs, into the tool schemas
 # agents read.

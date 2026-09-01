@@ -16,10 +16,10 @@ mod harness;
 
 use std::sync::Arc;
 
-use agmem_core::Source;
+use agmem_core::{Kind, Source};
 use agmem_embed::NoopEmbedder;
 use agmem_server::config::ToolDescriptions;
-use agmem_store::repo::{self, Lookup};
+use agmem_store::repo::{self, Batch, Lookup, NewMemory};
 use harness::*;
 use rmcp::model::{
     ContentBlock, ErrorCode, GetPromptRequestParams, ReadResourceRequestParams, Role,
@@ -258,6 +258,51 @@ async fn a_space_index_lists_live_claims_and_their_uris() {
         entry["uri"],
         format!("memory://default/{live}"),
         "each entry carries the URI that reads it whole"
+    );
+    assert!(
+        index.get("truncated").is_none(),
+        "an index that fits in one read carries no truncation marker: {index}"
+    );
+
+    agmem.shutdown().await;
+}
+
+/// Issue #69: a space larger than one lookup serves must say so — `live`
+/// keeps the true count and `truncated` marks the cut, instead of the index
+/// rendering 1000 entries beside a bigger number as if it were complete.
+#[tokio::test]
+async fn a_space_index_larger_than_one_read_marks_the_cut() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let over = repo::MAX_POOL + 1;
+    repo::insert_batch(
+        &agmem.db,
+        Batch {
+            space: space(),
+            episode: None,
+            memories: (0..over)
+                .map(|n| NewMemory::new(Kind::Fact, format!("claim number {n}")))
+                .collect(),
+        },
+    )
+    .await
+    .expect("seed past MAX_POOL");
+
+    let index = read_json(&agmem, "memory://default").await;
+    assert_eq!(
+        index["live"], over as u64,
+        "the count is the space's: {index}"
+    );
+    assert_eq!(
+        index["memories"].as_array().expect("memories").len(),
+        repo::MAX_POOL,
+        "the listing is one lookup's page"
+    );
+    let note = index["truncated"]
+        .as_str()
+        .unwrap_or_else(|| panic!("a cut index must carry the marker in words: {index}"));
+    assert!(
+        note.contains(&repo::MAX_POOL.to_string()) && note.contains(&over.to_string()),
+        "the marker names both sides of the cut: {note}"
     );
 
     agmem.shutdown().await;

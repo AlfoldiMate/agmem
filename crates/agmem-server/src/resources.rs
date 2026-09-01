@@ -10,7 +10,7 @@
 //!
 //! | URI | answer |
 //! |---|---|
-//! | `memory://<space>` | the index: every live claim in the space, slim |
+//! | `memory://<space>` | the index: the space's live claims, slim, marked when cut |
 //! | `memory://<space>/<id>` | the full `inspect` answer for that id |
 //!
 //! `resources/list` serves one entry per registered space; the record form is
@@ -48,11 +48,18 @@ const SCHEME: &str = "memory://";
 struct Index {
     /// The space asked about.
     space: String,
-    /// How many live claims it holds — always `memories.len()`, spelled out so
-    /// a reader need not count to know nothing was truncated.
+    /// How many live claims the space holds — counted independently of
+    /// `memories`, so the number stays honest when the listing is a page.
     live: u64,
-    /// Every live claim, strongest first.
+    /// The live claims, strongest first — all of them unless `truncated` says
+    /// otherwise.
     memories: Vec<IndexEntry>,
+    /// Present when the space holds more live claims than one read serves:
+    /// `memories` is then the strongest page, not the whole space, and this
+    /// says so in words (issue #69) — the same honesty rule as recall's
+    /// `truncated`. Absent means the index really is complete.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    truncated: Option<String>,
 }
 
 /// One line of the index: enough to recognise a claim, and the URI to read it.
@@ -83,8 +90,8 @@ pub async fn list(service: &AgmemService) -> Result<ListResourcesResult, ErrorDa
             Resource::new(format!("{SCHEME}{space}"), space.to_string())
                 .with_title(format!("Memory space `{space}`"))
                 .with_description(
-                    "Every live claim in the space, with the URI that reads \
-                     each one's history and source text.",
+                    "The space's live claims, strongest first, with the URI \
+                     that reads each one's history and source text.",
                 )
                 .with_mime_type(MIME)
         })
@@ -127,7 +134,7 @@ pub async fn read(service: &AgmemService, uri: &str) -> Result<ReadResourceResul
     ]))
 }
 
-/// The `memory://<space>` form: every live claim, slim.
+/// The `memory://<space>` form: the space's live claims, slim.
 async fn index(service: &AgmemService, name: &str) -> Result<String, ErrorData> {
     // Membership first: a URI naming an unregistered space is a resource that
     // does not exist (-32002), not an empty index — a client retrying a typo
@@ -140,14 +147,16 @@ async fn index(service: &AgmemService, name: &str) -> Result<String, ErrorData> 
         return Err(unknown_space(name));
     }
 
-    // The live count is the limit, so the index is complete by construction —
-    // an index that quietly truncated would break the one promise it makes.
+    // One lookup serves at most `MAX_POOL` rows however large a limit it is
+    // asked for, so past that the index is a page, not the space. The count
+    // stays the space's own, and `truncated` marks the cut rather than letting
+    // `live: 1500` sit beside 1000 entries as if nothing were missing (#69).
     let stats = repo::stats(service.db(), &space)
         .await
         .map_err(|error| store_error(&error))?;
     let mut lookup = Lookup::new(vec![space.clone()]);
-    lookup.limit = usize::try_from(stats.live).unwrap_or(usize::MAX);
-    let memories = repo::direct_lookup(service.db(), &lookup)
+    lookup.limit = repo::MAX_POOL;
+    let memories: Vec<IndexEntry> = repo::direct_lookup(service.db(), &lookup)
         .await
         .map_err(|error| store_error(&error))?
         .into_iter()
@@ -158,11 +167,21 @@ async fn index(service: &AgmemService, name: &str) -> Result<String, ErrorData> 
             content: memory.content,
         })
         .collect();
+    let truncated = (stats.live > memories.len() as u64).then(|| {
+        format!(
+            "The strongest {listed} of {live} live claims — a page, not the \
+             whole space. `recall` reaches the rest, and every claim still \
+             answers at its own {SCHEME}{space}/<id>.",
+            listed = memories.len(),
+            live = stats.live,
+        )
+    });
 
     render(&Index {
         space: space.to_string(),
         live: stats.live,
         memories,
+        truncated,
     })
 }
 

@@ -171,6 +171,26 @@ pub struct BatchOutcome {
     /// The memories this batch closed — the `supersedes` targets of the
     /// memories that were actually created.
     pub superseded: Vec<MemoryId>,
+    /// `supersedes` targets that were already closed when the batch arrived
+    /// (issue #62). Nothing was rewritten for these — the close that stands
+    /// is the one reported here.
+    pub already_closed: Vec<AlreadyClosed>,
+}
+
+/// A `supersedes` target that was closed before this call reached it.
+///
+/// A supersede never rewrites another close (issue #62, the same principle
+/// design §5.4 states for `forget`), so the target kept its own date, reason
+/// and successor — and the caller is told, because a silently dropped closure
+/// reads as a landed one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlreadyClosed {
+    /// The target that was already closed.
+    pub id: MemoryId,
+    /// Why it closed: `superseded`, `forgotten` or `expired`.
+    pub reason: Option<String>,
+    /// The memory that replaced it, when the reason is a supersession.
+    pub by: Option<MemoryId>,
 }
 
 /// Write a whole `remember` call in one transaction.
@@ -190,7 +210,7 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
     let Batch {
         space,
         episode,
-        memories,
+        mut memories,
     } = batch;
 
     let targets: Vec<&MemoryId> = memories
@@ -198,6 +218,19 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
         .flat_map(|memory| memory.supersedes.iter())
         .collect();
     ensure_memories_exist(db, &space, &targets).await?;
+
+    // Already-closed targets are skipped and reported, never rewritten
+    // (issue #62): the transaction's UPDATE only ever sees live ids, and its
+    // own `invalid_at IS NONE` guard covers the race between this check and
+    // the commit.
+    let already_closed = closed_memories(db, &space, &targets).await?;
+    if !already_closed.is_empty() {
+        for memory in &mut memories {
+            memory
+                .supersedes
+                .retain(|id| !already_closed.iter().any(|closed| closed.id == *id));
+        }
+    }
 
     let shapes: Vec<MemoryShape<'_>> = memories
         .iter()
@@ -306,7 +339,36 @@ pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreEr
             .transpose()?,
         memories: outcomes,
         superseded,
+        already_closed,
     })
+}
+
+/// Which of `ids` in `space` are already closed, and what closed them.
+async fn closed_memories(
+    db: &Db,
+    space: &SpaceName,
+    ids: &[&MemoryId],
+) -> Result<Vec<AlreadyClosed>, StoreError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let refs: Vec<RecordId> = ids.iter().copied().map(types::memory_ref).collect();
+    let mut resp = checked(
+        db.query(queries::CLOSED_MEMORIES)
+            .bind(("space", types::space_str(space)))
+            .bind(("ids", refs))
+            .await?,
+    )?;
+    let rows: Vec<types::ClosedRow> = resp.take(0)?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(AlreadyClosed {
+                id: MemoryId::new(row.id)?,
+                reason: row.invalid_reason,
+                by: row.superseded_by.map(MemoryId::new).transpose()?,
+            })
+        })
+        .collect()
 }
 
 /// Register `space` in the space registry unless it is already there.
@@ -333,7 +395,9 @@ pub async fn ensure_space(db: &Db, space: &SpaceName) -> Result<(), StoreError> 
 /// backwards from a timestamp lands on exactly one live claim.
 ///
 /// # Errors
-/// [`StoreError::UnknownMemory`] when either id is not in `space`.
+/// [`StoreError::UnknownMemory`] when either id is not in `space`, and
+/// [`StoreError::AlreadyClosed`] when `old` is closed — a supersede never
+/// rewrites another close (issue #62), and the error names what stands.
 pub async fn supersede(
     db: &Db,
     space: &SpaceName,
@@ -341,6 +405,13 @@ pub async fn supersede(
     new: &MemoryId,
 ) -> Result<(), StoreError> {
     ensure_memories_exist(db, space, &[old, new]).await?;
+    if let Some(closed) = closed_memories(db, space, &[old]).await?.pop() {
+        return Err(StoreError::AlreadyClosed {
+            id: closed.id,
+            reason: closed.reason.unwrap_or_else(|| "closed".to_owned()),
+            by: closed.by,
+        });
+    }
     checked(
         db.query(queries::SUPERSEDE)
             .bind(("old", types::memory_ref(old)))

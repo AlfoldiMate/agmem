@@ -738,6 +738,184 @@ async fn an_exact_duplicate_with_supersedes_closes_targets_in_favour_of_the_live
     );
 }
 
+#[tokio::test]
+async fn closed_content_can_be_asserted_again() {
+    let db = store().await;
+    let first = repo::insert_batch(
+        &db,
+        batch(vec![NewMemory::new(
+            Kind::Fact,
+            "the deploy target is Fly.io",
+        )]),
+    )
+    .await
+    .expect("write")
+    .memories
+    .remove(0)
+    .into_id();
+
+    let mut correction = NewMemory::new(Kind::Fact, "the deploy target is Railway");
+    correction.supersedes = vec![first.clone()];
+    let second = repo::insert_batch(&db, batch(vec![correction]))
+        .await
+        .expect("supersede")
+        .memories
+        .remove(0)
+        .into_id();
+
+    // The world changed back. Before v5 the dead first row answered the
+    // exact-hash gate forever, so this wording could never be stored again
+    // (issue #61).
+    let mut outcome = repo::insert_batch(
+        &db,
+        batch(vec![NewMemory::new(
+            Kind::Fact,
+            "the deploy target is Fly.io",
+        )]),
+    )
+    .await
+    .expect("re-assert");
+    let third = match outcome.memories.remove(0) {
+        Written::Created(id) => id,
+        Written::Duplicate(id) => panic!("a dead row answered as the duplicate: {id}"),
+    };
+    assert_ne!(third, first, "a fresh row with its own validity window");
+
+    let rows = all_memories(&db, &space()).await;
+    let row = |id: &MemoryId| {
+        rows.iter()
+            .find(|row| row.id == *id)
+            .expect("the row exists")
+    };
+    assert_eq!(
+        (
+            row(&first).invalid_reason,
+            row(&first).superseded_by.as_ref()
+        ),
+        (Some(InvalidReason::Superseded), Some(&second)),
+        "history is untouched: the first close stands exactly as it was"
+    );
+    assert_eq!(row(&third).invalid_reason, None, "the re-assertion is live");
+
+    // The same door opens after a forget: closed is closed, whatever closed it.
+    repo::forget(
+        &db,
+        &Forget {
+            spaces: vec![space()],
+            memories: vec![third.clone()],
+            episodes: Vec::new(),
+            purge: false,
+        },
+    )
+    .await
+    .expect("forget");
+    let again = repo::insert_batch(
+        &db,
+        batch(vec![NewMemory::new(
+            Kind::Fact,
+            "the deploy target is Fly.io",
+        )]),
+    )
+    .await
+    .expect("re-assert after forget")
+    .memories
+    .remove(0);
+    assert!(again.is_created(), "a forgotten claim can be re-learned");
+}
+
+#[tokio::test]
+async fn a_supersede_never_rewrites_another_close() {
+    let db = store().await;
+    let old = repo::insert_batch(
+        &db,
+        batch(vec![NewMemory::new(Kind::Fact, "the user prefers Python")]),
+    )
+    .await
+    .expect("write")
+    .memories
+    .remove(0)
+    .into_id();
+
+    let mut first_fix = NewMemory::new(Kind::Fact, "the user prefers Rust");
+    first_fix.supersedes = vec![old.clone()];
+    let successor = repo::insert_batch(&db, batch(vec![first_fix]))
+        .await
+        .expect("close old")
+        .memories
+        .remove(0)
+        .into_id();
+
+    // A second correction names the same target — a retried call, or another
+    // session racing this one. The close that stands is the first one; this
+    // call is told so instead of silently rewriting it (issue #62).
+    let mut second_fix = NewMemory::new(Kind::Fact, "the user prefers Go");
+    second_fix.supersedes = vec![old.clone()];
+    let outcome = repo::insert_batch(&db, batch(vec![second_fix]))
+        .await
+        .expect("the write itself lands");
+
+    assert!(outcome.memories[0].is_created(), "the new claim is stored");
+    assert!(
+        outcome.superseded.is_empty(),
+        "nothing was closed by this call: {:?}",
+        outcome.superseded
+    );
+    assert_eq!(
+        outcome.already_closed.len(),
+        1,
+        "the skipped target is reported, not dropped: {:?}",
+        outcome.already_closed
+    );
+    let skipped = &outcome.already_closed[0];
+    assert_eq!(
+        (&skipped.id, skipped.reason.as_deref(), skipped.by.as_ref()),
+        (&old, Some("superseded"), Some(&successor)),
+        "naming the close that stands"
+    );
+
+    let rows = all_memories(&db, &space()).await;
+    let closed = rows.iter().find(|row| row.id == old).expect("the old row");
+    assert_eq!(
+        closed.superseded_by.as_ref(),
+        Some(&successor),
+        "the first close keeps its successor — an as_of read of that window \
+         must find exactly one live claim"
+    );
+}
+
+#[tokio::test]
+async fn a_standalone_supersede_refuses_a_closed_target() {
+    let db = store().await;
+    let ids: Vec<MemoryId> = repo::insert_batch(
+        &db,
+        batch(vec![
+            NewMemory::new(Kind::Fact, "the user prefers Python"),
+            NewMemory::new(Kind::Fact, "the user prefers Rust"),
+            NewMemory::new(Kind::Fact, "the user prefers Go"),
+        ]),
+    )
+    .await
+    .expect("write")
+    .memories
+    .into_iter()
+    .map(Written::into_id)
+    .collect();
+
+    repo::supersede(&db, &space(), &ids[0], &ids[1])
+        .await
+        .expect("the first close lands");
+    let error = repo::supersede(&db, &space(), &ids[0], &ids[2])
+        .await
+        .expect_err("the second must not rewrite it");
+    assert!(
+        matches!(
+            &error,
+            StoreError::AlreadyClosed { id, by: Some(by), .. } if *id == ids[0] && *by == ids[1]
+        ),
+        "{error:?} names the close that stands"
+    );
+}
+
 /// Backdate a row's last use and set the strength a few recalls would have
 /// left it with — the two inputs to the decay curve, and the only two no write
 /// API sets directly.

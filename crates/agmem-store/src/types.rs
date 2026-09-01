@@ -159,6 +159,15 @@ pub(crate) struct BatchRow {
     pub(crate) memories: Vec<WriteRow>,
 }
 
+/// One already-closed `supersedes` target (issue #62): what closed it, so the
+/// caller can report the no-op instead of rewriting the close.
+#[derive(SurrealValue)]
+pub(crate) struct ClosedRow {
+    pub(crate) id: String,
+    pub(crate) invalid_reason: Option<String>,
+    pub(crate) superseded_by: Option<String>,
+}
+
 /// Every `memory` column a read projects, minus `embedding`.
 ///
 /// `source` arrives flattened into two scalars because its `ref` is a record

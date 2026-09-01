@@ -17,8 +17,8 @@ pub use read::{
     reinforce, search_hybrid, spaces, stale_contexts, stats,
 };
 pub use write::{
-    Batch, BatchOutcome, Forget, Forgotten, NewChunk, NewEpisode, NewMemory, Written, ensure_space,
-    forget, insert_batch, prune_expired, supersede,
+    AlreadyClosed, Batch, BatchOutcome, Forget, Forgotten, NewChunk, NewEpisode, NewMemory,
+    Written, ensure_space, forget, insert_batch, prune_expired, supersede,
 };
 
 use agmem_core::{MemoryId, SpaceName};

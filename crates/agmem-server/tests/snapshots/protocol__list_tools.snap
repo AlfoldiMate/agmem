@@ -1476,6 +1476,33 @@ expression: "&tools.tools"
     },
     "outputSchema": {
       "$defs": {
+        "AlreadyClosed": {
+          "description": "A `supersedes` target whose close predates this call.",
+          "properties": {
+            "id": {
+              "description": "The id that was sent in `supersedes`.",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why it was already closed: `superseded`, `forgotten` or `expired`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "superseded_by": {
+              "description": "The memory that replaced it, when the reason is a supersession — the\nlive claim is there (or further down its chain), not here.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
         "Related": {
           "description": "A live claim near the insight that was just stored.",
           "properties": {
@@ -1503,6 +1530,13 @@ expression: "&tools.tools"
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "already_closed": {
+          "description": "`supersedes` targets that were already closed when this call arrived —\nskipped and reported, never rewritten, exactly as `remember` does.",
+          "items": {
+            "$ref": "#/$defs/AlreadyClosed"
+          },
+          "type": "array"
+        },
         "content": {
           "description": "What is stored under `id` — your wording when it was written, the\nexisting claim's when it was not.",
           "type": "string"
@@ -1550,7 +1584,8 @@ expression: "&tools.tools"
         "content",
         "derived_from",
         "related",
-        "superseded"
+        "superseded",
+        "already_closed"
       ],
       "type": "object"
     },
@@ -1744,6 +1779,33 @@ expression: "&tools.tools"
     },
     "outputSchema": {
       "$defs": {
+        "AlreadyClosed": {
+          "description": "A `supersedes` target whose close predates this call.",
+          "properties": {
+            "id": {
+              "description": "The id that was sent in `supersedes`.",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why it was already closed: `superseded`, `forgotten` or `expired`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "superseded_by": {
+              "description": "The memory that replaced it, when the reason is a supersession — the\nlive claim is there (or further down its chain), not here.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
         "Duplicate": {
           "description": "A claim that was already in the store.",
           "properties": {
@@ -1809,6 +1871,13 @@ expression: "&tools.tools"
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "already_closed": {
+          "description": "`supersedes` targets that were already closed when this call arrived.\n\nNothing was rewritten for these — a supersede never rewrites another\nclose, so each keeps its original date, reason and successor, named\nhere. Usually this means the correction already happened (a retried\ncall, or another session got there first); check `superseded_by`\nbefore assuming anything is still open.",
+          "items": {
+            "$ref": "#/$defs/AlreadyClosed"
+          },
+          "type": "array"
+        },
         "created": {
           "description": "Ids of the memories stored, in the order they were sent, skipping the\npositions reported in `duplicates`.",
           "items": {
@@ -1849,7 +1918,8 @@ expression: "&tools.tools"
         "created",
         "duplicates",
         "related",
-        "superseded"
+        "superseded",
+        "already_closed"
       ],
       "type": "object"
     },

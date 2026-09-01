@@ -135,8 +135,31 @@ pub struct RememberResult {
     /// Ids of the memories closed by a `supersedes` in this call.
     pub superseded: Vec<String>,
 
+    /// `supersedes` targets that were already closed when this call arrived.
+    ///
+    /// Nothing was rewritten for these — a supersede never rewrites another
+    /// close, so each keeps its original date, reason and successor, named
+    /// here. Usually this means the correction already happened (a retried
+    /// call, or another session got there first); check `superseded_by`
+    /// before assuming anything is still open.
+    pub already_closed: Vec<AlreadyClosed>,
+
     /// Id of the episode, whether it was written now or already stored.
     pub episode: Option<String>,
+}
+
+/// A `supersedes` target whose close predates this call.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct AlreadyClosed {
+    /// The id that was sent in `supersedes`.
+    pub id: String,
+
+    /// Why it was already closed: `superseded`, `forgotten` or `expired`.
+    pub reason: Option<String>,
+
+    /// The memory that replaced it, when the reason is a supersession — the
+    /// live claim is there (or further down its chain), not here.
+    pub superseded_by: Option<String>,
 }
 
 /// A live claim near one that was just stored.
@@ -295,6 +318,7 @@ pub async fn run(
             duplicates,
             related: Vec::new(),
             superseded: Vec::new(),
+            already_closed: Vec::new(),
             episode: None,
         });
     }
@@ -348,6 +372,15 @@ pub async fn run(
         duplicates,
         related,
         superseded: outcome.superseded.iter().map(ToString::to_string).collect(),
+        already_closed: outcome
+            .already_closed
+            .into_iter()
+            .map(|closed| AlreadyClosed {
+                id: closed.id.to_string(),
+                reason: closed.reason,
+                superseded_by: closed.by.map(|id| id.to_string()),
+            })
+            .collect(),
         episode: outcome.episode.map(|written| written.into_id().to_string()),
     })
 }

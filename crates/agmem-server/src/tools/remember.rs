@@ -242,7 +242,9 @@ pub async fn run(
     let mut new_episode = episode.as_ref().map(EpisodeInput::validated).transpose()?;
 
     // 2. One embedding pass for the whole call — the claims and the episode's
-    //    chunks together, so a batch of any size is one model invocation.
+    //    chunks together. agmem-embed slices the batch internally, so the
+    //    shared model breathes between slices instead of being held for the
+    //    call's full duration.
     embed(service, &mut new_memories, new_episode.as_mut()).await?;
 
     // 3. The near-dup gate: the same claim in different words is reported, not
@@ -385,11 +387,35 @@ pub async fn run(
     })
 }
 
+/// The most characters one claim may hold.
+///
+/// A memory is one distilled claim; anything longer is an artifact, and
+/// artifacts belong on disk with their path stored here instead. The cap also
+/// bounds what a single `remember` can put through the shared embedding model.
+const MAX_MEMORY_CHARS: usize = 10_000;
+
+/// The most characters an episode may hold — roughly seventy retrieval chunks.
+///
+/// Without it one multi-megabyte paste becomes thousands of chunks embedded
+/// and stored in a single call, monopolising the model every other session
+/// shares. Ground truth bigger than this belongs in a file, with a memory
+/// pointing at it.
+const MAX_EPISODE_CHARS: usize = 100_000;
+
 impl MemoryInput {
     /// This input as a store row, or the reason it cannot be one.
     fn validated(&self, index: usize) -> Result<NewMemory, ErrorData> {
         if self.content.trim().is_empty() {
             return Err(invalid(format!("memories[{index}].content is empty")));
+        }
+        let length = self.content.chars().count();
+        if length > MAX_MEMORY_CHARS {
+            return Err(invalid(format!(
+                "memories[{index}].content is {length} characters; the limit is \
+                 {MAX_MEMORY_CHARS}. One memory holds one distilled claim — verbatim \
+                 text goes in `episode`, and anything larger belongs on disk with its \
+                 path stored here instead"
+            )));
         }
         let mut memory = NewMemory::new(self.kind.unwrap_or(Kind::Fact), self.content.clone());
         memory.entities.clone_from(&self.entities);
@@ -418,6 +444,14 @@ impl EpisodeInput {
     fn validated(&self) -> Result<NewEpisode, ErrorData> {
         if self.content.trim().is_empty() {
             return Err(invalid("episode.content is empty"));
+        }
+        let length = self.content.chars().count();
+        if length > MAX_EPISODE_CHARS {
+            return Err(invalid(format!(
+                "episode.content is {length} characters; the limit is \
+                 {MAX_EPISODE_CHARS}. Store the artifact on disk and remember its \
+                 path alongside the claims distilled from it"
+            )));
         }
         Ok(NewEpisode {
             content: self.content.clone(),
@@ -463,7 +497,7 @@ async fn embed(
         return Ok(());
     }
 
-    let mut vectors = agmem_embed::embed_passages(Arc::clone(service.embedder()), passages.clone())
+    let mut vectors = agmem_embed::embed_passages(Arc::clone(service.embedder()), passages)
         .await
         .map_err(|error| internal(format!("embedding failed: {error}")))?;
     if vectors.len() != memories.len() + chunks {
@@ -507,6 +541,40 @@ mod tests {
         };
         let error = input.validated(1).expect_err("blank content is refused");
         assert!(error.message.contains("memories[1].content"), "{error:?}");
+    }
+
+    #[test]
+    fn an_oversized_memory_is_refused_naming_the_limit() {
+        let input = MemoryInput {
+            content: "c".repeat(MAX_MEMORY_CHARS + 1),
+            kind: None,
+            entities: Vec::new(),
+            tags: Vec::new(),
+            decay_class: None,
+            supersedes: Vec::new(),
+            valid_from: None,
+        };
+        let error = input.validated(0).expect_err("oversized claim is refused");
+        assert!(error.message.contains("memories[0].content"), "{error:?}");
+        assert!(
+            error.message.contains(&MAX_MEMORY_CHARS.to_string()),
+            "the refusal names the limit: {error:?}"
+        );
+    }
+
+    #[test]
+    fn an_oversized_episode_is_refused_naming_the_limit() {
+        let input = EpisodeInput {
+            content: "e".repeat(MAX_EPISODE_CHARS + 1),
+            occurred_at: None,
+            session: None,
+        };
+        let error = input.validated().expect_err("oversized episode is refused");
+        assert!(error.message.contains("episode.content"), "{error:?}");
+        assert!(
+            error.message.contains(&MAX_EPISODE_CHARS.to_string()),
+            "the refusal names the limit: {error:?}"
+        );
     }
 
     #[test]

@@ -8,7 +8,9 @@
 //! Backends are synchronous — ONNX inference is CPU-bound, and pretending
 //! otherwise would only hide it. The async wrappers [`embed_passages`] and
 //! [`embed_query`] move that work off the runtime with `spawn_blocking`, so
-//! the MCP server never stalls its reactor on a model.
+//! the MCP server never stalls its reactor on a model; [`embed_passages`]
+//! also slices large batches so one caller cannot hold the model for the
+//! whole batch while every other session waits.
 
 use std::sync::Arc;
 
@@ -69,7 +71,14 @@ pub enum EmbedError {
     Join(#[from] tokio::task::JoinError),
 }
 
-/// Embed passages on a blocking thread.
+/// How many passages reach the backend per call.
+///
+/// Backends serialise on one model, so a caller's batch is sliced here and the
+/// backend invoked once per slice — between slices the model is free, and
+/// another session's query gets in instead of waiting out the whole batch.
+const BATCH: usize = 128;
+
+/// Embed passages on a blocking thread, [`BATCH`] at a time.
 ///
 /// # Errors
 /// Whatever the backend reports, or [`EmbedError::Join`] if the task died.
@@ -77,7 +86,14 @@ pub async fn embed_passages(
     embedder: Arc<dyn Embedder>,
     passages: Vec<String>,
 ) -> Result<Vec<Vec<f32>>, EmbedError> {
-    tokio::task::spawn_blocking(move || embedder.embed_passages(&passages)).await?
+    tokio::task::spawn_blocking(move || {
+        let mut vectors = Vec::with_capacity(passages.len());
+        for slice in passages.chunks(BATCH) {
+            vectors.extend(embedder.embed_passages(slice)?);
+        }
+        Ok(vectors)
+    })
+    .await?
 }
 
 /// Embed one query on a blocking thread.
@@ -89,4 +105,57 @@ pub async fn embed_query(
     query: String,
 ) -> Result<Vec<f32>, EmbedError> {
     tokio::task::spawn_blocking(move || embedder.embed_query(&query)).await?
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    /// Records the size of every slice it is handed; each vector encodes the
+    /// passage's position in the original batch so order survives slicing.
+    struct SliceRecorder {
+        slices: Mutex<Vec<usize>>,
+    }
+
+    impl Embedder for SliceRecorder {
+        fn dim(&self) -> usize {
+            1
+        }
+
+        fn model_id(&self) -> &str {
+            "slice-recorder"
+        }
+
+        fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
+            self.slices.lock().unwrap().push(passages.len());
+            Ok(passages
+                .iter()
+                .map(|passage| vec![passage.parse::<f32>().unwrap()])
+                .collect())
+        }
+
+        fn embed_query(&self, _query: &str) -> Result<Vec<f32>, EmbedError> {
+            unreachable!("not under test")
+        }
+    }
+
+    #[tokio::test]
+    async fn a_large_batch_reaches_the_backend_in_slices_and_in_order() {
+        let embedder = Arc::new(SliceRecorder {
+            slices: Mutex::new(Vec::new()),
+        });
+        let passages: Vec<String> = (0..300).map(|index| index.to_string()).collect();
+
+        let vectors = embed_passages(Arc::clone(&embedder) as Arc<dyn Embedder>, passages)
+            .await
+            .expect("embed passages");
+
+        assert_eq!(*embedder.slices.lock().unwrap(), vec![128, 128, 44]);
+        assert_eq!(vectors.len(), 300);
+        for (index, vector) in vectors.iter().enumerate() {
+            assert_eq!(vector, &vec![index as f32]);
+        }
+    }
 }

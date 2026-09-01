@@ -460,23 +460,12 @@ pub(crate) struct NearestRow {
     pub(crate) d: f64,
 }
 
-/// One fulltext-arm candidate: which row, and its summed `search::score`.
-///
-/// Keyed like [`NearestRow`], on `(table, id)`.
-#[derive(SurrealValue)]
-pub(crate) struct TextScoreRow {
-    pub(crate) id: String,
-    pub(crate) table: String,
-    pub(crate) s: f64,
-}
-
 /// The single object a hybrid search returns: the fused order, the vector
-/// arms' distances, the fulltext arms' scores, and the rows.
+/// arms' distances, and the rows.
 #[derive(SurrealValue)]
 pub(crate) struct SearchRow {
     pub(crate) scored: Vec<ScoreRow>,
     pub(crate) nearest: Vec<NearestRow>,
-    pub(crate) texts: Vec<TextScoreRow>,
     pub(crate) memories: Vec<MemoryReadRow>,
     pub(crate) chunks: Vec<ChunkReadRow>,
 }

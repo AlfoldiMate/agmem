@@ -282,6 +282,12 @@ Two mechanisms answer "would this harness notice a broken scoring change":
   trim give back no labelled answer, and the new columns are the only ones
   watching what they add.
 
+A third mechanism ran once rather than continuously: the fusion-weight
+sweep (issue #80, `docs/eval/fusion-sweep.md`) measured fixed convex blends
+of the two retrieval arms against RRF across this whole scorecard. RRF
+stays — the write-up records a formal aggregate win that was rejected on
+Pareto and fixture-bias grounds, and what would reopen it.
+
 ## What the baseline says about the system
 
 The imperfect columns are findings, not harness debt:

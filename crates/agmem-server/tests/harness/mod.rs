@@ -48,13 +48,6 @@ impl Harness {
         Self::start_with(embedder, ToolDescriptions::default()).await
     }
 
-    /// The same, with the measurement-only fusion override set (issue #80):
-    /// `Some(α)` makes every search blend the raw arm signals instead of
-    /// taking the engine's RRF order. The eval sweep is the only caller.
-    pub async fn start_fused(embedder: Arc<dyn Embedder>, fusion: Option<f64>) -> Self {
-        Self::start_inner(embedder, ToolDescriptions::default(), fusion).await
-    }
-
     /// The same, serving `tool_desc` instead of agmem's own wording.
     ///
     /// The overrides are set on the resolved config rather than left to
@@ -63,14 +56,6 @@ impl Harness {
     /// `list_tools` snapshot with a diff that has nothing to do with their
     /// change.
     pub async fn start_with(embedder: Arc<dyn Embedder>, tool_desc: ToolDescriptions) -> Self {
-        Self::start_inner(embedder, tool_desc, None).await
-    }
-
-    async fn start_inner(
-        embedder: Arc<dyn Embedder>,
-        tool_desc: ToolDescriptions,
-        fusion: Option<f64>,
-    ) -> Self {
         let data = tempfile::tempdir().expect("tempdir");
         let mut config = Cli::try_parse_from([
             "agmem",
@@ -91,7 +76,6 @@ impl Harness {
         .resolve()
         .expect("resolve");
         config.tool_desc = tool_desc;
-        config.fusion = fusion;
         let db = agmem_store::db::connect(&config.db_url)
             .await
             .expect("connect mem://");

@@ -378,7 +378,6 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             search.filters = filters;
             search.liveness = liveness;
             search.pool = pool;
-            search.fusion = service.config().fusion;
             let mut candidates = repo::search_hybrid(service.db(), &search)
                 .await
                 .map_err(|error| store_error(&error))?;
@@ -401,7 +400,6 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
                 .map(|memory| Candidate {
                     rrf: 0.0,
                     similarity: None,
-                    text_score: None,
                     hit: StoreHit::Memory(Box::new(memory)),
                 })
                 .collect()

@@ -274,11 +274,6 @@ pub struct Config {
     /// the built-in wording. Read from the environment rather than a flag:
     /// there is one variable per tool and clap has no shape for that.
     pub tool_desc: ToolDescriptions,
-    /// Measurement-only fusion override for the offline sweep (issue #80):
-    /// `Some(α)` blends the raw arm signals instead of RRF. No flag and no
-    /// env variable sets it — the eval harness writes it directly, and
-    /// production runs are always `None`.
-    pub fusion: Option<f64>,
     pub log: String,
     pub log_file: Option<PathBuf>,
     pub doctor: bool,
@@ -426,7 +421,6 @@ impl Cli {
             pool: self.pool,
             max_k: self.max_k,
             tool_desc: ToolDescriptions::from_env()?,
-            fusion: None,
             log: self.log,
             log_file: self.log_file,
             doctor: self.doctor,

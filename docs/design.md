@@ -794,8 +794,21 @@ recall(q)
     Runs before the hop reserve, so the hop may promote one row over
     quota (bounded, deliberate — capping last re-creates the #43 miss)
  6. take k — the last slot reserved for the best hop-voted row when the cut
-    would otherwise drop every one (issue #43, hop::reserve_tail);
-    fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
+    would otherwise drop every one (issue #43, hop::reserve_tail)
+ 6b. honest page (issue #77, tools::abstain): the vector arms' cosine
+    distance rides out of the scan as each hit's `similarity` — the pool's
+    one absolute relevance signal, which min–max `rrf_normalized` cannot
+    give. Floor: a page whose best measured similarity is under 0.62 comes
+    back empty. Knee: the largest drop in the page's rrf_normalized
+    envelope (≥ 0.10 and more than half the spread) marks the tail, and a
+    tail row falls only when its own similarity is also under the floor.
+    Policy-placed rows — occupancy promotions, hop rows — are trim-exempt;
+    unmeasured rows (BM25-only mode, hop rows, text-arm-only hits) never
+    abstain and never fall; a filters-only call is never cut. A changed
+    page says so in `cut: {kept, considered, best_similarity, note}`,
+    `kept: 0` being the abstention (`capped`/`truncated` then stay absent).
+    Runs before reinforcement: a row cut off the page was not recalled.
+    Then the fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
  7. did the page fill exactly k? → COUNT the same filters; if it exceeds what
     came back, say so in `truncated`
  8. → hits with per-signal scores (agent can see *why* something surfaced)

@@ -50,6 +50,16 @@
       "relevant": ["gateway"]
     }
   ],
+  "abstain": [
+    {
+      "query": "who is cast in the theatre production this autumn?",
+      "k": 5
+    },
+    {
+      "query": "what discount applies to the annual conference tickets?",
+      "k": 5
+    }
+  ],
   "timeline": [
     {
       "query": "how do releases go out",

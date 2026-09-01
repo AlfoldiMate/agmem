@@ -89,6 +89,55 @@ async fn retrieval_without_vectors_scores_strictly_worse() {
     );
 }
 
+/// Prints the similarity landscape the abstention floor has to separate
+/// (issue #77): what the vector arm measured for every probe page — which
+/// must answer — and every abstain case — which must not. The floor in
+/// `tools/abstain.rs` is picked strictly between the weakest relevant top
+/// hit and the strongest abstain-case measurement; if this prints no such
+/// gap, the constant is not calibratable on these fixtures and the fixture
+/// set needs a scenario built for it, not a fudged threshold.
+#[tokio::test]
+#[ignore = "diagnostic: prints the similarity spread behind the abstention floor"]
+async fn calibrate_abstention() {
+    use serde_json::json;
+    for scenario in scenario::all() {
+        for (kind, query, k) in scenario
+            .probes
+            .iter()
+            .map(|probe| ("probe  ", probe.query.as_str(), probe.k))
+            .chain(
+                scenario
+                    .abstain
+                    .iter()
+                    .map(|case| ("abstain", case.query.as_str(), case.k)),
+            )
+        {
+            let seeded = scenario::seed(&scenario, Arc::new(RecordedEmbedder)).await;
+            let answer = seeded.agmem.recall(json!({ "query": query, "k": k })).await;
+            let sims: Vec<String> = answer["hits"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|hit| {
+                    format!(
+                        "{:.3}",
+                        hit["signals"]["similarity"].as_f64().unwrap_or(f64::NAN)
+                    )
+                })
+                .collect();
+            let best = answer["cut"]["best_similarity"]
+                .as_f64()
+                .map_or(String::new(), |best| format!(" cut.best={best:.3}"));
+            eprintln!(
+                "{kind} [{}] {query:?} -> hits [{}]{best}",
+                scenario.name,
+                sims.join(", ")
+            );
+            seeded.shutdown().await;
+        }
+    }
+}
+
 /// Rewrites the scorecard block in `docs/eval/quality.md` from a fresh run.
 /// Deliberate: run it, read the diff, commit both or neither.
 #[tokio::test]

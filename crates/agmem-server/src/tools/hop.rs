@@ -200,8 +200,12 @@ fn merge(candidates: &mut Vec<Candidate>, rows: Vec<MemoryRecord>) -> Vec<Memory
             .find(|candidate| matches!(&candidate.hit, Hit::Memory(memory) if memory.id == row.id));
         match existing {
             Some(candidate) => candidate.rrf += vote,
+            // A hop row arrives from a filters-only lookup: no vector arm
+            // measured it, so it carries no similarity — which also keeps the
+            // abstention floor from reading a hop row as evidence either way.
             None => candidates.push(Candidate {
                 rrf: vote,
+                similarity: None,
                 hit: Hit::Memory(Box::new(row)),
             }),
         }

@@ -52,6 +52,16 @@
       "relevant": ["pet"]
     }
   ],
+  "abstain": [
+    {
+      "query": "what is the kubernetes ingress configuration for the staging cluster?",
+      "k": 5
+    },
+    {
+      "query": "which herbs grow best on a shaded balcony?",
+      "k": 5
+    }
+  ],
   "timeline": [
     {
       "query": "where does the user live",

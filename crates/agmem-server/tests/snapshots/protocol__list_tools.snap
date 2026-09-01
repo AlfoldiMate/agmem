@@ -1281,6 +1281,41 @@ expression: "&tools.tools"
           ],
           "type": "object"
         },
+        "Cut": {
+          "description": "What match quality did to the page (issue #77).\n\nThe struct-with-note shape [`Capped`] and [`Truncated`] already have: the\nnumbers are what make the note checkable.",
+          "properties": {
+            "best_similarity": {
+              "description": "The best cosine similarity a vector arm measured on the page, absent\nwhen nothing was measured.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "considered": {
+              "description": "How many hits the page held before the cut.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kept": {
+              "description": "How many hits survived; 0 is the abstention — nothing matched well\nenough to act on, which is not the same as nothing being stored.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "note": {
+              "description": "The same thing in words, with the next move.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kept",
+            "considered",
+            "note"
+          ],
+          "type": "object"
+        },
         "HitKind": {
           "description": "What a hit is.",
           "oneOf": [
@@ -1328,6 +1363,14 @@ expression: "&tools.tools"
               "description": "`rrf` on a 0–1 scale against the rest of this call: 1.0 for the\nstrongest retrieval hit, 0.0 for the weakest one returned — or 0.0\neverywhere when nothing matched on words or meaning at all.",
               "format": "double",
               "type": "number"
+            },
+            "similarity": {
+              "description": "Cosine similarity between the query and this hit, when a vector arm\nmeasured it — the one signal here with an absolute scale, comparable\nacross calls. Absent for a hit only the text arms or the entity hop\nsurfaced, and everywhere in a BM25-only deployment.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
             }
           },
           "required": [
@@ -1473,6 +1516,17 @@ expression: "&tools.tools"
             }
           ],
           "description": "Present when the per-source occupancy cap changed this page: some\nsource had more strong hits than one source may hold, and the surplus\nyielded its slots to the next-ranked hits from elsewhere. Absent means\nthe page is exactly the ranking, uncapped."
+        },
+        "cut": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cut"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present when match quality changed this page (issue #77): either the\ntail fell off a marked drop in retrieval quality, or — `kept: 0` —\nnothing matched well enough to answer at all and the page is honestly\nempty. Absent means every hit earned its slot on ranking alone."
         },
         "hits": {
           "description": "The matches, highest `score` first.",

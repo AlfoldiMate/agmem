@@ -155,6 +155,12 @@ pub struct Candidate {
     /// every arm this row placed in. It has no fixed scale — `core::scoring`
     /// normalises it against the pool before weighing it.
     pub rrf: f64,
+    /// Cosine similarity between the query and this row, when a vector arm
+    /// measured it — the one absolute relevance signal a recall carries
+    /// (issue #77), in the same unit as [`Neighbour::similarity`]. `None`
+    /// when no vector arm ran, or when only a text arm returned the row:
+    /// the absence of a measurement is not evidence of irrelevance.
+    pub similarity: Option<f64>,
     /// The row itself.
     pub hit: Hit,
 }
@@ -252,12 +258,26 @@ pub async fn search_hybrid(db: &Db, search: &Search) -> Result<Vec<Candidate>, S
         .map(|row| (row.id.clone(), row))
         .collect();
 
+    let similarities: HashMap<(String, String), f64> = row
+        .nearest
+        .into_iter()
+        .map(|near| {
+            (
+                (near.table, near.id),
+                dedup::similarity_from_distance(near.d),
+            )
+        })
+        .collect();
+
     let mut candidates = Vec::with_capacity(row.scored.len());
     for scored in row.scored {
         // The fused ids and the rows come from the same request, so every
         // scored id has a row; a miss means the query text and the row
         // structs have drifted apart.
         let missing = StoreError::UnexpectedResponse("the search scored a row it did not return");
+        let similarity = similarities
+            .get(&(scored.table.clone(), scored.id.clone()))
+            .copied();
         let hit = match scored.table.as_str() {
             types::MEMORY => Hit::Memory(Box::new(
                 memories.remove(&scored.id).ok_or(missing)?.into_record()?,
@@ -269,6 +289,7 @@ pub async fn search_hybrid(db: &Db, search: &Search) -> Result<Vec<Candidate>, S
         };
         candidates.push(Candidate {
             rrf: scored.rrf,
+            similarity,
             hit,
         });
     }

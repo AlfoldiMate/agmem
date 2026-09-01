@@ -181,6 +181,7 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
     let memories = memory_where(&search.filters, search.liveness);
     let mut builder = Builder::plain();
     let mut arms: Vec<&str> = Vec::new();
+    let mut vector_arms: Vec<&str> = Vec::new();
 
     if !terms.is_empty() {
         let (matches, scores) = fulltext("content", terms);
@@ -200,6 +201,7 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
                  WHERE {memories} ORDER BY d LIMIT {pool})"
         ));
         arms.push("$vs");
+        vector_arms.push("$vs");
     }
     // Episodes are verbatim and append-only: they are never superseded, so
     // the memory-side filters have nothing to say about them. Liveness has
@@ -226,6 +228,7 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
                  WHERE {chunks} ORDER BY d LIMIT {pool})"
         ));
         arms.push("$vsc");
+        vector_arms.push("$vsc");
     }
 
     let arms = arms.join(", ");
@@ -235,10 +238,30 @@ pub(crate) fn search(search: &Search, terms: &[String]) -> Script {
     builder.push("LET $hits = $fused.map(|$hit| $hit.id)");
     builder.push("LET $mids = $hits.filter(|$id| record::tb($id) = 'memory')");
     builder.push("LET $cids = $hits.filter(|$id| record::tb($id) = 'episode_chunk')");
+    // The vector arms already computed each candidate's cosine distance and
+    // the fusion throws it away — but it is the one absolute relevance signal
+    // a recall has (issue #77), so it rides back beside the fused order. Cast
+    // like the near-dup gate's: an identical vector gives an integral 0 that
+    // `f64` refuses.
+    let nearest = if vector_arms.is_empty() {
+        "[]".to_owned()
+    } else {
+        let lists: Vec<String> = vector_arms
+            .iter()
+            .map(|arm| {
+                format!(
+                    "{arm}.map(|$row| {{ id: record::id($row.id),
+                         table: record::tb($row.id), d: <float> $row.d }})"
+                )
+            })
+            .collect();
+        format!("array::flatten([{}])", lists.join(", "))
+    };
     builder.finish(format!(
         "RETURN {{
              scored: $fused.map(|$hit| {{ id: record::id($hit.id),
                  table: record::tb($hit.id), rrf: <float> $hit.rrf_score }}),
+             nearest: {nearest},
              memories: (SELECT {MEMORY_FIELDS} FROM $mids),
              chunks: (SELECT {CHUNK_FIELDS} FROM $cids)
          }}"
@@ -646,6 +669,27 @@ mod tests {
                 "a predicate rides the scan: {clause}"
             );
         }
+    }
+
+    #[test]
+    fn the_vector_arms_report_their_distances_and_text_arms_do_not() {
+        let mut request = Search::new(vec!["test".parse().expect("slug")]);
+        request.vector = Some(vec![0.0; 384]);
+
+        let hybrid = search(&request, &["red".to_owned()]).text;
+        assert!(hybrid.contains("$vs.map"), "{hybrid}");
+        assert!(hybrid.contains("$vsc.map"), "{hybrid}");
+        assert!(
+            hybrid.contains("<float> $row.d"),
+            "an identical vector gives an integral 0 that f64 refuses: {hybrid}"
+        );
+
+        request.vector = None;
+        let text_only = search(&request, &["red".to_owned()]).text;
+        assert!(
+            text_only.contains("nearest: []"),
+            "no vector arm, no distances — but the column is always present: {text_only}"
+        );
     }
 
     #[test]

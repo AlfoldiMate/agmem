@@ -40,6 +40,7 @@ cap covers exactly the flood the gate lets through.
       "retrieval": {
         "found": 2,
         "expected": 2,
+        "returned": 9,
         "mrr": 0.375
       },
       "timeline": {
@@ -60,12 +61,19 @@ cap covers exactly the flood the gate lets through.
       "staleness": {
         "stale_hits": 0,
         "pages": 3
+      },
+      "abstention": {
+        "fired": 2,
+        "expected": 2,
+        "false_abstentions": 0,
+        "pages": 2
       }
     },
     "episode-flood": {
       "retrieval": {
         "found": 2,
         "expected": 2,
+        "returned": 4,
         "mrr": 0.3333
       },
       "timeline": {
@@ -86,13 +94,20 @@ cap covers exactly the flood the gate lets through.
       "staleness": {
         "stale_hits": 0,
         "pages": 1
+      },
+      "abstention": {
+        "fired": 1,
+        "expected": 2,
+        "false_abstentions": 0,
+        "pages": 1
       }
     },
     "formatter-switch": {
       "retrieval": {
         "found": 3,
         "expected": 3,
-        "mrr": 0.5556
+        "returned": 13,
+        "mrr": 0.6111
       },
       "timeline": {
         "passed": 2,
@@ -112,12 +127,19 @@ cap covers exactly the flood the gate lets through.
       "staleness": {
         "stale_hits": 0,
         "pages": 4
+      },
+      "abstention": {
+        "fired": 1,
+        "expected": 2,
+        "false_abstentions": 0,
+        "pages": 3
       }
     },
     "user-profile": {
       "retrieval": {
         "found": 3,
         "expected": 3,
+        "returned": 14,
         "mrr": 0.8333
       },
       "timeline": {
@@ -138,6 +160,12 @@ cap covers exactly the flood the gate lets through.
       "staleness": {
         "stale_hits": 0,
         "pages": 4
+      },
+      "abstention": {
+        "fired": 2,
+        "expected": 2,
+        "false_abstentions": 0,
+        "pages": 3
       }
     }
   }
@@ -147,8 +175,11 @@ cap covers exactly the flood the gate lets through.
 Reading it:
 
 - **retrieval** — recall@k over the labelled probes (`found` of `expected`
-  relevant claims returned), and the mean reciprocal rank of each probe's
-  first relevant hit.
+  relevant claims returned), the mean reciprocal rank of each probe's first
+  relevant hit, and `returned` — every hit the probes handed back, the
+  precision denominator: it is what falls when the knee trim (issue #77)
+  drops a tail that merely ranked, and what shows the trim's benefit where
+  `found` alone would only ever show its cost.
 - **timeline** — supersession checks: the right claim answers live queries,
   the right one answers `as_of` queries, and a closed claim carries
   `invalid_reason` and `superseded_by`.
@@ -165,6 +196,14 @@ Reading it:
   when the query ran. Ground truth is the fixture's `supersedes` graph, not
   the hit's annotation, so a closed claim leaking unannotated still counts.
   Zero is the only honest number.
+- **abstention** — honest empty pages (issue #77): `fired` of `expected` over
+  the labelled unanswerables — queries whose ground truth is that nothing
+  seeded qualifies — and `false_abstentions` over every probe page, because
+  an abstainer that fires on everything posts a perfect `fired` score. The
+  baseline's 6-of-8 is a calibration finding, not slack: two unanswerables
+  measure inside BGE-small's relevant band (0.655–0.691 against a weakest
+  relevant page of 0.656), and a floor that caught them would abstain on
+  real answers. `false_abstentions` is the number that must stay zero.
 
 ## Re-running
 
@@ -224,6 +263,25 @@ Two mechanisms answer "would this harness notice a broken scoring change":
   clean. That gap — a run scoring honest while corrected claims surface —
   is what the column closes.
 
+  Setting `MIN_SIMILARITY` (`agmem-server/src/tools/abstain.rs`) to 0.0 and
+  `MIN_GAP` to `f64::INFINITY` — the abstention floor and the knee trim both
+  disabled, every page filling to `k` as it did before issue #77 — moved
+  seven fields (run 2026-09-01):
+
+  | field | baseline | mutated |
+  |---|---|---|
+  | deploy-migration abstention fired | 2/2 | 0/2 |
+  | deploy-migration retrieval returned | 9 | 10 |
+  | episode-flood abstention fired | 1/2 | 0/2 |
+  | formatter-switch abstention fired | 1/2 | 0/2 |
+  | formatter-switch retrieval returned | 13 | 15 |
+  | user-profile abstention fired | 2/2 | 0/2 |
+  | user-profile retrieval returned | 14 | 15 |
+
+  `found` and `mrr` did not move in either direction: the shipped floor and
+  trim give back no labelled answer, and the new columns are the only ones
+  watching what they add.
+
 ## What the baseline says about the system
 
 The imperfect columns are findings, not harness debt:
@@ -243,3 +301,11 @@ The imperfect columns are findings, not harness debt:
   pairs and two same-shape-different-fact claims it correctly let through.
   Small n; the fixtures should grow adversarial cases before this column is
   trusted.
+- **Two unanswerables sit inside BGE-small's relevant band.** "The team's
+  chilli cook-off entry" measures 0.691 against an incident-review store and
+  "the gym's opening hours" 0.655 against a tooling store — above the weakest
+  labelled-relevant page (0.656) — so the abstention floor cannot catch them
+  without abstaining on real answers. The full landscape is one run away:
+  `cargo test -p agmem-server --test eval -- --ignored calibrate_abstention
+  --nocapture`. A stronger embedder, or a margin signal beyond a single
+  cosine, is what would move `fired` past 6-of-8.

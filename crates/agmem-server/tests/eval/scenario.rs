@@ -31,6 +31,8 @@ pub struct Scenario {
     #[serde(default)]
     pub probes: Vec<Probe>,
     #[serde(default)]
+    pub abstain: Vec<AbstainCase>,
+    #[serde(default)]
     pub timeline: Vec<TimelineCheck>,
     #[serde(default)]
     pub gate: Vec<GateCase>,
@@ -67,6 +69,16 @@ pub struct Probe {
     pub query: String,
     pub k: u16,
     pub relevant: Vec<String>,
+}
+
+/// One question this store cannot answer: the honest page is empty
+/// (issue #77). No `relevant` set — the labelled ground truth is that
+/// nothing seeded qualifies.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AbstainCase {
+    pub query: String,
+    pub k: u16,
 }
 
 /// One supersession check: what should answer, live or as of an instant.

@@ -52,6 +52,16 @@
       "relevant": ["test-runner"]
     }
   ],
+  "abstain": [
+    {
+      "query": "which cloud region hosts the customer analytics warehouse?",
+      "k": 5
+    },
+    {
+      "query": "what are the gym's opening hours on public holidays?",
+      "k": 5
+    }
+  ],
   "timeline": [
     {
       "query": "python formatter",

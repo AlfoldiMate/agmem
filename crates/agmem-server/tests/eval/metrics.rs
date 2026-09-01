@@ -29,16 +29,20 @@ pub struct ScenarioScore {
     pub gate: Gate,
     pub context: Ratio,
     pub staleness: Staleness,
+    pub abstention: Abstention,
 }
 
 /// How much of the labelled-relevant set the probes brought back, and how
-/// early. `found`/`expected` is recall@k over all probes; `mrr` is the mean
+/// early. `found`/`expected` is recall@k over all probes; `returned` is every
+/// hit the probes handed back — the precision denominator, without which a
+/// trim's cost is measured and its benefit is not; `mrr` is the mean
 /// reciprocal rank of each probe's first relevant hit, rounded to four
 /// decimals so the doc round-trips to the same f64.
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Retrieval {
     pub found: u32,
     pub expected: u32,
+    pub returned: u32,
     pub mrr: f64,
 }
 
@@ -76,6 +80,19 @@ pub struct Staleness {
     pub pages: u32,
 }
 
+/// Honest empty pages (issue #77). `fired`/`expected` is over the abstain
+/// cases — queries whose labelled ground truth is that nothing seeded
+/// answers them; `false_abstentions`/`pages` replays every probe and counts
+/// the ones that wrongly came back empty, because an abstainer that fires on
+/// everything posts a perfect `fired` score.
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct Abstention {
+    pub fired: u32,
+    pub expected: u32,
+    pub false_abstentions: u32,
+    pub pages: u32,
+}
+
 /// Scores every scenario with the given embedder.
 pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>) -> Scorecard {
     let mut scores = BTreeMap::new();
@@ -88,6 +105,7 @@ pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>) -> S
                 gate: gate(scenario, embedder.clone()).await,
                 context: context(scenario, embedder.clone()).await,
                 staleness: staleness(scenario, embedder.clone()).await,
+                abstention: abstention(scenario, embedder.clone()).await,
             },
         );
     }
@@ -106,6 +124,7 @@ fn hit_ids(found: &Value) -> Vec<&str> {
 pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retrieval {
     let mut found = 0;
     let mut expected = 0;
+    let mut returned_total = 0;
     let mut reciprocal_sum = 0.0;
     for probe in &scenario.probes {
         let seeded = scenario::seed(scenario, embedder.clone()).await;
@@ -121,6 +140,7 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
         let returned = hit_ids(&answer);
         found += returned.iter().filter(|id| relevant.contains(*id)).count() as u32;
         expected += relevant.len().min(usize::from(probe.k)) as u32;
+        returned_total += returned.len() as u32;
         if let Some(rank) = returned.iter().position(|id| relevant.contains(id)) {
             reciprocal_sum += 1.0 / (rank + 1) as f64;
         }
@@ -135,7 +155,40 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
     Retrieval {
         found,
         expected,
+        returned: returned_total,
         mrr,
+    }
+}
+
+/// Abstention over the labelled unanswerables, and its false-positive check
+/// over every probe: an empty page where the fixture labels hits relevant is
+/// a wrong abstention wherever the mechanism that emptied it lives.
+pub async fn abstention(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Abstention {
+    let mut fired = 0;
+    for case in &scenario.abstain {
+        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let answer = seeded
+            .agmem
+            .recall(json!({ "query": case.query, "k": case.k }))
+            .await;
+        fired += u32::from(hit_ids(&answer).is_empty());
+        seeded.shutdown().await;
+    }
+    let mut false_abstentions = 0;
+    for probe in &scenario.probes {
+        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let answer = seeded
+            .agmem
+            .recall(json!({ "query": probe.query, "k": probe.k }))
+            .await;
+        false_abstentions += u32::from(hit_ids(&answer).is_empty());
+        seeded.shutdown().await;
+    }
+    Abstention {
+        fired,
+        expected: scenario.abstain.len() as u32,
+        false_abstentions,
+        pages: scenario.probes.len() as u32,
     }
 }
 

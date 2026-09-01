@@ -1,0 +1,53 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.nT8cbShW14",
+  "answer": "Pulled everything tagged `atlas` from memory (48 hits). Here's what's duplicated or conflicting — nothing changed yet.\n\n**Contradiction (needs a decision):**\n- \"Merging to main deploys atlas to staging automatically.\" vs. \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\" These directly disagree on whether staging deploys are automatic. Both were stored in the same batch with no correction recorded, so I can't tell which is current — you'll need to say which is true.\n\n**Duplicates (same fact, stored 3x):**\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n  All three just say \"deploy = bin/ship.sh from repo root.\" The first is the most informative (also notes `make deploy` is gone); the other two are redundant and could be dropped.\n\n**Duplicates (2x):**\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n  Same claim, worded differently.\n\n**Likely stale / not durable (worth pruning before handover):**\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — time-relative (\"this week\"), will read as wrong almost immediately.\n- \"The branch under review is spike/consolidate.\" — looks like leftover session state rather than a project fact; probably shouldn't persist as a standing memory.\n\nEverything else (CI pipeline order, Postgres 15/16 support, crate layout, API auth/rate-limiting, release/semver process, PR/branch conventions, etc.) looks internally consistent with no overlaps.\n\nWant me to fix the contradiction once you tell me which deploy behavior is actually true, and prune the duplicates/stale entries?",
+  "cost_usd": 0.1616576,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1DPB7ST8XNY3CN2M1R9QDXV\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:16:21.489241Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1DPB7SN49VRQKNSF0P53QDE\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1DPB7M18KX2TDRNB815EJV0\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999934735244,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999738940976,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:16:21.48905Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1DPB7MAQ1KQQSHAFRT63154\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8906533297805231,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\""
+    }
+  ]
+}

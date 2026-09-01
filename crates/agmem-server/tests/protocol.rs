@@ -2471,6 +2471,54 @@ async fn consolidate_stays_in_the_current_space_unless_asked_otherwise() {
 }
 
 #[tokio::test]
+async fn consolidate_notes_the_cut_when_it_finds_more_than_one_answer_carries() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    // Three claims naming one subject per space: 0°, 20° and 40° are three
+    // pairs in the contradiction band, every one under the 0.95 write gate.
+    // Seven spaces make 21 candidates, one more than one answer carries —
+    // the shape `space: "all"` reaches while each space stays well under
+    // the row-fetch cap, so `scanned` confesses nothing (issue #68).
+    for space in 1..=7 {
+        agmem
+            .remember(json!({
+                "space": format!("team-{space}"),
+                "memories": [
+                    { "content": "the user formats python with black",
+                      "entities": ["formatter"] },
+                    { "content": "python here is formatted by blackfmt",
+                      "entities": ["formatter"] },
+                    { "content": "formatting runs blake over python",
+                      "entities": ["formatter"] },
+                ]
+            }))
+            .await;
+    }
+
+    let found = agmem.consolidate(json!({ "space": "all" })).await;
+    let contradictions = found["contradictions"].as_array().expect("an array");
+    assert_eq!(contradictions.len(), 20, "the cap holds: {found:#}");
+    for scan in found["scanned"].as_array().expect("an array") {
+        assert_eq!(
+            scan["truncated"], false,
+            "no space came anywhere near the row-fetch cut: {found:#}"
+        );
+    }
+
+    let note = found["note"]
+        .as_str()
+        .expect("a capped answer carries a note");
+    assert!(
+        note.contains("than one answer carries"),
+        "the cut has to be admitted, not silent: {note}"
+    );
+    assert_eq!(
+        found["near_duplicates"].as_array().expect("an array").len(),
+        7,
+        "one chained cluster per space, nowhere near its own cap: {found:#}"
+    );
+}
+
+#[tokio::test]
 async fn a_reflection_is_recallable_and_walks_back_to_its_evidence() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
     let stored = agmem

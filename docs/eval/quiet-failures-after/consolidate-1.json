@@ -1,0 +1,42 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.L4Y9ox4Amm",
+  "answer": "Pulled everything tagged `atlas` (48 memories). Here's what stands out — nothing changed yet.\n\n## Contradiction (the important one)\nTwo facts directly conflict on how staging deploys work:\n- **\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"**\n- **\"Merging to main deploys atlas to staging automatically.\"**\n\nOne of these is stale — the deploy process almost certainly changed at some point (manual → automatic, or the reverse) and only one memory got updated. Worth confirming which is current before handoff so the new owner isn't given wrong info.\n\n## Duplicates (same fact, restated separately)\n**Deploy command** — three near-identical entries all saying \"deploy = run `bin/ship.sh`\":\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"Deploying atlas means executing bin/ship.sh; the old `make deploy` target is gone.\" (this one has the extra \"make deploy is gone\" detail worth keeping)\n\n**Test runner** — two entries saying the same thing:\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n\n## Minor inconsistency\n- \"atlas stores its data in Postgres 16...\" reads as if 16 is the only supported version, while another memory says \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" Not contradictory, just imprecise phrasing in the first one.\n\n## Likely stale (ephemeral, time-bound)\nThese read like in-the-moment notes rather than durable project facts, and both have low retention scores already:\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — \"this week\" is now meaningless without a date; probably resolved or superseded.\n- \"The branch under review is spike/consolidate.\" — likely long since merged, abandoned, or renamed.\n\nEverything else (CI pipeline steps, API/auth details, workspace crate layout, release process, branch/PR conventions, etc.) looks internally consistent with no overlap.\n\nWant me to fix the contradiction and merge the duplicates, or would you rather verify the deploy behavior first?",
+  "cost_usd": 0.1064662,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "k": 50,
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1DQQZSQZ5FRP8FD61K4PJ1Q\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:40:47.870432Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1DQQZSKGXCHNWSND4HDC8SZ\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    }
+  ]
+}

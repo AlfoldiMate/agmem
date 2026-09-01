@@ -57,8 +57,14 @@ const NEIGHBOURS: usize = 4;
 ///
 /// Its `K` is 1 — the single nearest live neighbour — but for the reason in
 /// [`OVER_FETCH`] the scan no longer knows what "live" or "in this space"
-/// mean, so it needs room to reach past the rows the gate will discard.
-const NEAR_DUP_PROBE: usize = 64;
+/// mean, so it needs room to reach past the rows the gate will discard. The
+/// room is a fixed bound, not one scaled to the store (issue #73): in a store
+/// whose hot neighbourhood is other spaces and closed rows more than this
+/// many to one, the true in-space neighbour can still fall outside the draw,
+/// and the gate fails *open* — the paraphrase lands as a new claim for
+/// `consolidate` to catch later. Its EF rides at `K` rather than at
+/// [`EF_SEARCH`] so the traversal's candidate list is never what binds first.
+const NEAR_DUP_PROBE: usize = 256;
 
 /// The `memory` columns [`memory_where`] can name.
 ///
@@ -360,7 +366,7 @@ pub(crate) fn nearest_live(count: usize) -> Script {
             "LET $n{index} = (SELECT id, content, distance FROM
                  (SELECT record::id(id) AS id, content, space, invalid_at,
                       <float> vector::distance::knn() AS distance FROM memory
-                  WHERE embedding <|{NEAR_DUP_PROBE},{EF_SEARCH}|> $vec{index})
+                  WHERE embedding <|{NEAR_DUP_PROBE},{NEAR_DUP_PROBE}|> $vec{index})
                  WHERE space = $space AND invalid_at IS NONE
                  ORDER BY distance LIMIT {NEIGHBOURS})"
         ));

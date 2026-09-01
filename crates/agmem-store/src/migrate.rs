@@ -65,9 +65,15 @@ pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
 /// no pair has never held a vector (every run that could write one records
 /// its pair here first), so the indexes are empty and the switch is free.
 ///
+/// Two first runs on one shared store — `ws://`, where no advisory lock
+/// serialises processes — can both find the pair absent (issue #72). The
+/// write is conditional on it still being absent, so the engine lets exactly
+/// one land, and the re-read after it turns the loser into an ordinary
+/// mismatch refusal instead of a silent overwrite.
+///
 /// # Errors
 /// [`StoreError::EmbedderMismatch`] when the store was embedded with another
-/// model or width.
+/// model or width, or when a concurrent first run recorded its pair first.
 pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), StoreError> {
     if dim == 0 {
         return Ok(());
@@ -111,12 +117,34 @@ pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), 
                 crate::repo::reindex::reset_vectors(db, dim).await?;
             }
             tracing::info!(model = model_id, dim, "recording store embedder");
-            db.query("UPSERT meta:main SET embedder_model = $model, embedder_dim = $dim")
-                .bind(("model", model_id.to_owned()))
-                .bind(("dim", width))
-                .await?
-                .check()?;
-            Ok(())
+            // Conditional on the pair still being absent: a check in Rust and
+            // an unconditional write is two statements, and another first run
+            // fits between them (issue #72). One guarded statement is the
+            // only write the engine applies atomically, so exactly one pair
+            // lands — the re-read below is what tells a loser it lost.
+            db.query(
+                "UPDATE meta:main SET embedder_model = $model, embedder_dim = $dim
+                 WHERE embedder_model IS NONE AND embedder_dim IS NONE",
+            )
+            .bind(("model", model_id.to_owned()))
+            .bind(("dim", width))
+            .await?
+            .check()?;
+            match stored_embedder(db).await? {
+                Some((model, stored)) if model == model_id && stored == width => Ok(()),
+                Some((stored_model, stored_dim)) => Err(StoreError::EmbedderMismatch {
+                    stored_model,
+                    stored_dim,
+                    configured_model: model_id.to_owned(),
+                    configured_dim: width,
+                }),
+                // `ensure` ran before this, so `meta:main` exists and one of
+                // the writers above matched it; an absent pair here is the
+                // engine misbehaving, not a caller error.
+                None => Err(StoreError::UnexpectedResponse(
+                    "no embedder pair recorded after writing one",
+                )),
+            }
         }
     }
 }

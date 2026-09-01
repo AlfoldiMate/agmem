@@ -2,7 +2,7 @@
 
 use agmem_core::SpaceName;
 use agmem_store::repo::{self, Lookup};
-use agmem_store::{db, migrate};
+use agmem_store::{StoreError, db, migrate};
 
 #[tokio::test]
 async fn fresh_store_migrates_then_reruns_as_noop() {
@@ -41,6 +41,48 @@ async fn the_embedder_is_recorded_once_and_then_enforced() {
     migrate::ensure_embedder(&conn, "none", 0)
         .await
         .expect("BM25-only mode claims no vector space and opens any store");
+}
+
+/// Issue #72: concurrent first runs on one shared store race the
+/// check-then-write. However the statements interleave — and a `mem://`
+/// engine is free to interleave them anywhere between the read and the
+/// guarded write — exactly one pair may land, and every other contender gets
+/// the ordinary mismatch refusal rather than silently overwriting the winner.
+#[tokio::test]
+async fn concurrent_first_runs_record_exactly_one_embedder() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    migrate::ensure(&conn).await.expect("ensure");
+
+    let contenders: Vec<_> = (0..8)
+        .map(|n| {
+            let db = conn.clone();
+            tokio::spawn(async move {
+                migrate::ensure_embedder(&db, &format!("contender-{n}"), 384).await
+            })
+        })
+        .collect();
+
+    let mut winners = Vec::new();
+    for (n, contender) in contenders.into_iter().enumerate() {
+        match contender.await.expect("no contender panics") {
+            Ok(()) => winners.push(format!("contender-{n}")),
+            Err(StoreError::EmbedderMismatch { stored_model, .. }) => {
+                assert!(
+                    stored_model.starts_with("contender-"),
+                    "a loser is refused with the winner's pair: {stored_model}"
+                );
+            }
+            Err(other) => panic!("losing the race is a mismatch, not: {other}"),
+        }
+    }
+    assert_eq!(winners.len(), 1, "exactly one first run records its pair");
+
+    let (model, dim) = migrate::stored_embedder(&conn)
+        .await
+        .expect("read the pair")
+        .expect("a pair was recorded");
+    assert_eq!(model, winners[0], "the store holds the winner's model");
+    assert_eq!(dim, 384);
 }
 
 /// A row written before v2 carries no `derived_from` column at all — a

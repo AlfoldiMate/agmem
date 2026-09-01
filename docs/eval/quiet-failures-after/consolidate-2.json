@@ -1,0 +1,43 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.TkM2Pph9bj",
+  "answer": "I pulled everything tagged `atlas` from memory (46 hits). Here's what stands out — nothing changed yet.\n\n**Direct contradiction (needs a decision):**\n- \"Merging to main deploys atlas to staging automatically.\" vs. \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\" These can't both be true — one is stale.\n\n**Duplicates (same fact, restated):**\n- Ship process, 3 copies: \"deployed by running bin/ship.sh from the repository root,\" \"to ship atlas you run the bin/ship.sh script at the top of the repo,\" and \"deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" The third is the most informative (mentions `make deploy` was retired) — the other two are redundant subsets.\n- Test runner, 2 copies: \"The atlas test suite is run with cargo nextest run, not cargo test\" (tag: testing) and \"Tests in atlas are run through cargo nextest run; plain cargo test is not used\" (tag: ci). Same claim, just tagged differently.\n\n**Likely stale / time-bound (worth pruning before handover):**\n- \"The flaky test being chased this week is pagination_ordering in atlas-api\" — \"this week\" language, heavily decayed retention score, almost certainly resolved or irrelevant now.\n- \"The branch under review is spike/consolidate\" — leftover session context, very low retention, not a durable project fact.\n\n**Minor inconsistency (probably not contradictory, but imprecise):**\n- \"atlas stores its data in Postgres 16\" says just 16, while \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0\" is more precise. Not conflicting, but the first is an incomplete version of the second.\n\nEverything else (CI pipeline steps, crate layout, API auth/port/rate-limiting, release/semver process, branch naming, PR approval rules, docs/build tooling) looks internally consistent with no duplicates.\n\nWant me to consolidate the duplicates, resolve the staging-deploy contradiction (I'd need you to tell me which is current), and forget the two stale session-context items?",
+  "cost_usd": 0.1076338,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1DQS5T5XWEV0K19XPSK7TR1\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664820125359058,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659280501436234,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:41:26.979862Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1DQS5TWGBCN5TQE27E9P11V\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8478632815724851,\\\"signals\\\":{\\\"importance\\\":1,\\\"retenti"
+    }
+  ]
+}

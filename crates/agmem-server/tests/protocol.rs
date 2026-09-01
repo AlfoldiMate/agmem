@@ -603,6 +603,50 @@ async fn a_write_records_its_writer_and_inspect_shows_it() {
     agmem.shutdown().await;
 }
 
+/// Issue #75's speculative seam, exercised for the first time (issue #86): a
+/// client that names its session in `_meta["agmem/session"]` is attributed
+/// to it, and one that stays silent gets the connection's minted id — never
+/// a leftover from another request.
+#[tokio::test]
+async fn a_meta_session_override_is_what_the_writer_records() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    let result = agmem
+        .call_as(
+            "seed-7",
+            "remember",
+            json!({ "memories": [{ "content": "The override names this row's session." }] }),
+        )
+        .await
+        .expect("remember");
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    let diff = result.structured_content.expect("structured content");
+    let overridden = ids(&diff["created"])[0].to_owned();
+
+    let found = agmem.inspect(&overridden).await;
+    assert_eq!(
+        found["found"]["memory"]["writer"]["session"].as_str(),
+        Some("seed-7"),
+        "{found}"
+    );
+
+    // Silence on the next request falls back to the connection's id, not to
+    // the override the previous request carried.
+    let plain = agmem
+        .remember(json!({ "memories": [{ "content": "No override on this row." }] }))
+        .await;
+    let fallback = ids(&plain["created"])[0].to_owned();
+    let found = agmem.inspect(&fallback).await;
+    let session = found["found"]["memory"]["writer"]["session"]
+        .as_str()
+        .expect("a session id");
+    assert!(
+        !session.is_empty() && session != "seed-7",
+        "the fallback is the connection's own id: {found}"
+    );
+    agmem.shutdown().await;
+}
+
 #[tokio::test]
 async fn a_restatement_comes_back_as_the_id_that_already_holds_it() {
     let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;

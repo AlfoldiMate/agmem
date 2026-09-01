@@ -17,6 +17,8 @@ use std::sync::Arc;
 #[cfg(feature = "onnx")]
 pub mod fastembed;
 pub mod noop;
+#[cfg(feature = "rerank")]
+pub mod rerank;
 #[cfg(feature = "static")]
 pub mod static_m2v;
 

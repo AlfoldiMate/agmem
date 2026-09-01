@@ -378,7 +378,7 @@ pub(crate) fn nearest_live(count: usize) -> Script {
     builder.finish(format!("RETURN [{}]", probes.join(", ")))
 }
 
-/// Recall's reinforcement (design §5.3 step 5), for a whole page of hits.
+/// Recall's reinforcement (design §5.3 step 6), for a whole page of hits.
 ///
 /// An id naming no row is a silent no-op `UPDATE`, which is what makes this
 /// safe to fire and forget; the returned ids are the ones that existed.

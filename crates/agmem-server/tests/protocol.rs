@@ -1433,6 +1433,85 @@ async fn a_filters_only_recall_ranks_on_decay_alone() {
     agmem.shutdown().await;
 }
 
+/// Issue #76: no single source may flood a page. Six claims distilled from
+/// one episode all match the query; the cap keeps the strongest of them and
+/// gives the freed slots to agent-sourced claims ranked below — and the
+/// answer admits the cut the way `truncated` admits `k`'s.
+#[tokio::test]
+async fn one_dominant_episode_cannot_flood_a_page() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let flood = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "The payment gateway retries failed charges three times" },
+                { "content": "The payment gateway settles in nightly batches" },
+                { "content": "The payment gateway sandbox needs its own API key" },
+                { "content": "The payment gateway rejects amounts over ten thousand" },
+                { "content": "The payment gateway webhooks are signed with HMAC" },
+                { "content": "The payment gateway dashboard lags settlement by a day" }
+            ],
+            "episode": {
+                "content": "A long call about the payment gateway migration."
+            }
+        }))
+        .await;
+    let episode = flood["episode"].as_str().expect("the episode id");
+    agmem
+        .remember(json!({ "memories": [
+            { "content": "The payment gateway choice was made for its refund API" },
+            { "content": "The team owns the payment gateway integration" },
+            { "content": "Invoices reconcile against the payment gateway monthly" }
+        ] }))
+        .await;
+
+    let page = agmem
+        .recall(json!({ "query": "payment gateway", "k": 5 }))
+        .await;
+    let flood_key = format!("episode:{episode}");
+    let from_flood = hits(&page)
+        .iter()
+        .filter(|hit| hit["source"].as_str() == Some(flood_key.as_str()))
+        .count();
+    assert!(
+        from_flood <= 3,
+        "one source holds at most cap(5) = 3 of 5 slots: {page}"
+    );
+    assert!(
+        hits(&page)
+            .iter()
+            .any(|hit| hit["source"].as_str() == Some("agent")),
+        "the freed slots went to hits from elsewhere: {page}"
+    );
+
+    let capped = &page["capped"];
+    assert_eq!(capped["cap"].as_u64(), Some(3), "{page}");
+    assert!(
+        capped["displaced"].as_u64().is_some_and(|count| count >= 1),
+        "{page}"
+    );
+    assert_eq!(
+        capped["sources"]
+            .as_array()
+            .expect("sources")
+            .iter()
+            .map(|source| source.as_str().expect("a string"))
+            .collect::<Vec<_>>(),
+        [flood_key.as_str()],
+        "the answer names the flooder, ready for `inspect`: {page}"
+    );
+
+    // A page the cap did not change carries no `capped` — absence must keep
+    // meaning "this is exactly the ranking".
+    let calm = agmem
+        .recall(json!({ "query": "refund API choice", "k": 10 }))
+        .await;
+    assert!(
+        calm["capped"].is_null(),
+        "a page nothing was deferred from admits no cut: {calm}"
+    );
+    agmem.shutdown().await;
+}
+
 #[tokio::test]
 async fn a_full_page_says_how_much_of_the_store_it_is_not() {
     // The measurement behind this: asked what memory holds about a subject, an

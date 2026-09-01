@@ -56,6 +56,11 @@ pub mod remember;
 /// widen the set.
 mod hop;
 
+/// Not a tool: `recall`'s per-source occupancy cap (see its module doc).
+/// Private for the same reason as `hop` — `context` assembles its own page
+/// and is deliberately uncapped, a choice its module records.
+mod occupancy;
+
 use std::borrow::Cow;
 use std::sync::Arc;
 

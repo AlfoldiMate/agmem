@@ -21,7 +21,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::service::AgmemService;
-use crate::tools::{self, embed_query, hop, invalid, provenance, store_error};
+use crate::tools::{self, embed_query, hop, invalid, occupancy, provenance, store_error};
 
 /// How many hits a call that does not say gets back.
 const DEFAULT_K: u16 = 10;
@@ -80,12 +80,59 @@ pub struct RecallResult {
     /// The matches, highest `score` first.
     pub hits: Vec<RecallHit>,
 
+    /// Present when the per-source occupancy cap changed this page: some
+    /// source had more strong hits than one source may hold, and the surplus
+    /// yielded its slots to the next-ranked hits from elsewhere. Absent means
+    /// the page is exactly the ranking, uncapped.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capped: Option<Capped>,
+
     /// Present when this answer filled `k` and the filters select more claims
     /// than it carries — so what came back is a page. Absent means `k` did not
     /// cut anything short: either the page never filled, or nothing beyond it
     /// matches these filters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncated: Option<Truncated>,
+}
+
+/// What the occupancy cap moved out of the page (issue #76).
+///
+/// A page one source dominates reads exactly like a page many sources agree
+/// on, so the cut is admitted here the way `truncated` admits `k`'s.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Capped {
+    /// The most hits of this page any single source may hold.
+    pub cap: usize,
+
+    /// How many over-quota hits left the page for lower-ranked ones from
+    /// other sources.
+    pub displaced: usize,
+
+    /// The sources that were over quota — the same `episode:<id>` or
+    /// `external:<origin>` strings the hits carry, ready for `inspect`.
+    pub sources: Vec<String>,
+
+    /// The same thing in words.
+    pub note: String,
+}
+
+impl Capped {
+    fn new(cap: usize, resliced: occupancy::Resliced) -> Self {
+        let sources = resliced.sources.join(", ");
+        let note = format!(
+            "{displaced} strong hit(s) from {sources} were moved off this page: no single \
+             source may hold more than {cap} of its slots, so the surplus yielded to the \
+             next-ranked hits from elsewhere. Raise `k`, or `inspect` the source, to see \
+             what was deferred.",
+            displaced = resliced.displaced,
+        );
+        Self {
+            cap,
+            displaced: resliced.displaced,
+            sources: resliced.sources,
+            note,
+        }
+    }
 }
 
 /// What a `k` left behind.
@@ -300,7 +347,22 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             (candidate.hit, signals)
         }));
 
-    // 2b. `take(k)` cuts at exactly the depth the hop arm's weakness leaves
+    // 2b. No single source may flood the page (issue #76): over-quota hits
+    //     defer to the next-ranked ones from elsewhere. Before the hop's
+    //     tail reserve on purpose — the hop may then promote one hop-voted
+    //     row back over quota, which is bounded (one row, one source) where
+    //     capping last would re-create the miss the hop exists to fix.
+    let page_cap = occupancy::cap(k);
+    let capped = occupancy::apply(&mut ranked, k, page_cap, |(hit, _)| match hit {
+        StoreHit::Memory(memory) => match &memory.source {
+            agmem_core::Source::Agent => None,
+            source => Some(provenance(source)),
+        },
+        StoreHit::Chunk(chunk) => Some(format!("episode:{}", chunk.episode)),
+    })
+    .map(|resliced| Capped::new(page_cap, resliced));
+
+    // 2c. `take(k)` cuts at exactly the depth the hop arm's weakness leaves
     //     its rows at, and the row was fetched precisely to be seen — so a
     //     full page that would carry no hop-voted row gives its last slot to
     //     the best one below the cut (issue #43).
@@ -351,6 +413,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             .into_iter()
             .map(|(hit, ranked)| RecallHit::new(hit, &ranked))
             .collect(),
+        capped,
         truncated,
     })
 }
@@ -445,7 +508,7 @@ fn resolve_liveness(as_of: Option<&str>, include_invalidated: bool) -> Result<Li
     }
 }
 
-/// Push every memory this call returned back up its decay curve (§5.3 step 5).
+/// Push every memory this call returned back up its decay curve (§5.3 step 6).
 ///
 /// Fire-and-forget in the sense that matters: a failure is logged and dropped
 /// rather than turned into a failed recall — the agent has its hits either

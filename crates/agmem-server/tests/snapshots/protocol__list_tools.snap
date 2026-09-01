@@ -1246,6 +1246,41 @@ expression: "&tools.tools"
     },
     "outputSchema": {
       "$defs": {
+        "Capped": {
+          "description": "What the occupancy cap moved out of the page (issue #76).\n\nA page one source dominates reads exactly like a page many sources agree\non, so the cut is admitted here the way `truncated` admits `k`'s.",
+          "properties": {
+            "cap": {
+              "description": "The most hits of this page any single source may hold.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "displaced": {
+              "description": "How many over-quota hits left the page for lower-ranked ones from\nother sources.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "note": {
+              "description": "The same thing in words.",
+              "type": "string"
+            },
+            "sources": {
+              "description": "The sources that were over quota — the same `episode:<id>` or\n`external:<origin>` strings the hits carry, ready for `inspect`.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "cap",
+            "displaced",
+            "sources",
+            "note"
+          ],
+          "type": "object"
+        },
         "HitKind": {
           "description": "What a hit is.",
           "oneOf": [
@@ -1428,6 +1463,17 @@ expression: "&tools.tools"
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "capped": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Capped"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present when the per-source occupancy cap changed this page: some\nsource had more strong hits than one source may hold, and the surplus\nyielded its slots to the next-ranked hits from elsewhere. Absent means\nthe page is exactly the ranking, uncapped."
+        },
         "hits": {
           "description": "The matches, highest `score` first.",
           "items": {

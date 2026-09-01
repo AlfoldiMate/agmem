@@ -523,6 +523,7 @@ mod tests {
             supersedes: Vec::new(),
             superseded_by: None,
             source: Source::Agent,
+            writer: None,
             derived_from: Vec::new(),
             created_at: Timestamp::UNIX_EPOCH,
         }

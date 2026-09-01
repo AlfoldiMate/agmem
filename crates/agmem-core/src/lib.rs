@@ -12,5 +12,5 @@ pub mod scoring;
 pub use error::CoreError;
 pub use model::{
     ChunkId, DecayClass, Derivation, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind,
-    MemoryId, MemoryRecord, Source, SpaceName,
+    MemoryId, MemoryRecord, Source, SpaceName, Writer,
 };

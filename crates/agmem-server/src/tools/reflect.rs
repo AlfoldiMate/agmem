@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use agmem_core::{Derivation, Kind, MemoryId, SpaceName, dedup};
+use agmem_core::{Derivation, Kind, MemoryId, SpaceName, Writer, dedup};
 use agmem_store::repo::{self, Batch, NewMemory};
 use rmcp::ErrorData;
 use schemars::JsonSchema;
@@ -143,6 +143,7 @@ pub struct Related {
 pub async fn run(
     service: &AgmemService,
     params: ReflectParams,
+    writer: Writer,
 ) -> Result<ReflectResult, ErrorData> {
     let ReflectParams {
         space,
@@ -227,6 +228,7 @@ pub async fn run(
             space,
             episode: None,
             memories: vec![memory],
+            writer,
         },
     )
     .await

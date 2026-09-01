@@ -17,7 +17,7 @@
 
 #![cfg(feature = "onnx")]
 
-use agmem_core::{Kind, SpaceName};
+use agmem_core::{Kind, SpaceName, Writer};
 use agmem_embed::Embedder;
 use agmem_embed::fastembed::FastembedBackend;
 use agmem_store::db::Db;
@@ -235,6 +235,7 @@ async fn write_session(url: &str, name: &str, memories: Vec<NewMemory>) {
             space: space(name),
             episode: None,
             memories,
+            writer: Writer::default(),
         },
     )
     .await

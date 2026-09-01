@@ -68,6 +68,11 @@ pub struct AgmemService {
     /// conversation: the daemon builds one service per connection, so a scope
     /// one agent confirmed can never authorise another agent's delete.
     pending_forget: Pending,
+    /// The session id this connection's writes are attributed to (issue #75),
+    /// unless a request carries its own in `_meta`. Minted here because the
+    /// daemon builds one service per connection — which is exactly the
+    /// granularity a session is.
+    session: String,
     /// The routes this session serves, with `config.tool_desc` already
     /// applied. Held as a field rather than rebuilt per request — which is
     /// what a bare `#[tool_handler]` does — so the surface is decided once, at
@@ -87,6 +92,13 @@ impl AgmemService {
             db,
             embedder,
             pending_forget: Pending::default(),
+            // Distinct per connection and sortable by start time; not a ULID
+            // only because nothing in this crate mints those.
+            session: format!(
+                "{}-{}",
+                std::process::id(),
+                jiff::Timestamp::now().as_nanosecond()
+            ),
             tool_router: described(Self::tool_router(), &config),
             prompt_router: Self::prompt_router(),
             config,
@@ -111,6 +123,11 @@ impl AgmemService {
     /// The gate a `forget` by query has to pass (design §5.4).
     pub(crate) fn pending_forget(&self) -> &Pending {
         &self.pending_forget
+    }
+
+    /// The session id this connection's writes fall back to (issue #75).
+    pub(crate) fn session(&self) -> &str {
+        &self.session
     }
 }
 
@@ -191,8 +208,10 @@ than acted on. When one of them says something your claim contradicts, send your
     async fn remember(
         &self,
         Parameters(params): Parameters<RememberParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<RememberResult>, ErrorData> {
-        remember::run(self, params).await.map(Json)
+        let writer = crate::tools::writer(self, &context, "remember");
+        remember::run(self, params, writer).await.map(Json)
     }
 
     /// The read verb (design §5.3).
@@ -391,8 +410,10 @@ text, for the same decision.",
     async fn reflect(
         &self,
         Parameters(params): Parameters<ReflectParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<ReflectResult>, ErrorData> {
-        reflect::run(self, params).await.map(Json)
+        let writer = crate::tools::writer(self, &context, "reflect");
+        reflect::run(self, params, writer).await.map(Json)
     }
 }
 

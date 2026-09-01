@@ -4,7 +4,7 @@
 //! HNSW index will accept — so the negative cases here are the point: they
 //! are what says the clear cannot be skipped.
 
-use agmem_core::{Kind, SpaceName};
+use agmem_core::{Kind, SpaceName, Writer};
 use agmem_store::db::Db;
 use agmem_store::repo::{self, Batch, NewChunk, NewEpisode, NewMemory};
 use agmem_store::{StoreError, db, migrate};
@@ -44,6 +44,7 @@ async fn seed(db: &Db, width: Option<usize>) -> usize {
     repo::insert_batch(
         db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(episode),
             memories: vec![fact, instruction],
@@ -86,6 +87,7 @@ async fn a_new_width_is_refused_until_the_vectors_are_cleared() {
     let err = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![narrow],

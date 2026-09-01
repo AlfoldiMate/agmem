@@ -11,7 +11,7 @@
 //! fulltext arm's order arbitrary. Every term asserted on here appears in
 //! exactly one row of several.
 
-use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup};
+use agmem_core::{DecayClass, EpisodeId, Kind, MemoryId, Source, SpaceName, Writer, dedup};
 use agmem_store::db::Db;
 use agmem_store::repo::{
     self, Batch, Candidate, Filters, Forget, Hit, Liveness, Lookup, NewChunk, NewEpisode,
@@ -73,6 +73,7 @@ async fn seeded() -> Db {
     repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode {
                 content: "a long conversation".to_owned(),
@@ -232,6 +233,7 @@ async fn an_as_of_recall_excludes_chunks_that_had_not_yet_happened() {
     repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode {
                 content: "an older conversation".to_owned(),
@@ -283,6 +285,7 @@ async fn a_closed_memory_is_invisible_until_the_window_asks_for_it() {
     repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![correction],
@@ -491,6 +494,7 @@ async fn a_count_answers_for_the_whole_selection_a_limit_only_pages() {
     repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![correction],
@@ -521,6 +525,7 @@ async fn a_history_walk_returns_the_whole_chain_from_any_link() {
     let second = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![second],
@@ -536,6 +541,7 @@ async fn a_history_walk_returns_the_whole_chain_from_any_link() {
     let third = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![third],
@@ -640,6 +646,7 @@ async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
     repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![correction],
@@ -764,6 +771,7 @@ async fn the_all_pairs_scan_pairs_every_live_row_with_its_own_vector() {
     repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![NewMemory::new(
@@ -887,6 +895,7 @@ async fn stale_contexts_are_the_rows_reinforcement_carried_past_the_prune() {
     let ids: Vec<MemoryId> = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: None,
             memories: vec![

@@ -140,6 +140,13 @@ pub struct MemoryView {
     /// Where it came from: `agent`, `episode:<id>`, or `external:<origin>`.
     pub source: String,
 
+    /// Who wrote the row: the MCP client, the session the write belonged to,
+    /// and the verb that performed it. Absent on rows stored before agmem
+    /// recorded writers — absence means "not recorded", never "unknown
+    /// client" (see the `derived_from` note below on why this is `Option`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub writer: Option<WriterView>,
+
     /// What this claim was reflected out of, when `reflect` wrote it: the
     /// memories and episodes it was drawn from, as refs to hand straight back
     /// to `inspect`. Absent on a claim that cites nothing.
@@ -191,6 +198,24 @@ pub struct MemoryView {
 
     /// When the row was written, RFC3339.
     pub created_at: String,
+}
+
+/// Who performed the write that created a row (issue #75).
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct WriterView {
+    /// The client's name from its MCP handshake; `unknown` when the session
+    /// never introduced itself.
+    pub client: String,
+
+    /// The client's version, when it offered one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_version: Option<String>,
+
+    /// The session the write belonged to.
+    pub session: String,
+
+    /// The verb that performed the write: `remember` or `reflect`.
+    pub tool: String,
 }
 
 /// Verbatim text as stored — never rewritten, never superseded.
@@ -589,6 +614,12 @@ impl From<MemoryRecord> for MemoryView {
             entities: memory.entities,
             tags: memory.tags,
             source: provenance(&memory.source),
+            writer: memory.writer.map(|writer| WriterView {
+                client: writer.client,
+                client_version: writer.client_version,
+                session: writer.session,
+                tool: writer.tool,
+            }),
             derived_from: (!memory.derived_from.is_empty()).then(|| {
                 memory
                     .derived_from

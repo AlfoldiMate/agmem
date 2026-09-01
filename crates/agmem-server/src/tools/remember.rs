@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use agmem_core::{DecayClass, Kind, chunk, dedup};
+use agmem_core::{DecayClass, Kind, Writer, chunk, dedup};
 use agmem_store::repo::{self, Batch, NewChunk, NewEpisode, NewMemory, Written};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -219,6 +219,7 @@ pub struct Duplicate {
 pub async fn run(
     service: &AgmemService,
     params: RememberParams,
+    writer: Writer,
 ) -> Result<RememberResult, ErrorData> {
     let RememberParams {
         space,
@@ -331,6 +332,7 @@ pub async fn run(
             space,
             episode: new_episode,
             memories: batch,
+            writer,
         },
     )
     .await

@@ -5,7 +5,9 @@
 //! reported result rather than an aborted transaction, that a rejected row
 //! takes the whole batch down with it — are proven here rather than assumed.
 
-use agmem_core::{DecayClass, Derivation, InvalidReason, Kind, MemoryId, Source, SpaceName};
+use agmem_core::{
+    DecayClass, Derivation, InvalidReason, Kind, MemoryId, Source, SpaceName, Writer,
+};
 use agmem_store::db::Db;
 use agmem_store::repo::{
     self, Batch, Forget, Liveness, Lookup, NewChunk, NewEpisode, NewMemory, Written,
@@ -44,10 +46,54 @@ async fn column<T: SurrealValue>(db: &Db, query: &str) -> Vec<T> {
 
 fn batch(memories: Vec<NewMemory>) -> Batch {
     Batch {
+        writer: Writer::default(),
         space: space(),
         episode: None,
         memories,
     }
+}
+
+/// Issue #75: the writer stamped on a batch rides every row it creates —
+/// memories read it back typed, and the episode records the same one.
+#[tokio::test]
+async fn a_batch_stamps_its_writer_on_every_row_it_creates() {
+    let db = store().await;
+    let stamp = Writer {
+        client: "test-client".to_owned(),
+        client_version: Some("1.2.3".to_owned()),
+        session: "session-1".to_owned(),
+        tool: "remember".to_owned(),
+    };
+    repo::insert_batch(
+        &db,
+        Batch {
+            writer: stamp.clone(),
+            space: space(),
+            episode: Some(NewEpisode::new("the verbatim text behind the claim")),
+            memories: vec![NewMemory::new(Kind::Fact, "the user prefers Rust")],
+        },
+    )
+    .await
+    .expect("batch");
+
+    let rows = repo::direct_lookup(&db, &Lookup::new(vec![space()]))
+        .await
+        .expect("lookup");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].writer,
+        Some(stamp),
+        "the memory reads back exactly the writer the batch carried"
+    );
+    assert_eq!(
+        column::<String>(&db, "SELECT VALUE writer.client FROM episode").await,
+        ["test-client"],
+        "the episode records the same writer"
+    );
+    assert_eq!(
+        column::<String>(&db, "SELECT VALUE writer.tool FROM episode").await,
+        ["remember"]
+    );
 }
 
 #[tokio::test]
@@ -65,6 +111,7 @@ async fn episode_chunks_and_memories_commit_together() {
     let outcome = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode {
                 content: "I like Rust. Python is fine too.".to_owned(),
@@ -223,6 +270,7 @@ async fn a_repeated_episode_is_reused_rather_than_re_chunked() {
     let first = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(episode()),
             memories: vec![NewMemory::new(Kind::Fact, "the user likes Rust")],
@@ -235,6 +283,7 @@ async fn a_repeated_episode_is_reused_rather_than_re_chunked() {
     let second = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(episode()),
             memories: vec![NewMemory::new(Kind::Fact, "the user dislikes Python")],
@@ -455,6 +504,7 @@ async fn one_rejected_row_rolls_the_whole_batch_back() {
     let error = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode::new("verbatim ground truth")),
             memories: vec![
@@ -487,6 +537,7 @@ async fn a_supersedes_target_outside_this_space_is_rejected_before_anything_is_w
     let elsewhere = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: "other".parse().expect("valid slug"),
             episode: None,
             memories: vec![NewMemory::new(Kind::Fact, "a claim in another space")],
@@ -533,6 +584,7 @@ async fn elsewhere(db: &Db, space: &SpaceName, content: &str) -> MemoryId {
     repo::insert_batch(
         db,
         Batch {
+            writer: Writer::default(),
             space: space.clone(),
             episode: None,
             memories: vec![NewMemory::new(Kind::Fact, content)],
@@ -615,6 +667,7 @@ async fn a_purge_takes_an_episodes_slices_and_leaves_the_claims_drawn_from_it() 
     let outcome = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode {
                 content: "I like Rust. Python is fine too.".to_owned(),
@@ -1150,6 +1203,7 @@ async fn a_reflection_carries_its_citations_and_they_read_back_typed() {
     let seeded = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode::new("cargo build failed on a cold cache")),
             memories: vec![NewMemory::new(
@@ -1203,6 +1257,7 @@ async fn locate_says_which_table_each_id_belongs_to() {
     let seeded = repo::insert_batch(
         &db,
         Batch {
+            writer: Writer::default(),
             space: space(),
             episode: Some(NewEpisode::new("the verbatim text")),
             memories: vec![NewMemory::new(Kind::Fact, "the distilled claim")],

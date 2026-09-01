@@ -108,6 +108,9 @@ const MEMORY_FIELDS: &str = "record::id(id) AS id, space, kind, content, content
      source.kind AS source_kind,
      IF type::is_record(source.ref) { record::id(source.ref) } ELSE { source.ref }
          AS source_ref,
+     IF writer IS NONE { NONE } ELSE { { client: writer.client,
+         client_version: writer.client_version, session: writer.session,
+         tool: writer.tool } } AS writer,
      array::map(derived_from ?? [],
          |$link| { table: record::table($link), id: record::id($link) }) AS derived_from,
      created_at";

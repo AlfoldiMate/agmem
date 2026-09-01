@@ -241,6 +241,17 @@ expression: "&tools.tools"
             "valid_from": {
               "description": "When the claim started being true, RFC3339.",
               "type": "string"
+            },
+            "writer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WriterView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Who wrote the row: the MCP client, the session the write belonged to,\nand the verb that performed it. Absent on rows stored before agmem\nrecorded writers — absence means \"not recorded\", never \"unknown\nclient\" (see the `derived_from` note below on why this is `Option`)."
             }
           },
           "required": [
@@ -307,6 +318,36 @@ expression: "&tools.tools"
             "claim",
             "idle_days",
             "expires_in_days"
+          ],
+          "type": "object"
+        },
+        "WriterView": {
+          "description": "Who performed the write that created a row (issue #75).",
+          "properties": {
+            "client": {
+              "description": "The client's name from its MCP handshake; `unknown` when the session\nnever introduced itself.",
+              "type": "string"
+            },
+            "client_version": {
+              "description": "The client's version, when it offered one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session": {
+              "description": "The session the write belonged to.",
+              "type": "string"
+            },
+            "tool": {
+              "description": "The verb that performed the write: `remember` or `reflect`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "client",
+            "session",
+            "tool"
           ],
           "type": "object"
         }
@@ -960,6 +1001,17 @@ expression: "&tools.tools"
             "valid_from": {
               "description": "When the claim started being true, RFC3339.",
               "type": "string"
+            },
+            "writer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WriterView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Who wrote the row: the MCP client, the session the write belonged to,\nand the verb that performed it. Absent on rows stored before agmem\nrecorded writers — absence means \"not recorded\", never \"unknown\nclient\" (see the `derived_from` note below on why this is `Option`)."
             }
           },
           "required": [
@@ -1032,6 +1084,36 @@ expression: "&tools.tools"
             "episodes",
             "chunks",
             "live_by_kind"
+          ],
+          "type": "object"
+        },
+        "WriterView": {
+          "description": "Who performed the write that created a row (issue #75).",
+          "properties": {
+            "client": {
+              "description": "The client's name from its MCP handshake; `unknown` when the session\nnever introduced itself.",
+              "type": "string"
+            },
+            "client_version": {
+              "description": "The client's version, when it offered one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session": {
+              "description": "The session the write belonged to.",
+              "type": "string"
+            },
+            "tool": {
+              "description": "The verb that performed the write: `remember` or `reflect`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "client",
+            "session",
+            "tool"
           ],
           "type": "object"
         }

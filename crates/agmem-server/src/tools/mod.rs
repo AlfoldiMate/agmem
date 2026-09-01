@@ -79,9 +79,9 @@ pub const NAMES: [&str; 7] = [
     "reflect",
 ];
 
-use agmem_core::{MemoryId, Source, SpaceName};
+use agmem_core::{MemoryId, Source, SpaceName, Writer};
 use agmem_store::{StoreError, repo};
-use rmcp::ErrorData;
+use rmcp::{ErrorData, RoleServer, service::RequestContext};
 
 use crate::service::AgmemService;
 
@@ -180,6 +180,46 @@ pub(crate) async fn resolve_space(
             .map_err(|error| store_error(&error))?;
     }
     Ok(space)
+}
+
+/// The `_meta` key a client may send to name the session a write belongs to.
+///
+/// Speculative on purpose (issue #75): no MCP field carries a host session id
+/// over stdio today, but the seam costs nothing and a client that starts
+/// sending one is attributed correctly from that moment on.
+const SESSION_META_KEY: &str = "agmem/session";
+
+/// Who is performing this write (issue #75), assembled from the request.
+///
+/// The client name and version come from the MCP `initialize` handshake,
+/// which rmcp keeps on the connection; the session is the id a client offered
+/// in `_meta`, falling back to the one the service minted for this
+/// connection. `unknown` stands in for a client that never introduced itself
+/// — a fact about the session, not a guess about the writer.
+pub(crate) fn writer(
+    service: &AgmemService,
+    context: &RequestContext<RoleServer>,
+    tool: &str,
+) -> Writer {
+    let client = context.client_info();
+    Writer {
+        client: client
+            .as_ref()
+            .map(|info| info.name.clone())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "unknown".to_owned()),
+        client_version: client
+            .as_ref()
+            .map(|info| info.version.clone())
+            .filter(|version| !version.is_empty()),
+        session: context
+            .meta
+            .get(SESSION_META_KEY)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| service.session().to_owned()),
+        tool: tool.to_owned(),
+    }
 }
 
 /// A memory id as sent, with or without the `memory:` table prefix agmem's own

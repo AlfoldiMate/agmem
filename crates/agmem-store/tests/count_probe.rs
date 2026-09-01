@@ -11,7 +11,7 @@
 
 use std::time::Instant;
 
-use agmem_core::{Kind, SpaceName};
+use agmem_core::{Kind, SpaceName, Writer};
 use agmem_store::db::Db;
 use agmem_store::repo::{self, Batch, Lookup, NewMemory};
 use agmem_store::{db, migrate};
@@ -33,6 +33,7 @@ async fn seeded(rows: usize) -> Db {
         repo::insert_batch(
             &db,
             Batch {
+                writer: Writer::default(),
                 space: space(),
                 episode: None,
                 memories,

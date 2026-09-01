@@ -15,7 +15,7 @@
 
 use agmem_core::{
     ChunkId, DecayClass, Derivation, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind,
-    MemoryId, MemoryRecord, Source, SpaceName,
+    MemoryId, MemoryRecord, Source, SpaceName, Writer,
 };
 use jiff::Timestamp;
 use surrealdb::types::{Datetime, RecordId, SurrealValue, Value};
@@ -95,6 +95,41 @@ pub(crate) struct MemoryRow {
     pub(crate) valid_from: Datetime,
     pub(crate) supersedes: Vec<RecordId>,
     pub(crate) derived_from: Vec<RecordId>,
+    pub(crate) writer: WriterRow,
+}
+
+/// The `writer` object: who performed the write (issue #75).
+///
+/// Required on every write row and optional on every read row: new rows
+/// always record their writer, and rows from before v6 never can.
+#[derive(SurrealValue)]
+pub(crate) struct WriterRow {
+    pub(crate) client: String,
+    pub(crate) client_version: Option<String>,
+    pub(crate) session: String,
+    pub(crate) tool: String,
+}
+
+impl WriterRow {
+    /// The row spelling of a writer.
+    pub(crate) fn new(writer: &Writer) -> Self {
+        Self {
+            client: writer.client.clone(),
+            client_version: writer.client_version.clone(),
+            session: writer.session.clone(),
+            tool: writer.tool.clone(),
+        }
+    }
+
+    /// The domain writer this row spells.
+    fn into_writer(self) -> Writer {
+        Writer {
+            client: self.client,
+            client_version: self.client_version,
+            session: self.session,
+            tool: self.tool,
+        }
+    }
 }
 
 /// The `source` object: `{ kind, ref }`, with `ref` absent for `agent`.
@@ -134,6 +169,7 @@ pub(crate) struct EpisodeRow {
     pub(crate) content_hash: String,
     pub(crate) occurred_at: Datetime,
     pub(crate) session: Option<String>,
+    pub(crate) writer: WriterRow,
 }
 
 /// The `episode_chunk` columns a write supplies, minus the ones the query
@@ -193,6 +229,7 @@ pub(crate) struct MemoryReadRow {
     pub(crate) superseded_by: Option<String>,
     pub(crate) source_kind: String,
     pub(crate) source_ref: Option<String>,
+    pub(crate) writer: Option<WriterRow>,
     pub(crate) derived_from: Vec<DerivationRow>,
     pub(crate) created_at: Datetime,
 }
@@ -261,6 +298,7 @@ impl MemoryReadRow {
                 .collect::<Result<_, _>>()?,
             superseded_by: self.superseded_by.map(MemoryId::new).transpose()?,
             source: to_source(&self.source_kind, self.source_ref)?,
+            writer: self.writer.map(WriterRow::into_writer),
             derived_from: self
                 .derived_from
                 .into_iter()

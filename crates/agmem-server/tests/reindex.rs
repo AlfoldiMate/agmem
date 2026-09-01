@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use agmem_core::{Kind, SpaceName};
+use agmem_core::{Kind, SpaceName, Writer};
 use agmem_embed::{EmbedError, Embedder, NoopEmbedder};
 use agmem_server::reindex;
 use agmem_store::db::Db;
@@ -77,6 +77,7 @@ async fn bm25_only_store() -> Db {
                 NewMemory::new(Kind::Fact, "the user prefers Rust over Python"),
                 NewMemory::new(Kind::Instruction, "answer in English"),
             ],
+            writer: Writer::default(),
         },
     )
     .await

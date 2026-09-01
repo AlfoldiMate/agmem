@@ -16,7 +16,7 @@ mod harness;
 
 use std::sync::Arc;
 
-use agmem_core::{Kind, Source};
+use agmem_core::{Kind, Source, Writer};
 use agmem_embed::NoopEmbedder;
 use agmem_server::config::ToolDescriptions;
 use agmem_store::repo::{self, Batch, Lookup, NewMemory};
@@ -282,6 +282,7 @@ async fn a_space_index_larger_than_one_read_marks_the_cut() {
             memories: (0..over)
                 .map(|n| NewMemory::new(Kind::Fact, format!("claim number {n}")))
                 .collect(),
+            writer: Writer::default(),
         },
     )
     .await
@@ -555,6 +556,49 @@ async fn remember_stores_a_batch_and_provenances_it_to_the_episode() {
         (stats.live, stats.episodes, stats.chunks),
         (2, 1, 1),
         "the episode is stored verbatim and chunked for retrieval"
+    );
+    agmem.shutdown().await;
+}
+
+/// Issue #75: every write records who made it, and `inspect` shows it. The
+/// client name is whatever the MCP client introduced itself as — asserted
+/// non-empty rather than as a literal, because the test client reports
+/// rmcp's own build info — and `tool` names the verb that wrote the row.
+#[tokio::test]
+async fn a_write_records_its_writer_and_inspect_shows_it() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let diff = agmem
+        .remember(json!({ "memories": [{ "content": "The deploy target moved to Railway." }] }))
+        .await;
+    let remembered = ids(&diff["created"])[0].to_owned();
+
+    let found = agmem.inspect(&remembered).await;
+    let writer = &found["found"]["memory"]["writer"];
+    assert_eq!(writer["tool"].as_str(), Some("remember"), "{found}");
+    assert!(
+        writer["client"]
+            .as_str()
+            .is_some_and(|name| !name.is_empty()),
+        "the writer names the client that introduced itself: {found}"
+    );
+    assert!(
+        writer["session"]
+            .as_str()
+            .is_some_and(|session| !session.is_empty()),
+        "a client that offers no session id gets the connection's: {found}"
+    );
+
+    let insight = agmem
+        .reflect(json!({
+            "insight": "Deploys keep moving toward automation.",
+            "derived_from": [remembered]
+        }))
+        .await;
+    let reflected = agmem.inspect(insight["id"].as_str().expect("an id")).await;
+    assert_eq!(
+        reflected["found"]["memory"]["writer"]["tool"].as_str(),
+        Some("reflect"),
+        "each verb stamps its own name: {reflected}"
     );
     agmem.shutdown().await;
 }

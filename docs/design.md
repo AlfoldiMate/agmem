@@ -163,6 +163,8 @@ DEFINE FIELD content_hash ON episode TYPE string;        -- blake3
 DEFINE FIELD occurred_at  ON episode TYPE datetime DEFAULT time::now();
 DEFINE FIELD session      ON episode TYPE option<string>;
 DEFINE FIELD created_at   ON episode TYPE datetime DEFAULT time::now();
+-- v6: which client wrote it (issue #75); sub-fields as on memory.writer
+DEFINE FIELD writer       ON episode TYPE option<object>;
 DEFINE INDEX episode_hash ON episode COLUMNS space, content_hash UNIQUE;
 
 DEFINE TABLE episode_chunk SCHEMAFULL;
@@ -199,6 +201,10 @@ DEFINE FIELD invalid_reason ON memory TYPE option<string>
 DEFINE FIELD supersedes    ON memory TYPE array<record<memory>> DEFAULT [];  -- v3: a list, so one claim can merge a cluster
 DEFINE FIELD superseded_by ON memory TYPE option<record<memory>>;
 DEFINE FIELD source        ON memory TYPE object;   -- { kind: "episode"|"agent"|"external", ref: option }
+-- v6: who performed the write (issue #75) — { client, client_version, session, tool },
+-- every sub-field option<string>; NONE on pre-v6 rows, never backfilled
+DEFINE FIELD writer        ON memory TYPE option<object>;
+DEFINE INDEX mem_writer_session ON memory COLUMNS writer.session;
 -- schema v2: what a `reflect` insight was drawn from; empty for every other write
 DEFINE FIELD derived_from  ON memory TYPE array<record<memory | episode>> DEFAULT [];
 DEFINE FIELD created_at    ON memory TYPE datetime DEFAULT time::now();
@@ -233,6 +239,12 @@ Notes:
   `meta`; switching embedders requires an explicit `agmem --reindex`
   maintenance pass — startup refuses a model/dim mismatch with a clear
   error rather than silently mixing spaces.
+- `writer` (v6) is the attribution `source` never was: `source` says where
+  the content came from, `writer` says which client and session put it in the
+  store, and which verb did the writing. It is stamped server-side from the
+  MCP `initialize` handshake (never trusted from tool arguments), reads as
+  absent on rows older than the field, and is the axis the per-source
+  occupancy defense (issue #76) will slice on.
 
 ### 2.3 Kinds, decay classes, and lifecycle
 

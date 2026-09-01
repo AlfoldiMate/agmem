@@ -305,6 +305,7 @@ mod tests {
             supersedes: Vec::new(),
             superseded_by: None,
             source: crate::model::Source::Agent,
+            writer: None,
             derived_from: vec![],
             created_at: days_ago(100),
         }

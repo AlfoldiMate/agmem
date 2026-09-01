@@ -6,7 +6,7 @@
 //! what a duplicate means.
 
 use agmem_core::{
-    DecayClass, Derivation, EpisodeId, Kind, MemoryId, Source, SpaceName, dedup, scoring,
+    DecayClass, Derivation, EpisodeId, Kind, MemoryId, Source, SpaceName, Writer, dedup, scoring,
 };
 use jiff::Timestamp;
 use surrealdb::types::RecordId;
@@ -16,7 +16,7 @@ use crate::StoreError;
 use crate::db::Db;
 use crate::queries::write::{self as queries, MemoryShape};
 use crate::types::{
-    self, BatchRow, ChunkRow, EpisodeRow, MemoryRow, PurgedRow, SourceRow, WriteRow,
+    self, BatchRow, ChunkRow, EpisodeRow, MemoryRow, PurgedRow, SourceRow, WriteRow, WriterRow,
 };
 
 /// A memory to write.
@@ -122,6 +122,10 @@ pub struct Batch {
     pub episode: Option<NewEpisode>,
     /// The distilled memories.
     pub memories: Vec<NewMemory>,
+    /// Who is performing this write (issue #75). Stamped on every row the
+    /// batch creates — it is per-call rather than per-memory because one
+    /// `remember` is one writer, whatever it carries.
+    pub writer: Writer,
 }
 
 /// What became of one row a batch asked for.
@@ -251,6 +255,7 @@ async fn insert_batch_once(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreE
         space,
         episode,
         mut memories,
+        writer,
     } = batch;
 
     let targets: Vec<&MemoryId> = memories
@@ -306,6 +311,7 @@ async fn insert_batch_once(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreE
                     content_hash: hash,
                     occurred_at: types::to_datetime(episode.occurred_at.unwrap_or_else(now)),
                     session: episode.session.clone(),
+                    writer: WriterRow::new(&writer),
                 },
             ))
             .bind(("ep_chunks", chunks));
@@ -334,6 +340,7 @@ async fn insert_batch_once(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreE
                     .iter()
                     .map(types::derivation_ref)
                     .collect(),
+                writer: WriterRow::new(&writer),
             },
         ));
         if !shapes[index].source_is_batch_episode {

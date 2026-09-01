@@ -445,6 +445,28 @@ impl From<Derivation> for String {
     }
 }
 
+/// Who performed the write that created a row (issue #75).
+///
+/// Distinct from [`Source`]: `source` records where the *content* came from,
+/// `writer` records which client put it in the store — the attribution every
+/// poisoning defense and outcome-feedback signal downstream hangs off. It is
+/// captured at write time because it cannot be reconstructed later: a row
+/// that did not record its writer can never gain one, which is why rows from
+/// before the field existed read as `None` rather than as a sentinel.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Writer {
+    /// The client's name from the MCP `initialize` handshake, or `unknown`
+    /// when the session never offered one.
+    pub client: String,
+    /// The client's version, when it offered one.
+    pub client_version: Option<String>,
+    /// The session the write belonged to: an id the client sent with the
+    /// request, or one the server minted for the connection.
+    pub session: String,
+    /// The agmem verb that performed the write (`remember`, `reflect`).
+    pub tool: String,
+}
+
 /// A distilled, supersedable memory as stored.
 ///
 /// Fields mirror the `memory` table; see `docs/design.md` §2.2. Ranking
@@ -491,6 +513,8 @@ pub struct MemoryRecord {
     pub superseded_by: Option<MemoryId>,
     /// Provenance.
     pub source: Source,
+    /// Who wrote the row; `None` on rows from before the store recorded it.
+    pub writer: Option<Writer>,
     /// The memories and episodes this claim was reflected out of. Empty for
     /// everything a `reflect` call did not write.
     pub derived_from: Vec<Derivation>,
@@ -704,6 +728,12 @@ mod tests {
             source: Source::Episode {
                 episode: EpisodeId::new("01M145SMNET1XRYA713EWAQTD3").unwrap(),
             },
+            writer: Some(Writer {
+                client: "claude-code".to_owned(),
+                client_version: Some("2.0.1".to_owned()),
+                session: "1234-5678".to_owned(),
+                tool: "remember".to_owned(),
+            }),
             derived_from: vec![Derivation::Memory(
                 MemoryId::new("01M145SMNET1XRYA713EWAQTD4").unwrap(),
             )],

@@ -1,6 +1,6 @@
 //! Migration gate against the real (in-memory) engine.
 
-use agmem_core::SpaceName;
+use agmem_core::{SpaceName, Writer};
 use agmem_store::repo::{self, Lookup};
 use agmem_store::{StoreError, db, migrate};
 
@@ -189,6 +189,7 @@ async fn a_correction_written_before_v3_reads_as_a_one_element_list() {
     let outcome = repo::insert_batch(
         &conn,
         repo::Batch {
+            writer: Writer::default(),
             space,
             episode: None,
             memories: vec![repo::NewMemory::new(
@@ -203,6 +204,79 @@ async fn a_correction_written_before_v3_reads_as_a_one_element_list() {
         outcome.memories[0].is_created(),
         "a row closed before the upgrade does not answer as the duplicate: {:?}",
         outcome.memories
+    );
+}
+
+/// A row written before v6 carries no `writer` — the field cannot be
+/// backfilled, which is the whole reason it lands early (issue #75) — so it
+/// must read as `None` rather than fail or invent a sentinel. And because a
+/// SurrealDB UPDATE re-coerces every field (the v3 lesson), the close-path
+/// UPDATEs must still reach a writerless row: a required sub-field would make
+/// supersession refuse every pre-v6 row.
+#[tokio::test]
+async fn a_row_written_before_v6_reads_with_no_writer_and_still_closes() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    conn.query(include_str!("../src/migrations/v1_schema.surql"))
+        .await
+        .expect("v1")
+        .check()
+        .expect("v1 statements");
+    conn.query(
+        "CREATE memory:01M145SMNET1XRYA713EWAQTD5 SET space = 'test', kind = 'fact',
+             content_hash = 'v1-w', content = 'recorded before writers existed',
+             source = { kind: 'agent' }",
+    )
+    .await
+    .expect("seed")
+    .check()
+    .expect("seed statement");
+
+    assert_eq!(
+        migrate::ensure(&conn).await.expect("upgrade"),
+        migrate::SCHEMA_VERSION
+    );
+
+    let space: SpaceName = "test".parse().expect("valid slug");
+    let rows = repo::direct_lookup(&conn, &Lookup::new(vec![space.clone()]))
+        .await
+        .expect("lookup");
+    assert_eq!(rows.len(), 1, "the upgrade keeps the row");
+    assert!(
+        rows[0].writer.is_none(),
+        "a pre-v6 row records no writer, and reading it must not fail"
+    );
+
+    // Correcting the old row is the UPDATE that re-coerces it; it has to land.
+    let mut correction =
+        repo::NewMemory::new(agmem_core::Kind::Fact, "recorded after writers existed");
+    correction.supersedes = vec!["01M145SMNET1XRYA713EWAQTD5".parse().expect("a ULID")];
+    let stamp = Writer {
+        client: "test-client".to_owned(),
+        client_version: Some("1.2.3".to_owned()),
+        session: "session-1".to_owned(),
+        tool: "remember".to_owned(),
+    };
+    let outcome = repo::insert_batch(
+        &conn,
+        repo::Batch {
+            space: space.clone(),
+            episode: None,
+            memories: vec![correction],
+            writer: stamp.clone(),
+        },
+    )
+    .await
+    .expect("supersede a writerless row");
+    assert!(outcome.memories[0].is_created());
+
+    let rows = repo::direct_lookup(&conn, &Lookup::new(vec![space]))
+        .await
+        .expect("lookup after the close");
+    assert_eq!(rows.len(), 1, "only the correction is live");
+    assert_eq!(
+        rows[0].writer,
+        Some(stamp),
+        "the new row carries the writer it was stamped with"
     );
 }
 

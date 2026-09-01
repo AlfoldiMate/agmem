@@ -335,6 +335,12 @@ pub struct RecallHit {
     /// The id of the claim that replaced this one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub superseded_by: Option<String>,
+
+    /// On a `summary` hit, the claims it stands in for — refs `inspect` takes
+    /// as they stand, so the digest expands only when its detail is needed.
+    /// Absent on every other kind of hit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub covers: Option<Vec<String>>,
 }
 
 /// What a hit is.
@@ -347,6 +353,9 @@ pub enum HitKind {
     Lesson,
     /// A standing behavioral rule.
     Instruction,
+    /// A digest standing in for several claims; the refs in `covers` reach
+    /// them through `inspect`.
+    Summary,
     /// A slice of verbatim text, stored unedited as ground truth.
     Episode,
 }
@@ -683,6 +692,14 @@ impl RecallHit {
         match hit {
             StoreHit::Memory(memory) => {
                 let memory = *memory;
+                let covers = (memory.kind == Kind::Summary && !memory.derived_from.is_empty())
+                    .then(|| {
+                        memory
+                            .derived_from
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect()
+                    });
                 Self {
                     id: memory.id.into(),
                     kind: memory.kind.into(),
@@ -699,6 +716,7 @@ impl RecallHit {
                         .invalid_reason
                         .map(|reason| reason.as_str().to_owned()),
                     superseded_by: memory.superseded_by.map(Into::into),
+                    covers,
                 }
             }
             StoreHit::Chunk(chunk) => Self {
@@ -715,6 +733,7 @@ impl RecallHit {
                 invalid_at: None,
                 invalid_reason: None,
                 superseded_by: None,
+                covers: None,
             },
         }
     }
@@ -726,6 +745,7 @@ impl From<Kind> for HitKind {
             Kind::Fact => Self::Fact,
             Kind::Lesson => Self::Lesson,
             Kind::Instruction => Self::Instruction,
+            Kind::Summary => Self::Summary,
         }
     }
 }

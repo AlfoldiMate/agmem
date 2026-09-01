@@ -51,7 +51,9 @@ pub struct MemoryInput {
     /// over Python for CLI tools", not "he said he likes it better".
     pub content: String,
 
-    /// What the claim is; defaults to `fact`.
+    /// What the claim is; defaults to `fact`. A `summary` is refused here:
+    /// it has to cite the claims it stands in for, which is `reflect`'s
+    /// contract.
     #[serde(default)]
     pub kind: Option<Kind>,
 
@@ -426,6 +428,13 @@ impl MemoryInput {
                  path stored here instead"
             )));
         }
+        if self.kind == Some(Kind::Summary) {
+            return Err(invalid(format!(
+                "memories[{index}].kind: a summary is written through `reflect`, \
+                 which records the claims it stands in for as `derived_from` — a \
+                 summary that cannot expand is not one"
+            )));
+        }
         let mut memory = NewMemory::new(self.kind.unwrap_or(Kind::Fact), self.content.clone());
         memory.entities.clone_from(&self.entities);
         memory.tags.clone_from(&self.tags);
@@ -550,6 +559,25 @@ mod tests {
         };
         let error = input.validated(1).expect_err("blank content is refused");
         assert!(error.message.contains("memories[1].content"), "{error:?}");
+    }
+
+    #[test]
+    fn a_summary_is_refused_and_pointed_at_reflect() {
+        let input = MemoryInput {
+            content: "The auth incident hardened token refresh end to end.".to_owned(),
+            kind: Some(Kind::Summary),
+            entities: Vec::new(),
+            tags: Vec::new(),
+            decay_class: None,
+            supersedes: Vec::new(),
+            valid_from: None,
+        };
+        let error = input.validated(2).expect_err("a summary needs citations");
+        assert!(error.message.contains("memories[2].kind"), "{error:?}");
+        assert!(
+            error.message.contains("reflect"),
+            "the refusal names the verb that works: {error:?}"
+        );
     }
 
     #[test]

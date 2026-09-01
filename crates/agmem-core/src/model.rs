@@ -194,16 +194,22 @@ pub enum Kind {
     Lesson,
     /// A standing behavioral rule, always part of assembled context.
     Instruction,
+    /// A digest standing in for several claims, written through `reflect`
+    /// with the claims it covers cited in `derived_from` — `context` may show
+    /// it in their place under budget pressure, and `inspect` expands them.
+    Summary,
 }
 
 impl Kind {
     /// The decay class a memory of this kind gets unless told otherwise
     /// (`docs/design.md` §2.3): instructions stand until superseded, lessons
-    /// are meant to be few and long-lived, facts fade at the normal rate.
+    /// are meant to be few and long-lived, facts fade at the normal rate. A
+    /// summary fades slowly like a lesson — it stands in for several claims,
+    /// so it has to outlive any one of them.
     pub fn default_decay_class(self) -> DecayClass {
         match self {
             Self::Fact => DecayClass::Normal,
-            Self::Lesson => DecayClass::Slow,
+            Self::Lesson | Self::Summary => DecayClass::Slow,
             Self::Instruction => DecayClass::Pinned,
         }
     }
@@ -214,6 +220,7 @@ impl Kind {
             Self::Fact => "fact",
             Self::Lesson => "lesson",
             Self::Instruction => "instruction",
+            Self::Summary => "summary",
         }
     }
 }
@@ -234,6 +241,7 @@ impl std::str::FromStr for Kind {
             "fact" => Ok(Self::Fact),
             "lesson" => Ok(Self::Lesson),
             "instruction" => Ok(Self::Instruction),
+            "summary" => Ok(Self::Summary),
             other => Err(CoreError::UnknownVariant {
                 name: "kind",
                 value: other.to_owned(),
@@ -609,6 +617,7 @@ mod tests {
         assert_eq!(Kind::Fact.default_decay_class(), DecayClass::Normal);
         assert_eq!(Kind::Lesson.default_decay_class(), DecayClass::Slow);
         assert_eq!(Kind::Instruction.default_decay_class(), DecayClass::Pinned);
+        assert_eq!(Kind::Summary.default_decay_class(), DecayClass::Slow);
         assert_eq!(DecayClass::default(), Kind::Fact.default_decay_class());
     }
 
@@ -640,6 +649,7 @@ mod tests {
     #[test]
     fn enums_parse_back_from_the_row_spellings() {
         assert_eq!("lesson".parse::<Kind>().unwrap(), Kind::Lesson);
+        assert_eq!("summary".parse::<Kind>().unwrap(), Kind::Summary);
         assert_eq!("slow".parse::<DecayClass>().unwrap(), DecayClass::Slow);
         assert_eq!(
             "expired".parse::<InvalidReason>().unwrap(),

@@ -505,7 +505,11 @@ outcome from one that leaves a cited one standing, and the answer says which
 you got.
 
 It is stored as a `lesson` unless you say otherwise, so it appears in the
-Lessons section of `context` and fades slowly. `inspect` renders the citations
+Lessons section of `context` and fades slowly. `kind: "summary"` instead marks
+a digest standing in for the claims it cites: when `context` runs short of
+budget it shows the summary in their place, and `inspect` expands the cited
+claims in full — compression that costs no detail, because the detail stays
+one call away. `inspect` renders the citations
 as refs it takes as they stand — one call per piece of evidence, each with its
 own history to walk. Ids resolve in the current space and in `user`, so an
 insight about the project may cite what is known about the person.

@@ -1,0 +1,789 @@
+[
+  {
+    "scenario": "store",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "verified": true,
+    "cited": null,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 0,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": [
+      {
+        "tool": "remember",
+        "field": "created",
+        "expect": "nonempty",
+        "pass": true
+      }
+    ],
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.DUl9fHsEj0",
+    "answer": "Noted and stored — library crates use `thiserror`, binaries use `anyhow`, never reversed. I'll apply this going forward on any Rust work here.",
+    "cost_usd": 0.136017,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "Library crates in this codebase should use thiserror for error types; binaries should use anyhow for error types. This convention should never be reversed (library using anyhow or binary using thiserror), because doing so has caused problems twice before.",
+              "kind": "instruction",
+              "tags": [
+                "rust",
+                "error-handling",
+                "coding-convention"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5PQ592HMPNRKWP7CVXQJJ\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "store",
+    "run": 2,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "verified": true,
+    "cited": null,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 0,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": [
+      {
+        "tool": "remember",
+        "field": "created",
+        "expect": "nonempty",
+        "pass": true
+      }
+    ],
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.A9YQDiNF3a",
+    "answer": "Noted and saved for future sessions: library crates → `thiserror`, binaries → `anyhow`, never mixed the other way.",
+    "cost_usd": 0.0446966,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow — never the reverse. Mixing them the wrong way has caused problems twice before.",
+              "kind": "instruction",
+              "tags": [
+                "rust",
+                "error-handling",
+                "conventions"
+              ],
+              "entities": [
+                "project"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5Q13AZRCQ0XP0K3SBAV49\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "store",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "remember"
+    ],
+    "calls": 1,
+    "superseded": false,
+    "verified": true,
+    "cited": null,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 0,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": [
+      {
+        "tool": "remember",
+        "field": "created",
+        "expect": "nonempty",
+        "pass": true
+      }
+    ],
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.zb23JgRk5S",
+    "answer": "Noted — I've stored this as a standing convention: library crates use `thiserror`, binaries use `anyhow`, never mixed. I'll apply it in future work on this codebase.",
+    "cost_usd": 0.0454718,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "In this codebase, library crates must use thiserror for error types, and binary crates must use anyhow for error types — never the reverse.",
+              "kind": "instruction",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "rust",
+                "error-handling",
+                "convention"
+              ]
+            },
+            {
+              "content": "The user reported that mixing up thiserror (should be libraries) and anyhow (should be binaries) in this codebase has caused problems twice.",
+              "kind": "lesson",
+              "entities": [
+                "project"
+              ],
+              "tags": [
+                "rust",
+                "error-handling"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5Q9TVQ39890T0YX7VWGPP\\\",\\\"01M1F5Q9V5YE89MP41HCFAQ0B9\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "reflect",
+    "run": 1,
+    "pass": false,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 3,
+    "superseded": false,
+    "verified": null,
+    "cited": false,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 2,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": null,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.JXqyuVqXIk",
+    "answer": "Root cause and fix are now saved as a lesson, so this won't need re-diagnosing next month — just recall \"atlas release build\" for the answer.\n\n**Why it keeps happening:** the atlas CI pipeline hard-cancels any job running past 30 minutes, but every release build starts with an empty cargo registry cache (no cache persistence configured), and that cold cache alone adds ~18 minutes. That leaves almost no margin for the actual compile — it's the same failure mode each time (cancelled 2026-08-11, 2026-08-19, and now 2026-09-01).\n\n**Fix:** persist/restore the cargo registry cache (and `target/`) between release-build CI runs, keyed on `Cargo.lock`, rather than just bumping the timeout — that also makes every future build faster, not just this one.",
+    "cost_usd": 0.0993656,
+    "agent_turns": 6,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled",
+          "space": "all",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5QD5HG723K3J7X23ZXDKB\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996287805418,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999985151221672,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8289198424446476},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:04:23.458591Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5QD5DQFA6W37ECCDA8WMP\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476666971075667,\\\"signals\\\":{\\\"importance\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas project CI pipeline configuration",
+          "space": "all",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas pins surrealdb to the 3.x line.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5QD5TM26W0JP1QS0ER6MW\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999999725376,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999989015046,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7226078379668532},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T19:04:23.458607Z\\\"},{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5QD52H6B7AX6GV4K23Q90\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999999694589,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999987783"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build repeatedly gets cancelled by CI because the pipeline has a hard 30-minute timeout while every release build starts with an empty cargo registry cache, and a cold cargo cache alone adds about 18 minutes — leaving too little margin for the actual compile before the timeout hits. Fix: persist/restore the cargo registry cache (and target/ build cache) between release-build CI runs, keyed on Cargo.lock, instead of raising the timeout.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ]
+            }
+          ],
+          "episode": {
+            "content": "User reported the atlas release build got cancelled again on 2026-09-01. Diagnosed root cause from prior memory: atlas CI cancels jobs after 30 min; every release build starts with a cold cargo registry cache which adds ~18 min; build was also cancelled on 2026-08-11 and 2026-08-19 for the same reason. Recommended fix: cache the cargo registry/target dir between CI runs keyed on Cargo.lock.",
+            "session": "atlas-ci-diagnosis"
+          }
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5R47RWT37JSMNNFG3P6WM\\\"],\\\"duplicates\\\":[],\\\"episode\\\":\\\"01M1F5R47EGBWQTHFGS70HSC36\\\",\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M1F5QD52H6B7AX6GV4K23Q90\\\",\\\"of\\\":0,\\\"similarity\\\":0.9006739740424546},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M1F5QD5A5AWY835NWY9BWSY9\\\",\\\"of\\\":0,\\\"similarity\\\":0.8929481400508192},{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M1F5QD5HG723K3J7X23ZXDKB\\\",\\\"of\\\":0,\\\"similarity\\\":0.8782564533766647},{\\\"content\\\":\\\"The at"
+      }
+    ]
+  },
+  {
+    "scenario": "reflect",
+    "run": 2,
+    "pass": false,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 2,
+    "superseded": false,
+    "verified": null,
+    "cited": false,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 1,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": null,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.gM50rRQ93l",
+    "answer": "Here's what's going on, based on what's already known about atlas's CI:\n\n**Root cause:** it's a timeout/cache interaction, not a flaky test or infra outage.\n\n- The atlas CI pipeline hard-cancels any job still running after **30 minutes**.\n- Every release build starts from an **empty cargo registry cache** — there's no cache persistence configured for release runs.\n- A cold cargo registry cache alone adds roughly **18 minutes** to the build.\n\nThat eats well over half the 30-minute budget before compilation even really gets going, so any normal variance in build time (dependency count, runner load, registry latency) is enough to tip the total over the limit and get the job killed. This isn't the first time either — it was also cancelled on 2026-08-11 and 2026-08-19, which fits a recurring \"just barely over budget\" pattern rather than a one-off fluke.\n\n**Fix:** persist/restore the cargo registry cache between release CI runs (e.g. `actions/cache` keyed on `Cargo.lock`) instead of rebuilding it from scratch every time. That removes most of the 18-minute tax and should pull builds comfortably back under 30 minutes. Bumping the timeout instead would just mask the problem until the codebase grows further.\n\nI don't have the atlas repo in this environment, so I can't wire up the cache config directly — if you point me at the repo (or the CI yaml), I can make the change. I've also saved this diagnosis to memory so it won't need to be re-derived next month.",
+    "cost_usd": 0.097082,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled failing",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5R9MM9FFXF134RH9QMQ1X\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996662976764,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999986651907057,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7651073652633877},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:04:52.607984Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5R9MGZ7B2TGPCPNTSQPJA\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476667346347707,\\\"signals\\\":{\\\"importance\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build keeps getting cancelled because every run starts with an empty cargo registry cache (no cache persistence in CI), which alone adds ~18 minutes, pushing total build time close to or past the CI pipeline's 30-minute job timeout; fix is to persist/restore the cargo registry cache between release CI runs (e.g. keyed on Cargo.lock) rather than raising the timeout.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "decay_class": "slow"
+            },
+            {
+              "content": "The atlas release build was cancelled by CI a third time on 2026-09-01, following prior cancellations on 2026-08-11 and 2026-08-19, consistent with the cold cargo cache + 30-minute timeout theory.",
+              "kind": "fact",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5S0VV0X55F00FVYEE6VGS\\\"],\\\"duplicates\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M1F5R9MM9FFXF134RH9QMQ1X\\\",\\\"of\\\":1,\\\"similarity\\\":0.9727866552305336}],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M1F5R9M0BQ8ZQM114YYPBD96\\\",\\\"of\\\":0,\\\"similarity\\\":0.9353011336419726},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M1F5R9MB4F98TZNJQ6NN0C0B\\\",\\\"of\\\":0,\\\"similarity\\\":0.9166658595202193},{\\\"content\\\":\\\"The atlas CI pipeline cancels any"
+      }
+    ]
+  },
+  {
+    "scenario": "reflect",
+    "run": 3,
+    "pass": false,
+    "tools": [
+      "recall",
+      "context",
+      "remember"
+    ],
+    "calls": 3,
+    "superseded": false,
+    "verified": null,
+    "cited": false,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 2,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": null,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.BqhHQE6gzK",
+    "answer": "Saved as a lesson, so next time this comes up I'll surface the diagnosis immediately instead of re-deriving it. If you want, I can also draft the CI config change (cargo registry caching) for the atlas repo — just point me at the workflow file.",
+    "cost_usd": 0.08167940000000001,
+    "agent_turns": 5,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled failing",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5S9X9GHXFC351PJEPGXS4\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249995187373845,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999980749495381,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7651073652633877},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:05:25.653492Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5S9X4ZTD7T01PWDQ408NB\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476665870187499,\\\"signals\\\":{\\\"importance\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "context",
+        "input": {
+          "query": "atlas release build CI pipeline"
+        },
+        "answer": "[{\"type\":\"text\",\"text\":\"# Memory context (spaces: eval + user)\\n\\n## Relevant\\n- The atlas CI job starts every release build with an empty cargo registry cache. `01M1F5S9WNMP8Z19CFP6ZA24ZQ`\\n- A cold cargo registry cache adds about 18 minutes to an atlas release build. `01M1F5S9WZGFPH1WVZZQFPDPAA`\\n- The atlas CI pipeline cancels any job still running after 30 minutes. `01M1F5S9X4ZTD7T01PWDQ408NB`\\n- The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19. `01M1F5S9X9GHXFC351PJEPGXS4`\\n- Project atlas pins surrealdb to the 3.x line. `01M1F5S9XKAK9XCK5HRXE60P44`\\n- The atlas team reviews pull requests on Tuesdays. `01M1F5S9XEJPRR5M54MQJ6NH7G`\"}]"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build repeatedly gets cancelled by CI (2026-08-11, 2026-08-19, 2026-09-01) because the pipeline kills any job over 30 minutes, and every release build starts with an empty cargo registry cache that adds ~18 minutes — the fix is to cache the cargo registry between CI runs (or raise the timeout) so builds start warm.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5SVWEYJSCPF9QAWDNJ1W7\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"id\\\":\\\"01M1F5S9X4ZTD7T01PWDQ408NB\\\",\\\"of\\\":0,\\\"similarity\\\":0.9259732984097544},{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M1F5S9X9GHXFC351PJEPGXS4\\\",\\\"of\\\":0,\\\"similarity\\\":0.9234653071159339},{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M1F5S9WNMP8Z19CFP6ZA24ZQ\\\",\\\"of\\\":0,\\\"similarity\\\":0.9181434669072299},{\\\"content\\\":\\\"A cold cargo registry cache adds about "
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_reflect",
+    "run": 1,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember",
+      "reflect"
+    ],
+    "calls": 6,
+    "superseded": false,
+    "verified": null,
+    "cited": true,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 4,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [],
+    "landed": [],
+    "checked": null,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.AZT83Prgyu",
+    "answer": "Checkpoint done. Summary:\n\n- **Corrected/upgraded**: the root-cause diagnosis (30-min CI timeout + empty cargo cache + ~18 min cold-cache penalty → repeated cancellations, with fix recommendation) was previously saved as a plain `lesson` via `remember`; replaced it with a `reflect` insight that cites its four source facts (`derived_from`), so future sessions can verify the reasoning against the evidence rather than take it on faith.\n- **Left out**: no new preferences, decisions, or facts surfaced in this session — the diagnostic work was entirely built from memory already on record, and the empty local directory (no atlas repo checked out here) is turn-scoped, not worth persisting.",
+    "cost_usd": 0.19076959999999998,
+    "agent_turns": 4,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5SZZBSE0HBARBQWYCY2BJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996032516458,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999984130065833,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8289198424446476},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:05:48.249141Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5SZZ7N3BHB71BHKPNDYA5\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476666715832425,\\\"signals\\\":{\\\"importance\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas cargo cache configuration CI why empty",
+          "k": 15
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5SZYS68V31KDNJJX5NF5X\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249998916945257,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999995667781031,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7795151411042052},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:05:48.249114Z\\\"},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5SZZ2VQZKM3954HPB9GKF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.7840283160506842,\\\"signals\\\":{\\\"importan"
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas build time total duration minutes",
+          "k": 15
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5SZZ2VQZKM3954HPB9GKF\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999993306713,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999732268522,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7683898436265654},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:05:48.249128Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5SZZ7N3BHB71BHKPNDYA5\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476670618815578,\\\"signals\\\":{\\\"importance\\\":0.5,\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build repeatedly gets cancelled by CI (2026-08-11, 2026-08-19, 2026-09-01) because the pipeline kills any job running past 30 minutes, and every release build starts with an empty cargo registry cache (no persistent caching configured), which adds ~18 minutes of cold-compile overhead — pushing total build time over the 30-minute limit. Fix: configure persistent cargo registry caching (e.g. actions/cache keyed on Cargo.lock, or sccache) in the atlas release workflow so builds stay warm and finish under the timeout; raising the timeout is only a stopgap.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "decay_class": "slow"
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5TS91KP8W2PQY4V7YPJGJ\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M1F5SZYS68V31KDNJJX5NF5X\\\",\\\"of\\\":0,\\\"similarity\\\":0.9137274211537527},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M1F5SZZ2VQZKM3954HPB9GKF\\\",\\\"of\\\":0,\\\"similarity\\\":0.9075728865272075},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"id\\\":\\\"01M1F5SZZ7N3BHB71BHKPNDYA5\\\",\\\"of\\\":0,\\\"similarity\\\":0.9030973218183499},{\\\"content\\\":\\\"The atlas release build was cancelled by CI o"
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled root cause cold cargo cache timeout",
+          "k": 10,
+          "include_invalidated": true
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build repeatedly gets cancelled by CI (2026-08-11, 2026-08-19, 2026-09-01) because the pipeline kills any job running past 30 minutes, and every release build starts with an empty cargo registry cache (no persistent caching configured), which adds ~18 minutes of cold-compile overhead — pushing total build time over the 30-minute limit. Fix: configure persistent cargo registry caching (e.g. actions/cache keyed on Cargo.lock, or sccache) in the atlas release workflow so builds stay warm and finish under the timeout; raising the timeout is only a stopgap.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5TS91KP8W2PQY4V7YPJGJ\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":"
+      },
+      {
+        "turn": 1,
+        "tool": "reflect",
+        "input": {
+          "insight": "The atlas release build repeatedly gets cancelled by CI (2026-08-11, 2026-08-19, 2026-09-01) because the pipeline kills any job still running after 30 minutes, and every release build starts with an empty cargo registry cache (no persistent caching configured), which adds ~18 minutes of cold-compile overhead — pushing total build time over the 30-minute limit. Fix: configure persistent cargo registry caching (e.g. actions/cache keyed on Cargo.lock, or sccache) in the atlas release workflow so builds stay warm and finish under the timeout; raising the timeout alone would only be a stopgap.",
+          "derived_from": [
+            "01M1F5SZZ2VQZKM3954HPB9GKF",
+            "01M1F5SZYS68V31KDNJJX5NF5X",
+            "01M1F5SZZBSE0HBARBQWYCY2BJ",
+            "01M1F5SZZ7N3BHB71BHKPNDYA5"
+          ],
+          "supersedes": [
+            "01M1F5TS91KP8W2PQY4V7YPJGJ"
+          ],
+          "entities": [
+            "atlas"
+          ],
+          "tags": [
+            "ci"
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"content\\\":\\\"The atlas release build repeatedly gets cancelled by CI (2026-08-11, 2026-08-19, 2026-09-01) because the pipeline kills any job still running after 30 minutes, and every release build starts with an empty cargo registry cache (no persistent caching configured), which adds ~18 minutes of cold-compile overhead — pushing total build time over the 30-minute limit. Fix: configure persistent cargo registry caching (e.g. actions/cache keyed on Cargo.lock, or sccache) in the atlas release workflow so builds stay warm and finish under the timeout; raising the timeout alone would only be a stopgap.\\\",\\\"created\\\":true,\\\"derived_from\\\":[\\\"memory:01M1F5SZZ2VQZKM3954"
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_reflect",
+    "run": 2,
+    "pass": false,
+    "tools": [
+      "recall",
+      "remember"
+    ],
+    "calls": 5,
+    "superseded": true,
+    "verified": null,
+    "cited": false,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 3,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [
+      {
+        "id": "01M1F5VY5NQEWY2RKN14Y0ZT5B",
+        "content": "The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19."
+      }
+    ],
+    "landed": [],
+    "checked": null,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.PIb5eIx01w",
+    "answer": "Checkpoint complete:\n\n- **Corrected:** the cancellation-date fact now reads Aug 11, Aug 19, **and Sep 1** (superseded the two-date version).\n- **Left as-is:** the root-cause lesson (cold cargo cache + 30-min timeout → cancellation, fix = add persistent caching) was already stored earlier this session — recall confirmed it's live, so no rewrite needed.\n- **Left out:** everything else was either scratch reasoning for this turn or already-known facts (30-min timeout, empty cache, ~18min cost, surrealdb pin, Tuesday PR reviews) that didn't change.",
+    "cost_usd": 0.1580988,
+    "agent_turns": 3,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled CI failure",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5VY5NQEWY2RKN14Y0ZT5B\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996108027914,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999984432111655,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7678628654357403},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:06:51.939296Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5VY5F0TB3GCZNKBQ2H3QX\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476666790639599,\\\"signals\\\":{\\\"importance\\\""
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas project",
+          "entities": [
+            "atlas"
+          ],
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas pins surrealdb to the 3.x line.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5VY5ZB55VJDT3EZAHYZ2Y\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999950606191,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.999999980242477,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8062268514117156},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T19:06:51.939309Z\\\"},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5VY5ATM076HAA9TRFBS9J\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.6916090580262104,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999801847225"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build repeatedly gets cancelled by CI because the pipeline has no persistent cargo registry cache: every run starts cold, which adds ~18 minutes, leaving little headroom under CI's hard 30-minute job timeout — any normal-length build then tips over and gets killed. Fix: add persistent caching for the cargo registry (and ideally target/) to the atlas release pipeline config, rather than raising the timeout.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5WXB04JVA1TVA2SGCBYPD\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M1F5VY539CZECASAQAANJRNQ\\\",\\\"of\\\":0,\\\"similarity\\\":0.8817874558809983},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M1F5VY5ATM076HAA9TRFBS9J\\\",\\\"of\\\":0,\\\"similarity\\\":0.8815418916954076},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"id\\\":\\\"01M1F5VY5F0TB3GCZNKBQ2H3QX\\\",\\\"of\\\":0,\\\"similarity\\\":0.8604925212659928},{\\\"content\\\":\\\"The atlas release build was cancelled by CI o"
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled dates",
+          "entities": [
+            "atlas"
+          ],
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5VY5NQEWY2RKN14Y0ZT5B\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249993077284469,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999972309137877,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8487786615759751},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:06:51.939296Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5VY5F0TB3GCZNKBQ2H3QX\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8621882703457259,\\\"signals\\\":{\\\"importance\\\""
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build was cancelled by CI on 2026-08-11, 2026-08-19, and again on 2026-09-01.",
+              "kind": "fact",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "supersedes": [
+                "01M1F5VY5NQEWY2RKN14Y0ZT5B"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5XC83XQY5ZDMTYYT2HK4X\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1F5VY5NQEWY2RKN14Y0ZT5B\\\"]}\""
+      }
+    ]
+  },
+  {
+    "scenario": "ritual_reflect",
+    "run": 3,
+    "pass": true,
+    "tools": [
+      "recall",
+      "remember",
+      "reflect"
+    ],
+    "calls": 8,
+    "superseded": true,
+    "verified": null,
+    "cited": true,
+    "answered": null,
+    "bridged": null,
+    "misled": null,
+    "reads": 4,
+    "on_target": null,
+    "touched": null,
+    "purged": false,
+    "closed": [
+      {
+        "id": "01M1F5XHV8YHRJ8WXTHYS9EVB6",
+        "content": "The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19."
+      }
+    ],
+    "landed": [],
+    "checked": null,
+    "served": true,
+    "rival_memory": false,
+    "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.hPdARHWHUh",
+    "answer": "Checkpoint complete.\n\n**Saved:**\n- Updated the cancellation-history fact to include today's occurrence (now: 2026-08-11, 2026-08-19, 2026-09-01).\n- Root-cause insight (via `reflect`, properly linked to its evidence): cold cargo registry cache adds ~18 min, pushing builds past the CI pipeline's 30-min timeout — a deterministic pattern, not flakiness.\n- Fix insight (via `reflect`): add persistent cargo registry/target caching between release-build CI runs; bumping the timeout is only a fallback.\n\n**Corrected:** the two lessons I'd stored mid-session via `remember` were re-filed as `reflect` insights with `derived_from` pointing at the underlying facts (cache-empty, 18-min cost, 30-min timeout, cancellation dates), and the originals were superseded — this is a conclusion drawn from existing evidence, so it belongs with provenance attached rather than as a bare `remember`.\n\n**Left out:** the two pre-existing unrelated facts (`atlas` pins surrealdb 3.x, PR reviews happen Tuesdays) — untouched by this session, nothing to update.",
+    "cost_usd": 0.2571928,
+    "agent_turns": 7,
+    "session": [
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled CI",
+          "k": 20
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5XHV8YHRJ8WXTHYS9EVB6\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.924999664301267,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999986572050682,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8140091674338793},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:07:44.853534Z\\\"},{\\\"content\\\":\\\"The atlas CI pipeline cancels any job still running after 30 minutes.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5XHV40GKE0ZJY6DEVY7X6\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8476667326348313,\\\"signals\\\":{\\\"importance\\\":"
+      },
+      {
+        "turn": 0,
+        "tool": "recall",
+        "input": {
+          "query": "atlas CI cache fix cargo registry github actions",
+          "k": 15
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5XHTNA5VXERB8M3M2FD8Z\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249998584764578,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999994339058316,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7894233684700916},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:07:44.853502Z\\\"},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5XHTZMSVMFSHN9YR4VM78\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.7840282828308512,\\\"signals\\\":{\\\"importan"
+      },
+      {
+        "turn": 0,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build is repeatedly cancelled by CI (Aug 11, Aug 19, Sept 1 2026) because the job starts with an empty cargo registry cache, which adds ~18 minutes to the build, pushing total runtime past the CI pipeline's 30-minute cancellation timeout. Root cause is missing cargo registry caching in the release-build CI config, not flakiness.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "decay_class": "slow"
+            },
+            {
+              "content": "Fix for atlas release build CI timeouts: add persistent caching of the cargo registry/target directory between release-build CI runs (e.g. actions/cache keyed on Cargo.lock) so the build starts warm instead of cold.",
+              "kind": "lesson",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "decay_class": "slow"
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5Y8MH3RW49WXC09WDWEFW\\\",\\\"01M1F5Y8MVR4B6QCN593TFJCWS\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The atlas CI job starts every release build with an empty cargo registry cache.\\\",\\\"id\\\":\\\"01M1F5XHTNA5VXERB8M3M2FD8Z\\\",\\\"of\\\":0,\\\"similarity\\\":0.9150905850907638},{\\\"content\\\":\\\"The atlas release build was cancelled by CI on 2026-08-11 and again on 2026-08-19.\\\",\\\"id\\\":\\\"01M1F5XHV8YHRJ8WXTHYS9EVB6\\\",\\\"of\\\":0,\\\"similarity\\\":0.9147298950561639},{\\\"content\\\":\\\"A cold cargo registry cache adds about 18 minutes to an atlas release build.\\\",\\\"id\\\":\\\"01M1F5XHTZMSVMFSHN9YR4VM78\\\",\\\"of\\\":0,\\\"similarity\\\":0.8993875024512483},{\\\"content\\\":\\\"T"
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "atlas release build cancelled dates count",
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas release build is repeatedly cancelled by CI (Aug 11, Aug 19, Sept 1 2026) because the job starts with an empty cargo registry cache, which adds ~18 minutes to the build, pushing total runtime past the CI pipeline's 30-minute cancellation timeout. Root cause is missing cargo registry caching in the release-build CI config, not flakiness.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5Y8MH3RW49WXC09WDWEFW\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.9624999999314525,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"novelty\\\":0.0849094149092362,\\\"retention\\\":0.9999999997258102,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8189478788879064},\\\"source\\\":\\\"agent\\\",\\\"space\\"
+      },
+      {
+        "turn": 1,
+        "tool": "recall",
+        "input": {
+          "query": "root cause of atlas release build CI cancellations cold cache timeout",
+          "k": 10
+        },
+        "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Fix for atlas release build CI timeouts: add persistent caching of the cargo registry/target directory between release-build CI runs (e.g. actions/cache keyed on Cargo.lock) so the build starts warm instead of cold.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1F5Y8MVR4B6QCN593TFJCWS\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.9624994401376783,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"novelty\\\":0.09466688378659716,\\\"retention\\\":0.9999977605507135,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8462602106900269},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"ci\\\"],\\\"valid_from\\\":\\\"2026-09-01T19:08:08.208925Z\\\"},{\\\"content\\\":\\\"The atlas release build is repeatedly can"
+      },
+      {
+        "turn": 1,
+        "tool": "remember",
+        "input": {
+          "memories": [
+            {
+              "content": "The atlas release build was cancelled by CI on 2026-08-11, 2026-08-19, and 2026-09-01.",
+              "kind": "fact",
+              "entities": [
+                "atlas"
+              ],
+              "tags": [
+                "ci"
+              ],
+              "supersedes": [
+                "01M1F5XHV8YHRJ8WXTHYS9EVB6"
+              ]
+            }
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1F5ZYZTXTSJ1BP9H79HE9K7\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1F5XHV8YHRJ8WXTHYS9EVB6\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "reflect",
+        "input": {
+          "insight": "The atlas release build's recurring CI cancellations (2026-08-11, 2026-08-19, 2026-09-01) are caused by every release build starting with a cold cargo registry cache, which adds ~18 minutes to build time and pushes total runtime past the CI pipeline's 30-minute cancellation timeout; it is a deterministic recurring failure, not flakiness.",
+          "derived_from": [
+            "01M1F5ZYZTXTSJ1BP9H79HE9K7",
+            "01M1F5XHTNA5VXERB8M3M2FD8Z",
+            "01M1F5XHTZMSVMFSHN9YR4VM78",
+            "01M1F5XHV40GKE0ZJY6DEVY7X6"
+          ],
+          "supersedes": [
+            "01M1F5Y8MH3RW49WXC09WDWEFW"
+          ],
+          "entities": [
+            "atlas"
+          ],
+          "tags": [
+            "ci"
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"content\\\":\\\"The atlas release build's recurring CI cancellations (2026-08-11, 2026-08-19, 2026-09-01) are caused by every release build starting with a cold cargo registry cache, which adds ~18 minutes to build time and pushes total runtime past the CI pipeline's 30-minute cancellation timeout; it is a deterministic recurring failure, not flakiness.\\\",\\\"created\\\":true,\\\"derived_from\\\":[\\\"memory:01M1F5ZYZTXTSJ1BP9H79HE9K7\\\",\\\"memory:01M1F5XHTNA5VXERB8M3M2FD8Z\\\",\\\"memory:01M1F5XHTZMSVMFSHN9YR4VM78\\\",\\\"memory:01M1F5XHV40GKE0ZJY6DEVY7X6\\\"],\\\"id\\\":\\\"01M1F604MFGVVHMTF5FXQR7VY8\\\",\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1F5Y8MH3RW49WXC09WDWEFW\\\"]}\""
+      },
+      {
+        "turn": 1,
+        "tool": "reflect",
+        "input": {
+          "insight": "Fixing the atlas release build's recurring CI timeout cancellations requires adding persistent caching of the cargo registry/target directory between release-build CI runs (e.g. actions/cache keyed on Cargo.lock) so the build starts warm instead of cold; raising the 30-minute timeout is only a fallback since it doesn't address the wasted cold-cache rebuild.",
+          "derived_from": [
+            "01M1F5XHTNA5VXERB8M3M2FD8Z",
+            "01M1F5XHTZMSVMFSHN9YR4VM78",
+            "01M1F5XHV40GKE0ZJY6DEVY7X6"
+          ],
+          "supersedes": [
+            "01M1F5Y8MVR4B6QCN593TFJCWS"
+          ],
+          "entities": [
+            "atlas"
+          ],
+          "tags": [
+            "ci"
+          ]
+        },
+        "answer": "\"{\\\"already_closed\\\":[],\\\"content\\\":\\\"Fixing the atlas release build's recurring CI timeout cancellations requires adding persistent caching of the cargo registry/target directory between release-build CI runs (e.g. actions/cache keyed on Cargo.lock) so the build starts warm instead of cold; raising the 30-minute timeout is only a fallback since it doesn't address the wasted cold-cache rebuild.\\\",\\\"created\\\":true,\\\"derived_from\\\":[\\\"memory:01M1F5XHTNA5VXERB8M3M2FD8Z\\\",\\\"memory:01M1F5XHTZMSVMFSHN9YR4VM78\\\",\\\"memory:01M1F5XHV40GKE0ZJY6DEVY7X6\\\"],\\\"id\\\":\\\"01M1F606WT1WDWY856TJA1JA0G\\\",\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1F5Y8MVR4B6QCN593TFJCWS\\\"]}\""
+      }
+    ]
+  }
+]

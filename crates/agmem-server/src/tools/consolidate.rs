@@ -276,7 +276,7 @@ pub async fn run(
 
     // Fullest first, so the cap keeps the tags most worth merging.
     let tags_capped = over_full.len() > MAX_CLUSTERS;
-    over_full.sort_by(|left: &OverFullTag, right: &OverFullTag| right.live.cmp(&left.live));
+    over_full.sort_by_key(|tag: &OverFullTag| std::cmp::Reverse(tag.live));
     over_full.truncate(MAX_CLUSTERS);
 
     Ok(ConsolidateResult {

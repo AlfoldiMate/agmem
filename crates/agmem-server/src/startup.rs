@@ -14,7 +14,7 @@ use agmem_store::db::Db;
 /// answer questions; refusing to serve any memory at all because a maintenance
 /// pass failed trades everything the agent needs for a little unbounded
 /// growth. It is the rule `recall`'s reinforcement already follows (design
-/// §5.3 step 5) — the sweep is not what the session came for.
+/// §5.3 step 6) — the sweep is not what the session came for.
 pub async fn prune(db: &Db) -> usize {
     match agmem_store::repo::prune_expired(db).await {
         Ok(closed) => closed.len(),

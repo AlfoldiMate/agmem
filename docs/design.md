@@ -787,12 +787,18 @@ recall(q)
       norm  = min–max over the pool: (rrf − min) / (max − min)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history);
               chunks filter on their denormalised occurred_at ≤ T (v4)
- 5. take k — the last slot reserved for the best hop-voted row when the cut
+ 5. occupancy cap (issue #76, tools::occupancy): no source — episode or
+    external origin; agent-sourced rows are uncapped — may hold more than
+    ceil(k/2) (min 2) of the page; the surplus defers to the next-ranked
+    hits from elsewhere, and a page it changed says so in `capped`.
+    Runs before the hop reserve, so the hop may promote one row over
+    quota (bounded, deliberate — capping last re-creates the #43 miss)
+ 6. take k — the last slot reserved for the best hop-voted row when the cut
     would otherwise drop every one (issue #43, hop::reserve_tail);
     fire-and-forget reinforcement UPDATE (strength+1, last_accessed)
- 6. did the page fill exactly k? → COUNT the same filters; if it exceeds what
+ 7. did the page fill exactly k? → COUNT the same filters; if it exceeds what
     came back, say so in `truncated`
- 7. → hits with per-signal scores (agent can see *why* something surfaced)
+ 8. → hits with per-signal scores (agent can see *why* something surfaced)
 ```
 
 Pool size 64 default (`AGMEM_POOL`), k default 10 / max 50. Tier-2 semantic

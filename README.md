@@ -315,6 +315,20 @@ has no way to know it. `truncated` is absent when nothing was cut. Reading a
 page is still not an audit: what is duplicated or out of date needs every claim
 compared against every other, which is `consolidate`.
 
+No single source may flood a page, either: when one episode or external origin
+has more strong hits than half the page (rounded up), the surplus yields its
+slots to the next-ranked hits from elsewhere, and the answer admits it:
+
+```json
+{ "capped": { "cap": 5, "displaced": 2, "sources": ["episode:01M14XWWANHH…"],
+              "note": "2 strong hit(s) from episode:01M14XWWANHH… were moved off this page…" } }
+```
+
+That is the one memory-poisoning defense that needs no judge model, and it
+buys ordinary diversity on the way. Agent-sourced claims are uncapped — each
+was stored on its own judgement. `capped` is absent when the cap changed
+nothing.
+
 **Corrections** — never store a contradiction; send `supersedes`:
 
 ```json

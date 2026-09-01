@@ -20,6 +20,18 @@ plain equality. The numbers are honest measurements, not targets — the gate
 misses it records are what BGE at the 0.95 threshold actually does with
 genuine paraphrases.
 
+`episode-flood` is the measured half of the occupancy cap (issue #76): six
+claims distilled from one episode plus its chunk against two claims from
+elsewhere, probed at `k: 4` where `cap(4) = 2`. With the cap the two elsewhere
+claims surface — `found` 2/2, mrr 0.3333; with the cap neutered the episode's
+three strongest hits hold the page and it drops to 1/2, mrr 0.25 (measured by
+re-recording with `cap = usize::MAX`, 2026-09-01). Removing the cap therefore
+fails this baseline. The tuning found a structural fact worth keeping: the
+near-dup gate is why the flood tops out at three strong members — wordings
+close enough to the query to flood harder sit above 0.95 against *each other*
+and are gated at write time, so the two defenses meet in the middle and the
+cap covers exactly the flood the gate lets through.
+
 <!-- eval:scorecard -->
 ```json
 {
@@ -44,6 +56,28 @@ genuine paraphrases.
       "context": {
         "passed": 24,
         "total": 24
+      }
+    },
+    "episode-flood": {
+      "retrieval": {
+        "found": 2,
+        "expected": 2,
+        "mrr": 0.3333
+      },
+      "timeline": {
+        "passed": 0,
+        "total": 0
+      },
+      "gate": {
+        "correct": 0,
+        "total": 0,
+        "false_gates": 0,
+        "missed": 0,
+        "wrong_original": 0
+      },
+      "context": {
+        "passed": 0,
+        "total": 0
       }
     },
     "formatter-switch": {

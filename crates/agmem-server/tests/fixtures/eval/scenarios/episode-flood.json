@@ -1,0 +1,58 @@
+{
+  "name": "episode-flood",
+  "about": "One incident review floods the store: six claims distilled from a single episode plus its chunk, all carrying the outage vocabulary, against two claims from elsewhere that hold the durable state. At k:4 the episode's three strongest hits outscore both; the occupancy cap (issue #76, cap(4) = 2) defers the third and both elsewhere claims surface — found 2/2 against 1/2 without the cap, which is what makes removing the cap fail this baseline. Tuning note: the near-dup gate (0.95) is why the flood has only three strong members — claims worded close enough to the query to flood harder are close enough to each other to be gated at write time, so the two defenses meet in the middle. This is the measured half of the cap; the deterministic half lives in protocol.rs.",
+  "seeds": [
+    {
+      "label": "flood-timeout",
+      "content": "Query timeouts had to be raised from two seconds to eight while search recovered.",
+      "episode": "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down."
+    },
+    {
+      "label": "flood-cache",
+      "content": "Result caching masked the problem at first, serving stale search hits for forty minutes.",
+      "episode": "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down."
+    },
+    {
+      "label": "flood-index",
+      "content": "The nightly index rebuild was paused to free memory while the search cluster was down.",
+      "episode": "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down."
+    },
+    {
+      "label": "flood-alerts",
+      "content": "The on-call pager stayed silent for the first eleven minutes, well after users saw errors.",
+      "episode": "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down."
+    },
+    {
+      "label": "flood-traffic",
+      "content": "The load balancer shed a third of incoming search queries at the height of the incident.",
+      "episode": "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down."
+    },
+    {
+      "label": "flood-restart",
+      "content": "Search's coordinator node needed two restarts before the cluster finally held.",
+      "episode": "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down."
+    },
+    {
+      "label": "relevant-replica",
+      "content": "The search cluster now keeps a second replica of every shard, so a single node failure is survivable."
+    },
+    {
+      "label": "relevant-breaker",
+      "content": "A circuit breaker sheds search traffic before the cluster saturates."
+    },
+    {
+      "label": "distractor-logo",
+      "content": "The marketing site got a new logo in June."
+    }
+  ],
+  "probes": [
+    {
+      "query": "what happened during the search cluster outage?",
+      "k": 4,
+      "relevant": ["relevant-replica", "relevant-breaker"]
+    }
+  ],
+  "timeline": [],
+  "gate": [],
+  "context": []
+}

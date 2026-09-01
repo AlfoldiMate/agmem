@@ -143,34 +143,43 @@ pub struct Scope {
     purge: bool,
 }
 
-/// The one-slot record of what this session's last dry run offered.
+/// The one-slot record of what this session's last dry run offered: the
+/// scope, and the ids it showed.
 ///
 /// One slot rather than a set: a confirmation is for the call being made now,
 /// and letting several accumulate would turn "confirm the scope" into "confirm
 /// some scope, once, at some point". It is consumed on use, so executing the
 /// same query twice means dry-running it twice — which is right, because the
 /// second execution acts on a store the first one changed.
+///
+/// The ids travel with the scope (issue #66) because the scope alone confirms
+/// the *question*, not the *answer*: a query re-run at confirm time selects
+/// whatever matches now, and a row written between the two calls would be
+/// closed — or purged — without ever having been previewed.
 #[derive(Debug, Default)]
-pub struct Pending(Mutex<Option<Scope>>);
+pub struct Pending(Mutex<Option<(Scope, Vec<String>)>>);
 
 impl Pending {
     /// Record what this dry run offered, replacing anything older.
-    fn arm(&self, scope: Scope) -> Result<(), ErrorData> {
-        *self.0.lock().map_err(|_| poisoned())? = Some(scope);
+    fn arm(&self, scope: Scope, matched: Vec<String>) -> Result<(), ErrorData> {
+        *self.0.lock().map_err(|_| poisoned())? = Some((scope, matched));
         Ok(())
     }
 
-    /// Consume a confirmation for exactly this scope, or refuse.
-    fn confirm(&self, scope: &Scope) -> Result<(), ErrorData> {
+    /// Consume a confirmation for exactly this scope, or refuse. Returns the
+    /// ids the dry run previewed — the only rows the caller may act on.
+    fn confirm(&self, scope: &Scope) -> Result<Vec<String>, ErrorData> {
         let mut slot = self.0.lock().map_err(|_| poisoned())?;
-        if slot.as_ref() != Some(scope) {
-            return Err(invalid(
-                "forgetting by query needs the same call with `dry_run: true` first — \
-                 read what it matched, then send this call again unchanged",
-            ));
+        match slot.take() {
+            Some((armed, matched)) if armed == *scope => Ok(matched),
+            other => {
+                *slot = other;
+                Err(invalid(
+                    "forgetting by query needs the same call with `dry_run: true` first — \
+                     read what it matched, then send this call again unchanged",
+                ))
+            }
         }
-        *slot = None;
-        Ok(())
     }
 }
 
@@ -196,6 +205,10 @@ pub async fn run(service: &AgmemService, params: ForgetParams) -> Result<ForgetR
 
     // 1. One selector, and it decides whether a confirmation is owed. Ids are
     //    already the answer to "which rows"; a query is a question about them.
+    //    A confirmed query yields the dry run's id list — the snapshot this
+    //    call is allowed to act on.
+    let mut armable: Option<Scope> = None;
+    let mut previewed: Option<Vec<String>> = None;
     let targets = match (ids.is_empty(), query) {
         (false, None) => by_ids(service, &spaces, &ids, purge).await?,
         (true, Some(text)) => {
@@ -204,14 +217,12 @@ pub async fn run(service: &AgmemService, params: ForgetParams) -> Result<ForgetR
                 spaces: spaces.clone(),
                 purge,
             };
-            if !dry_run {
-                service.pending_forget().confirm(&scope)?;
-            }
-            let found = by_query(service, &spaces, &text).await?;
             if dry_run {
-                service.pending_forget().arm(scope)?;
+                armable = Some(scope);
+            } else {
+                previewed = Some(service.pending_forget().confirm(&scope)?);
             }
-            found
+            by_query(service, &spaces, &text).await?
         }
         (false, Some(_)) => {
             return Err(invalid(
@@ -235,9 +246,40 @@ pub async fn run(service: &AgmemService, params: ForgetParams) -> Result<ForgetR
         targets
     };
 
+    // 2b. The snapshot discipline (issue #66): the scope confirmed the
+    //     question, the id list is the answer that was actually read. A row
+    //     matching now that the dry run never showed — written since, or
+    //     pulled in by a chain that grew — stops the call before anything
+    //     moves. Fewer rows than previewed is fine: everything acted on was
+    //     seen. The confirmation is already spent, so the way forward is a
+    //     fresh dry run against the store as it is now.
+    if let Some(previewed) = &previewed {
+        let unseen: Vec<&str> = targets
+            .iter()
+            .map(Target::id)
+            .filter(|id| !previewed.iter().any(|seen| seen == id))
+            .collect();
+        if !unseen.is_empty() {
+            return Err(invalid(format!(
+                "the store changed since the dry run: {} matching row(s) were never \
+                 previewed ({}). Nothing was forgotten; run the same call with \
+                 `dry_run: true` again and read the fresh list.",
+                unseen.len(),
+                unseen.join(", ")
+            )));
+        }
+    }
+
     let matched: Vec<ForgetMatch> = targets.iter().map(ForgetMatch::new).collect();
     let spaces_named: Vec<String> = spaces.iter().map(ToString::to_string).collect();
     if dry_run {
+        if let Some(scope) = armable {
+            let shown = targets
+                .iter()
+                .map(|target| target.id().to_owned())
+                .collect();
+            service.pending_forget().arm(scope, shown)?;
+        }
         return Ok(ForgetResult {
             spaces: spaces_named,
             dry_run: true,
@@ -634,8 +676,14 @@ mod tests {
             "an unarmed gate refuses everything"
         );
 
-        pending.arm(asked.clone()).expect("arm");
-        pending.confirm(&asked).expect("the same call goes through");
+        pending
+            .arm(asked.clone(), vec!["01A".to_owned()])
+            .expect("arm");
+        assert_eq!(
+            pending.confirm(&asked).expect("the same call goes through"),
+            ["01A"],
+            "the confirmation hands back exactly what the dry run showed"
+        );
         assert!(
             pending.confirm(&asked).is_err(),
             "a confirmation authorises one call, not a standing licence"
@@ -645,7 +693,9 @@ mod tests {
     #[test]
     fn a_dry_run_does_not_authorise_a_different_call() {
         let pending = Pending::default();
-        pending.arm(scope("old notes", false)).expect("arm");
+        pending
+            .arm(scope("old notes", false), Vec::new())
+            .expect("arm");
         assert!(
             pending.confirm(&scope("old notes", true)).is_err(),
             "previewing what would be closed does not authorise deleting it"

@@ -1,0 +1,218 @@
+{
+  "model": "jina-reranker-v1-turbo-en",
+  "pairs": {
+    "how are the automated checks executed?": {
+      "A fiddle-leaf fig sits by the office window and needs weekly watering.": -3.949223518371582,
+      "CI runs the test suite with pytest under tox.": -2.8579719066619873,
+      "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.": -3.424945592880249,
+      "The project formats Python with black.": -4.021042346954346,
+      "The project switched its Python formatter to ruff format; black is retired.": -3.43699312210083,
+      "The team orders Neapolitan pizza for Friday lunch.": -4.440381050109863,
+      "The user edits in Helix, not VS Code.": -2.282088041305542
+    },
+    "how deployments work": {
+      "Database migrations must run before the new pods roll out, or the old schema panics.": -3.208909034729004,
+      "Deployments are run by hand from the lead developer's laptop.": -1.0312473773956299,
+      "Deployments run from the CI pipeline on every tagged release.": -2.2373595237731934,
+      "Never force-push to the main branch.": -3.436434745788574,
+      "The API gateway lives in the infra repository and is deployed separately.": -2.7064385414123535,
+      "The espresso machine on the third floor is broken again.": -4.528151512145996,
+      "The user works from the Europe/Budapest timezone.": -3.2775509357452393,
+      "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead.": -1.29938805103302
+    },
+    "how do I claim travel expenses for the client visit?": {
+      "A circuit breaker sheds search traffic before the cluster saturates.": -3.7964940071105957,
+      "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down.": -3.902017116546631,
+      "Query timeouts had to be raised from two seconds to eight while search recovered.": -3.990903854370117,
+      "Result caching masked the problem at first, serving stale search hits for forty minutes.": -2.851766586303711,
+      "Search's coordinator node needed two restarts before the cluster finally held.": -4.190290451049805,
+      "The load balancer shed a third of incoming search queries at the height of the incident.": -4.0425848960876465,
+      "The marketing site got a new logo in June.": -4.11456823348999,
+      "The nightly index rebuild was paused to free memory while the search cluster was down.": -4.262015342712402,
+      "The on-call pager stayed silent for the first eleven minutes, well after users saw errors.": -3.8331046104431152,
+      "The search cluster now keeps a second replica of every shard, so a single node failure is survivable.": -4.3619160652160645
+    },
+    "how do releases go out": {
+      "Database migrations must run before the new pods roll out, or the old schema panics.": -3.2507901191711426,
+      "Deployments are run by hand from the lead developer's laptop.": -3.5103397369384766,
+      "Deployments run from the CI pipeline on every tagged release.": -3.3655052185058594,
+      "Never force-push to the main branch.": -4.052469253540039,
+      "The API gateway lives in the infra repository and is deployed separately.": -4.166182518005371,
+      "The espresso machine on the third floor is broken again.": -4.265393257141113,
+      "The user works from the Europe/Budapest timezone.": -3.982334613800049,
+      "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead.": -2.1788992881774902
+    },
+    "python formatter": {
+      "A fiddle-leaf fig sits by the office window and needs weekly watering.": -3.9206199645996094,
+      "CI runs the test suite with pytest under tox.": -2.169764518737793,
+      "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.": -3.390869617462158,
+      "The project formats Python with black.": -0.6090502142906189,
+      "The project switched its Python formatter to ruff format; black is retired.": 1.4472992420196533,
+      "The team orders Neapolitan pizza for Friday lunch.": -4.359029293060303,
+      "The user edits in Helix, not VS Code.": -3.2566025257110596
+    },
+    "what animal shares the user's home?": {
+      "A grey cat named Miso lives with the user.": -0.5633310079574585,
+      "The user is vegetarian and allergic to peanuts.": -1.042036533355713,
+      "The user lives in London.": -1.3314337730407715,
+      "The user prefers Rust for systems tools and reaches for it by default.": -3.3605313301086426,
+      "The user relocated to Lisbon in the spring.": -2.2361745834350586,
+      "The user visited Lisbon on holiday in 2019.": -3.302272319793701,
+      "The user's sister lives in Manchester.": -1.7285163402557373
+    },
+    "what are the gym's opening hours on public holidays?": {
+      "A fiddle-leaf fig sits by the office window and needs weekly watering.": -3.147177219390869,
+      "CI runs the test suite with pytest under tox.": -3.9036808013916016,
+      "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.": -1.9900245666503906,
+      "The project formats Python with black.": -4.002676963806152,
+      "The project switched its Python formatter to ruff format; black is retired.": -4.065518856048584,
+      "The team orders Neapolitan pizza for Friday lunch.": -3.515026807785034,
+      "The user edits in Helix, not VS Code.": -3.925137519836426
+    },
+    "what discount applies to the annual conference tickets?": {
+      "Database migrations must run before the new pods roll out, or the old schema panics.": -3.5426619052886963,
+      "Deployments are run by hand from the lead developer's laptop.": -4.280275344848633,
+      "Deployments run from the CI pipeline on every tagged release.": -3.9048659801483154,
+      "Never force-push to the main branch.": -3.879149913787842,
+      "The API gateway lives in the infra repository and is deployed separately.": -4.305229187011719,
+      "The espresso machine on the third floor is broken again.": -4.317305088043213,
+      "The user works from the Europe/Budapest timezone.": -3.233253002166748,
+      "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead.": -4.3554301261901855
+    },
+    "what does the developer write code in?": {
+      "A fiddle-leaf fig sits by the office window and needs weekly watering.": -3.5795717239379883,
+      "CI runs the test suite with pytest under tox.": -1.8988661766052246,
+      "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.": -3.023982048034668,
+      "The project formats Python with black.": -2.2837634086608887,
+      "The project switched its Python formatter to ruff format; black is retired.": -2.5514636039733887,
+      "The team orders Neapolitan pizza for Friday lunch.": -4.440514087677002,
+      "The user edits in Helix, not VS Code.": -1.0860872268676758
+    },
+    "what food restrictions should dinner plans respect?": {
+      "A grey cat named Miso lives with the user.": -3.562260627746582,
+      "The user is vegetarian and allergic to peanuts.": -2.16243314743042,
+      "The user lives in London.": -3.819281578063965,
+      "The user prefers Rust for systems tools and reaches for it by default.": -4.0865583419799805,
+      "The user relocated to Lisbon in the spring.": -4.456507682800293,
+      "The user visited Lisbon on holiday in 2019.": -4.530107498168945,
+      "The user's sister lives in Manchester.": -4.1901960372924805
+    },
+    "what happened during the search cluster outage?": {
+      "A circuit breaker sheds search traffic before the cluster saturates.": -1.2054295539855957,
+      "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down.": 0.7771620750427246,
+      "Query timeouts had to be raised from two seconds to eight while search recovered.": -0.9336259961128235,
+      "Result caching masked the problem at first, serving stale search hits for forty minutes.": -1.2322170734405518,
+      "Search's coordinator node needed two restarts before the cluster finally held.": -1.0311837196350098,
+      "The load balancer shed a third of incoming search queries at the height of the incident.": -1.0337631702423096,
+      "The marketing site got a new logo in June.": -3.289541721343994,
+      "The nightly index rebuild was paused to free memory while the search cluster was down.": -0.6314963102340698,
+      "The on-call pager stayed silent for the first eleven minutes, well after users saw errors.": -1.1975404024124146,
+      "The search cluster now keeps a second replica of every shard, so a single node failure is survivable.": -0.8230960369110107
+    },
+    "what is the kubernetes ingress configuration for the staging cluster?": {
+      "A grey cat named Miso lives with the user.": -3.412226676940918,
+      "The user is vegetarian and allergic to peanuts.": -3.4910831451416016,
+      "The user lives in London.": -2.6313564777374268,
+      "The user prefers Rust for systems tools and reaches for it by default.": -2.0740904808044434,
+      "The user relocated to Lisbon in the spring.": -2.958056926727295,
+      "The user visited Lisbon on holiday in 2019.": -3.7041049003601074,
+      "The user's sister lives in Manchester.": -3.6065449714660645
+    },
+    "what is the recipe for the team's chilli cook-off entry?": {
+      "A circuit breaker sheds search traffic before the cluster saturates.": -3.381241798400879,
+      "Post-incident review of the search cluster outage: we walked the whole timeline, from the first elevated latencies to full recovery, and noted what every subsystem did while search was down.": -3.9879841804504395,
+      "Query timeouts had to be raised from two seconds to eight while search recovered.": -3.6545634269714355,
+      "Result caching masked the problem at first, serving stale search hits for forty minutes.": -2.7474167346954346,
+      "Search's coordinator node needed two restarts before the cluster finally held.": -3.4606523513793945,
+      "The load balancer shed a third of incoming search queries at the height of the incident.": -2.8098630905151367,
+      "The marketing site got a new logo in June.": -4.027266502380371,
+      "The nightly index rebuild was paused to free memory while the search cluster was down.": -3.9340872764587402,
+      "The on-call pager stayed silent for the first eleven minutes, well after users saw errors.": -3.6113805770874023,
+      "The search cluster now keeps a second replica of every shard, so a single node failure is survivable.": -3.2670624256134033
+    },
+    "what should I know about this person?": {
+      "A grey cat named Miso lives with the user.": -3.2006516456604004,
+      "The user is vegetarian and allergic to peanuts.": -3.084972858428955,
+      "The user lives in London.": -2.7689318656921387,
+      "The user prefers Rust for systems tools and reaches for it by default.": -4.15379524230957,
+      "The user relocated to Lisbon in the spring.": -3.7921299934387207,
+      "The user visited Lisbon on holiday in 2019.": -4.003835678100586,
+      "The user's sister lives in Manchester.": -2.852325916290283
+    },
+    "where does the service that routes external traffic live?": {
+      "Database migrations must run before the new pods roll out, or the old schema panics.": -3.779552459716797,
+      "Deployments are run by hand from the lead developer's laptop.": -3.4043290615081787,
+      "Deployments run from the CI pipeline on every tagged release.": -2.3290271759033203,
+      "Never force-push to the main branch.": -3.5262584686279297,
+      "The API gateway lives in the infra repository and is deployed separately.": -1.5284249782562256,
+      "The espresso machine on the third floor is broken again.": -4.170482158660889,
+      "The user works from the Europe/Budapest timezone.": -0.5757929682731628,
+      "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead.": -3.225029468536377
+    },
+    "where does the user live": {
+      "A grey cat named Miso lives with the user.": -2.6409788131713867,
+      "The user is vegetarian and allergic to peanuts.": -2.9057822227478027,
+      "The user lives in London.": 0.13796567916870117,
+      "The user prefers Rust for systems tools and reaches for it by default.": -3.2800183296203613,
+      "The user relocated to Lisbon in the spring.": -1.7472503185272217,
+      "The user visited Lisbon on holiday in 2019.": -3.1506152153015137,
+      "The user's sister lives in Manchester.": -1.4350557327270508
+    },
+    "where is the user based these days?": {
+      "A grey cat named Miso lives with the user.": -2.0726280212402344,
+      "The user is vegetarian and allergic to peanuts.": -1.7786519527435303,
+      "The user lives in London.": -0.27333202958106995,
+      "The user prefers Rust for systems tools and reaches for it by default.": -2.143310070037842,
+      "The user relocated to Lisbon in the spring.": -0.736240804195404,
+      "The user visited Lisbon on holiday in 2019.": -1.3315545320510864,
+      "The user's sister lives in Manchester.": -1.0138533115386963
+    },
+    "which cloud region hosts the customer analytics warehouse?": {
+      "A fiddle-leaf fig sits by the office window and needs weekly watering.": -4.015856742858887,
+      "CI runs the test suite with pytest under tox.": -3.8123979568481445,
+      "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.": -3.8308606147766113,
+      "The project formats Python with black.": -3.5999245643615723,
+      "The project switched its Python formatter to ruff format; black is retired.": -4.249223232269287,
+      "The team orders Neapolitan pizza for Friday lunch.": -4.3710174560546875,
+      "The user edits in Helix, not VS Code.": -3.0328049659729004
+    },
+    "which herbs grow best on a shaded balcony?": {
+      "A grey cat named Miso lives with the user.": -3.332353115081787,
+      "The user is vegetarian and allergic to peanuts.": -1.995227575302124,
+      "The user lives in London.": -3.6140940189361572,
+      "The user prefers Rust for systems tools and reaches for it by default.": -4.568090915679932,
+      "The user relocated to Lisbon in the spring.": -4.470047950744629,
+      "The user visited Lisbon on holiday in 2019.": -4.368980407714844,
+      "The user's sister lives in Manchester.": -4.3134026527404785
+    },
+    "which tool tidies up our source code layout?": {
+      "A fiddle-leaf fig sits by the office window and needs weekly watering.": -2.0943148136138916,
+      "CI runs the test suite with pytest under tox.": -2.091312885284424,
+      "Cold cargo caches make the first CI build take twenty minutes; a nightly job keeps them warm.": -2.917952537536621,
+      "The project formats Python with black.": -1.605238676071167,
+      "The project switched its Python formatter to ruff format; black is retired.": -2.3135831356048584,
+      "The team orders Neapolitan pizza for Friday lunch.": -4.080488204956055,
+      "The user edits in Helix, not VS Code.": -0.7765235900878906
+    },
+    "who is cast in the theatre production this autumn?": {
+      "Database migrations must run before the new pods roll out, or the old schema panics.": -4.273312568664551,
+      "Deployments are run by hand from the lead developer's laptop.": -3.9614362716674805,
+      "Deployments run from the CI pipeline on every tagged release.": -4.329422950744629,
+      "Never force-push to the main branch.": -4.043063640594482,
+      "The API gateway lives in the infra repository and is deployed separately.": -4.297112464904785,
+      "The espresso machine on the third floor is broken again.": -4.096869468688965,
+      "The user works from the Europe/Budapest timezone.": -2.3294143676757812,
+      "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead.": -4.228933334350586
+    },
+    "who or what pushes new versions to production?": {
+      "Database migrations must run before the new pods roll out, or the old schema panics.": -2.6363775730133057,
+      "Deployments are run by hand from the lead developer's laptop.": -1.9403191804885864,
+      "Deployments run from the CI pipeline on every tagged release.": -2.1965787410736084,
+      "Never force-push to the main branch.": -1.4429287910461426,
+      "The API gateway lives in the infra repository and is deployed separately.": -3.643364906311035,
+      "The espresso machine on the third floor is broken again.": -3.779343605041504,
+      "The user works from the Europe/Budapest timezone.": -1.5841059684753418,
+      "We spent the afternoon moving the deploy job into CI. The laptop flow kept breaking on SSH keys, so tagged releases now trigger the pipeline instead.": -2.247692823410034
+    }
+  }
+}

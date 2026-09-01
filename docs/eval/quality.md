@@ -329,7 +329,13 @@ A third mechanism ran once rather than continuously: the fusion-weight
 sweep (issue #80, `docs/eval/fusion-sweep.md`) measured fixed convex blends
 of the two retrieval arms against RRF across this whole scorecard. RRF
 stays — the write-up records a formal aggregate win that was rejected on
-Pareto and fixture-bias grounds, and what would reopen it.
+Pareto and fixture-bias grounds, and what would reopen it. A fourth,
+the cross-encoder rerank probe (issue #81, `docs/eval/rerank-probe.md`),
+scored every fixture query×passage pair with jina-reranker-v1-turbo-en
+against a pre-registered abstention rule and was measured and dropped:
+the reranker trades the cosine floor's two confusables for two new ones,
+5/8 fired against the cosine's 6/8. Its full score map is committed
+beside the vectors for model-free replay.
 
 ## What the baseline says about the system
 

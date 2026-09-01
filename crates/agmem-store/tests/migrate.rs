@@ -140,6 +140,28 @@ async fn a_correction_written_before_v3_reads_as_a_one_element_list() {
         .expect("the chain still walks");
     assert_eq!(chain.len(), 2, "both links, in one walk");
     assert!(chain[0].supersedes.is_empty(), "the oldest closed nothing");
+
+    // v5's backfill keyed that closed row by its close time, so its wording
+    // is free to be asserted again on the upgraded store (issue #61) — the
+    // proof that the migration reached rows written before it existed.
+    let outcome = repo::insert_batch(
+        &conn,
+        repo::Batch {
+            space,
+            episode: None,
+            memories: vec![repo::NewMemory::new(
+                agmem_core::Kind::Fact,
+                "the user prefers Python",
+            )],
+        },
+    )
+    .await
+    .expect("re-assert closed pre-v5 content");
+    assert!(
+        outcome.memories[0].is_created(),
+        "a row closed before the upgrade does not answer as the duplicate: {:?}",
+        outcome.memories
+    );
 }
 
 /// Chunks written before v4 carry no `occurred_at` — the column arrives with

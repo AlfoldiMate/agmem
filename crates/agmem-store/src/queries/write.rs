@@ -85,27 +85,44 @@ pub(crate) fn insert_batch(memories: &[MemoryShape<'_>], with_episode: bool) -> 
                 .map(|old| format!("memory:{old}"))
                 .collect::<Vec<_>>()
                 .join(", ");
+            // `invalid_at IS NONE` is the guard `FORGET_SOFT` has always had
+            // (issue #62): a supersede must never rewrite another close. The
+            // caller filtered already-closed targets out before this query
+            // was built, so a shortfall here means a target was closed or
+            // deleted by another writer between that check and this
+            // transaction — abort rather than half-land.
             (
                 format!(
                     "LET $sup{index} = (UPDATE $old{index} SET superseded_by = $new{index}.id,
-                         invalid_at = $new{index}.valid_from, invalid_reason = 'superseded');
+                         invalid_at = $new{index}.valid_from, invalid_reason = 'superseded'
+                         WHERE invalid_at IS NONE);
                      IF array::len($sup{index}) != {count} {{
-                         THROW 'supersedes targets {named} — one of them does not exist'
+                         THROW 'supersedes targets {named} — one of them is gone or was \
+                          closed by another writer'
                      }};"
                 ),
                 format!(
                     "LET $keep{index} = array::complement($old{index}, [$dup{index}]);
                      LET $sup{index} = (UPDATE $keep{index} SET superseded_by = $dup{index},
-                         invalid_at = $row{index}.valid_from, invalid_reason = 'superseded');
+                         invalid_at = $row{index}.valid_from, invalid_reason = 'superseded'
+                         WHERE invalid_at IS NONE);
                      IF array::len($sup{index}) != array::len($keep{index}) {{
-                         THROW 'supersedes targets {named} — one of them does not exist'
+                         THROW 'supersedes targets {named} — one of them is gone or was \
+                          closed by another writer'
                      }};"
                 ),
             )
         };
+        // Live rows only (issue #61): a superseded or forgotten claim is not
+        // a duplicate of a new assertion of the same words — it is history,
+        // and blocking on it made closed content unrepeatable forever. The
+        // v5 index (`space, content_hash, dedup_key`) scopes uniqueness the
+        // same way, so the gate and the index agree on what "already stored"
+        // means.
         builder.push(format!(
             "LET $dup{index} = (SELECT VALUE id FROM memory
-                 WHERE space = $space AND content_hash = $hash{index} LIMIT 1)[0]"
+                 WHERE space = $space AND content_hash = $hash{index}
+                   AND invalid_at IS NONE LIMIT 1)[0]"
         ));
         builder.push(format!(
             "LET $res{index} = IF $dup{index} IS NOT NONE {{
@@ -144,13 +161,25 @@ pub(crate) const EXISTING_MEMORIES: &str =
 
 /// Close `$old` in favour of `$new`, taking the boundary from the successor so
 /// the history chain has no gap and no overlap.
+///
+/// `invalid_at IS NONE` for the same reason `FORGET_SOFT` carries it (issue
+/// #62): a close that stands keeps its own date, reason and successor. The
+/// caller checks liveness first and reports the no-op; the guard here is the
+/// backstop against a close landing between that check and this transaction.
 pub(crate) const SUPERSEDE: &str = "BEGIN;
 LET $valid_from = (SELECT VALUE valid_from FROM $new)[0];
 IF $valid_from IS NONE { THROW 'the superseding memory does not exist' };
 LET $done = (UPDATE $old SET superseded_by = $new,
-    invalid_at = $valid_from, invalid_reason = 'superseded');
-IF array::len($done) = 0 { THROW 'the superseded memory does not exist' };
+    invalid_at = $valid_from, invalid_reason = 'superseded'
+    WHERE invalid_at IS NONE);
+IF array::len($done) = 0 { THROW 'the superseded memory is gone or already closed' };
 COMMIT;";
+
+/// Which of `$ids` in `$space` are already closed, and what closed them —
+/// what a supersede must skip (issue #62) and report rather than rewrite.
+pub(crate) const CLOSED_MEMORIES: &str = "SELECT record::id(id) AS id, invalid_reason,
+     IF superseded_by IS NONE { NONE } ELSE { record::id(superseded_by) } AS superseded_by
+     FROM memory WHERE space = $space AND id IN $ids AND invalid_at IS NOT NONE";
 
 /// Close every live memory in `$memories` that one of `$spaces` holds
 /// (design §5.4).

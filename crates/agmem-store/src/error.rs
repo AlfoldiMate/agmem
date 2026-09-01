@@ -19,6 +19,16 @@ pub enum StoreError {
     #[error("episode {id} does not exist in space {space}")]
     UnknownEpisode { space: SpaceName, id: EpisodeId },
 
+    /// A supersede named a target that is already closed. The close that
+    /// stands is the original one (issue #62); `by` names the successor when
+    /// the reason is a supersession.
+    #[error("memory {id} is already closed ({reason}); its close stands")]
+    AlreadyClosed {
+        id: MemoryId,
+        reason: String,
+        by: Option<MemoryId>,
+    },
+
     /// A row came back in a shape the schema cannot have minted — a record id
     /// that is not a ULID, or an enum spelling this agmem does not know.
     #[error("malformed row from the store: {0}")]

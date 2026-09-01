@@ -726,6 +726,70 @@ async fn a_correction_closes_the_memory_it_supersedes() {
     agmem.shutdown().await;
 }
 
+/// Issue #62: a supersede whose target is already closed is a report, not a
+/// rewrite — the first close keeps its date and successor, and the caller is
+/// told what stands instead of reading silence as a landed closure.
+#[tokio::test]
+async fn a_second_correction_reports_the_close_that_stands() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let first = agmem
+        .remember(json!({ "memories": [{ "content": "The deploy target is Fly.io" }] }))
+        .await;
+    let old = ids(&first["created"])[0].to_owned();
+    let corrected = agmem
+        .remember(json!({
+            "memories": [{ "content": "The deploy target moved to Railway", "supersedes": [old] }]
+        }))
+        .await;
+    let successor = ids(&corrected["created"])[0].to_owned();
+
+    // The same target again — a retried call, or a second session racing.
+    let raced = agmem
+        .remember(json!({
+            "memories": [{ "content": "The deploy target moved to Render", "supersedes": [old] }]
+        }))
+        .await;
+
+    assert_eq!(
+        ids(&raced["created"]).len(),
+        1,
+        "the new claim itself lands: {raced}"
+    );
+    assert!(
+        ids(&raced["superseded"]).is_empty(),
+        "but it closed nothing: {raced}"
+    );
+    let skipped = raced["already_closed"]
+        .as_array()
+        .expect("already_closed is a list");
+    assert_eq!(skipped.len(), 1, "the skipped target is reported: {raced}");
+    assert_eq!(
+        (
+            skipped[0]["id"].as_str(),
+            skipped[0]["reason"].as_str(),
+            skipped[0]["superseded_by"].as_str()
+        ),
+        (
+            Some(old.as_str()),
+            Some("superseded"),
+            Some(successor.as_str())
+        ),
+        "naming the close that stands: {raced}"
+    );
+
+    let memories = agmem.memories().await;
+    let closed = memories
+        .iter()
+        .find(|memory| memory.id.as_str() == old)
+        .expect("the closed memory is still readable");
+    assert_eq!(
+        closed.superseded_by.as_ref().map(|id| id.as_str()),
+        Some(successor.as_str()),
+        "the first close keeps its successor"
+    );
+    agmem.shutdown().await;
+}
+
 /// Issue #57: a word-for-word re-send with `supersedes` used to block at the
 /// exact-hash gate with the supersede riding on the blocked entry — so the
 /// retry the description asks for ("re-send yours with the id in supersedes")

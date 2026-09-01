@@ -103,6 +103,10 @@ pub struct ReflectResult {
     /// The ids of the claims closed by a `supersedes` in this call.
     pub superseded: Vec<String>,
 
+    /// `supersedes` targets that were already closed when this call arrived —
+    /// skipped and reported, never rewritten, exactly as `remember` does.
+    pub already_closed: Vec<super::remember::AlreadyClosed>,
+
     /// What to do about a write that did not happen, when there is something
     /// worth doing.
     ///
@@ -201,6 +205,7 @@ pub async fn run(
                     derived_from: Vec::new(),
                     related: Vec::new(),
                     superseded: Vec::new(),
+                    already_closed: Vec::new(),
                     note,
                 });
             }
@@ -253,6 +258,15 @@ pub async fn run(
         },
         related: if created { related } else { Vec::new() },
         superseded: outcome.superseded.iter().map(ToString::to_string).collect(),
+        already_closed: outcome
+            .already_closed
+            .into_iter()
+            .map(|closed| super::remember::AlreadyClosed {
+                id: closed.id.to_string(),
+                reason: closed.reason,
+                superseded_by: closed.by.map(|id| id.to_string()),
+            })
+            .collect(),
         note,
     })
 }

@@ -93,8 +93,9 @@ pub struct ConsolidateResult {
     /// would have expired them.
     pub stale_contexts: Vec<StaleContext>,
 
-    /// Present only when something limited the answer — no embedder, or a
-    /// space larger than one pass compares.
+    /// Present only when something limited the answer — no embedder, a
+    /// space larger than one pass compares, or more findings than one
+    /// answer carries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
@@ -221,7 +222,10 @@ pub async fn run(
     }
 
     // Closest first in both, so the cap keeps what is most worth acting on
-    // rather than whichever space came first.
+    // rather than whichever space came first. A cap that bites is a second
+    // way this answer is thinner than the store (issue #68), and `note` has
+    // to say so — `scanned` only confesses the row-fetch cut.
+    let capped = clusters.len() > MAX_CLUSTERS || contradictions.len() > MAX_CONTRADICTIONS;
     clusters.sort_by(|left, right| rank(right.max_similarity, left.max_similarity));
     clusters.truncate(MAX_CLUSTERS);
     contradictions.sort_by(|left, right| rank(right.similarity, left.similarity));
@@ -234,7 +238,7 @@ pub async fn run(
         near_duplicates: clusters,
         contradictions,
         stale_contexts: stale,
-        note: note(service, truncated_any),
+        note: note(service, truncated_any, capped),
     })
 }
 
@@ -248,9 +252,10 @@ struct Found {
 ///
 /// One pass answers both similarity questions, because they are the same
 /// number read against two bands: at or above [`dedup::CLUSTER_THRESHOLD`] a
-/// pair is one claim twice, and between [`dedup::CORRECTION_FLOOR`] and that
-/// bar it is one subject stated two ways. The bands do not overlap, so no pair
-/// is ever reported under both names.
+/// pair is one claim twice, and at or above [`dedup::CORRECTION_FLOOR`] it is
+/// one subject that may be stated two ways. The bands overlap from the
+/// clustering bar up — on purpose, for the reason on the contradiction branch
+/// below — so the closest pairs are reported under both names.
 fn compare(space: &SpaceName, rows: Vec<Embedded>) -> Found {
     let units: Vec<Option<dedup::Unit>> = rows
         .iter()
@@ -388,7 +393,7 @@ fn overdue(claim: MemoryRecord) -> StaleContext {
 }
 
 /// Why an answer is thinner than the store is, when it is.
-fn note(service: &AgmemService, truncated: bool) -> Option<String> {
+fn note(service: &AgmemService, truncated: bool, capped: bool) -> Option<String> {
     let mut reasons = Vec::new();
     if service.embedder().dim() == 0 {
         reasons.push(
@@ -400,6 +405,12 @@ fn note(service: &AgmemService, truncated: bool) -> Option<String> {
         reasons.push(
             "a space holds more live memories than one pass compares — the strongest were \
              kept, so call again after acting on these",
+        );
+    }
+    if capped {
+        reasons.push(
+            "more near-duplicate clusters or contradiction candidates were found than one \
+             answer carries — the closest were kept, so call again after acting on these",
         );
     }
     (!reasons.is_empty()).then(|| reasons.join("; "))

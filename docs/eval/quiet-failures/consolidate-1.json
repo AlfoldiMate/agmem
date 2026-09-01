@@ -1,0 +1,70 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall",
+    "inspect"
+  ],
+  "calls": 4,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.xO4IcXz925",
+  "answer": "Here's what's stored about atlas — 47 memories total, all in the `eval` space. I haven't changed anything.\n\n## Direct contradiction (needs your call)\n- **\"Merging to main deploys atlas to staging automatically.\"** vs **\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"**\n  These flatly disagree on whether staging deploy is automatic or manual. Both were stored at essentially the same time with no supersession link, so I can't tell which is current — one of these is wrong and should be corrected or removed.\n\n## Duplicates (same fact, restated)\n- **Deploy command**, said three ways:\n  - \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n  - \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n  - \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" (this one has extra info — the dropped `make deploy` target — the other two add nothing beyond it)\n- **Test runner**, said two ways:\n  - \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n  - \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n  These are word-for-word equivalent.\n\n## Worth a second look (not strictly contradictory, but in tension)\n- \"The atlas search index is rebuilt from Postgres, so it can always be discarded and regenerated.\" vs the lesson \"A deploy that skips bin/ship.sh leaves the search index stale, which cost the team an afternoon of downtime.\" If regeneration is always safe and cheap, it's odd that a stale index caused real downtime — worth confirming which is still true (maybe regeneration is safe but slow).\n\n## Likely stale / time-bound (low importance, low retention scores already reflect this)\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — \"this week\" has no anchor; almost certainly resolved or replaced by now.\n- \"The branch under review is spike/consolidate.\" — tied to a specific past review, probably long since merged or abandoned.\n\n## Everything else\nThe remaining ~35 memories (CI pipeline steps, Postgres version support, crate layout, API auth/rate-limiting, release process, branch naming, docs tooling, etc.) each cover distinct topics with no overlap or conflict — those look fine to carry forward as-is.\n\nWant me to fix the contradiction (once you tell me which is correct), collapse the duplicates, and prune the two stale entries?",
+  "cost_usd": 0.1873008,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1DP7Y28K6RHDN72A0172ZCF\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:14:33.219891Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1DP7Y2340ZM1X5P4MKFPWF4\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1DP7XW52NS35PEBBME6JW9D\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664820004642803,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659280018571213,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:14:33.219685Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1DP7XWWA1TWSCF4MJ1T2EA7\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8495182035572283,\\\"signals\\\":{\\\"importance\\\":1,\\\"retenti"
+    },
+    {
+      "turn": 0,
+      "tool": "inspect",
+      "input": {
+        "ref": "memory:01M1DP7XX1G6PVB6J0XK579RZY"
+      },
+      "answer": "\"{\\\"found\\\":{\\\"chain\\\":[{\\\"access_count\\\":10,\\\"content\\\":\\\"Merging to main deploys atlas to staging automatically.\\\",\\\"created_at\\\":\\\"2026-09-01T05:14:33.249345Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1DP7XX1G6PVB6J0XK579RZY\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-09-01T05:14:39.550097Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":5,\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:14:33.219721Z\\\"}],\\\"kind\\\":\\\"memory\\\",\\\"memory\\\":{\\\"access_count\\\":10,\\\"content\\\":\\\"Merging to main deploys atlas to staging automatically.\\\",\\\"created_at\\\":\\\"2026-09-01T05:14:33.249345Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\"
+    },
+    {
+      "turn": 0,
+      "tool": "inspect",
+      "input": {
+        "ref": "memory:01M1DP7Y0DVJ2JV3BD7HQBQ9CC"
+      },
+      "answer": "\"{\\\"found\\\":{\\\"chain\\\":[{\\\"access_count\\\":10,\\\"content\\\":\\\"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\\\",\\\"created_at\\\":\\\"2026-09-01T05:14:33.357459Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1DP7Y0DVJ2JV3BD7HQBQ9CC\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-09-01T05:14:39.563712Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":5,\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:14:33.219829Z\\\"}],\\\"kind\\\":\\\"memory\\\",\\\"memory\\\":{\\\"access_count\\\":10,\\\"content\\\":\\\"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\\\",\\\"created_at\\\":\\\"2026-09-01T05:14:33.357459Z\\\",\\\"d"
+    }
+  ]
+}

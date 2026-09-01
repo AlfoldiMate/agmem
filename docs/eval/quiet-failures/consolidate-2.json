@@ -1,0 +1,44 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.472F8K3yA8",
+  "answer": "Pulled everything tagged `atlas` (48 memories, all in the `eval` space). Here's what stands out:\n\n**Contradiction — needs a decision before handoff:**\n- *\"Merging to main deploys atlas to staging automatically.\"* (`01M1DP9K4G7FER4ZRBDT0RDXXA`)\n- *\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"* (`01M1DP9K7XTCX508FS1QXHBWER`)\n\nThese directly conflict — one describes CI-driven auto-deploy, the other a manual step. Both were written at the same timestamp with no supersede link between them, so the store has no way to know which is current. Whoever inherits this needs to say which is true so the wrong one can be superseded (not just deleted, per how agmem tracks corrections).\n\n**Duplicates — same fact, restated:**\n- *\"Project atlas is deployed by running `bin/ship.sh` from the repository root.\"* ≈ *\"To ship atlas you run the `bin/ship.sh` script at the top of the repo.\"* (`01M1DP9K3JETJGMF8N5ARQZHTR` / `01M1DP9K6TR8E2939BCMS9284S`)\n- *\"The atlas test suite is run with `cargo nextest run`, not `cargo test`.\"* ≈ *\"Tests in atlas are run through `cargo nextest run`; plain `cargo test` is not used.\"* (`01M1DP9K4TW8Q773JG78R0AZZ2` / `01M1DP9K8ZBWDZK6XEJAFQD3P4`)\n\nRelated but not strictly duplicate — worth merging anyway since it's the same topic cluster: *\"Deploying atlas means executing `bin/ship.sh`; the old `make deploy` target is gone.\"* (`01M1DP9KAM3QHGTAMC07E7KZW6`) — adds the \"make deploy is gone\" detail, so it's the one worth keeping if you consolidate the ship.sh trio.\n\n**Likely stale / transient, probably not worth handing off:**\n- *\"The flaky test being chased this week is `pagination_ordering` in atlas-api.\"* — explicitly time-relative (\"this week\"), and the system's own retention score has already decayed it hard (0.135 vs ~0.77 for the stable facts). Almost certainly no longer true.\n- *\"The branch under review is `spike/consolidate`.\"* — same low retention/importance signature, reads like a leftover session note rather than a durable project fact.\n\n**Everything else** (DB, CI pipeline order, API auth/rate-limiting/health endpoints, release process, branch/PR conventions, crate layout, logging, config paths) looks internally consistent — no conflicting versions found.\n\nWant me to fix the contradiction (once you tell me which deploy behavior is actually current), merge the two duplicate pairs, and drop the two stale entries?",
+  "cost_usd": 0.12073919999999999,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "Atlas project",
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1DP9K3JETJGMF8N5ARQZHTR\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819784636941,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659279138547765,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:15:27.728751Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1DP9K4B1NAA713D6PTP4AY5\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8478632815724851,\\\"signals\\\":{\\\"importance\\\":1,\\\"retenti"
+    }
+  ]
+}

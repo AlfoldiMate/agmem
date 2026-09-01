@@ -328,7 +328,7 @@ expression: "&tools.tools"
           "type": "array"
         },
         "note": {
-          "description": "Present only when something limited the answer — no embedder, or a\nspace larger than one pass compares.",
+          "description": "Present only when something limited the answer — no embedder, a\nspace larger than one pass compares, or more findings than one\nanswer carries.",
           "type": [
             "string",
             "null"

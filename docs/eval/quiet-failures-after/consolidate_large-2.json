@@ -1,0 +1,113 @@
+{
+  "scenario": "consolidate_large",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall",
+    "consolidate"
+  ],
+  "calls": 7,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 6,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.nkWswzvZM9",
+  "answer": "I reviewed everything tagged `atlas` in the `eval` memory space (~120 live claims) using both the automated consolidate pass and a manual read of the full set, since the automated pass alone throws some false positives from embedding similarity. I made no changes — this is just the audit.\n\n**Duplicates (same fact stated multiple ways):**\n\n1. **Test runner** — stated twice:\n   - \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n   - \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n\n2. **Deploy command** — stated three times:\n   - \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n   - \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n   - \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" (this one has extra info worth keeping — the `make deploy` retirement note)\n\n**Contradiction (real conflict, not just similar wording):**\n\n3. Whether staging deploys are automatic:\n   - \"Merging to main deploys atlas to staging automatically.\"\n   - \"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\"\n   \n   One of these is wrong and it's worth nailing down before handoff — a new owner needs to know whether staging deploys itself or needs a human.\n\n**Out of date (stale scratch notes):**\n\n4. \"The branch under review is spike/consolidate.\" — filed as short-lived, but idle ~40 days past when it should've expired. Almost certainly a dead reference now.\n5. \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — same issue, \"this week\" is now ~40 days stale.\n\n**False positives I ruled out:** the automated pass also flagged pairs like \"images pushed to GHCR\" vs \"container built from distroless base,\" \"cargo-deny in CI\" vs \"nextest for tests,\" and \"feature flags are an env var map\" vs \"feature flags are additive so `--all-features` must pass\" — these just share topic/embedding similarity, they're complementary facts, not duplicates or conflicts.\n\nWant me to merge the duplicates, resolve the staging-deploy contradiction (I'd need you to tell me which is correct), and drop the two stale scratch notes?",
+  "cost_usd": 0.41262180000000004,
+  "agent_turns": 10,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1DQZDPTWXNYEVDF11WEAYFK\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:44:50.995209Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1DQZDPCR62DX96QKBEGZCVQ\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1DQZD24XJS33ZXM4ERZ926S\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664820016777384,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659280067109535,\\\"rrf\\\":0.031746031746031744,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:44:50.994629Z\\\"},{\\\"content\\\":\\\"atlas stores its data in Postgres 16 and the schema lives under migrations/.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1DQZD29Y8XAMD1A3FH84Z8X\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.806905685087435,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7"
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "eval"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-09-01T05:44:51.232778Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1DQZD901HMPN1RFPRS3XDDW\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-09-01T05:44:57.827449Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":4,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:44:50.99481Z\\\"},\\\"b\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"created_at\\\":\\\"2026-09-01T05:44:51.070897Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"i"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "eval",
+        "k": 130
+      },
+      "answer": "\"k must be between 1 and 50\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "eval",
+        "query": "deploy release billing security infra",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1DQZDPTWXNYEVDF11WEAYFK\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.9832023422608865,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.029910714285714284,\\\"rrf_normalized\\\":0.9720039037681442},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:44:50.995209Z\\\"},{\\\"content\\\":\\\"A security advisory affecting atlas is triaged within two working days.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M1DQZDM08ZDPSPV05GZBBS1G\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.921929908859222,\\\"signals\\\":{\\\"importance\\\":1,\\\"reten"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "eval",
+        "query": "database connection pool schema migration ledger reconciliation timeout",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1DQZD2EZ1338QYPV5J3QC7N\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.032018442622950824,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:44:50.994645Z\\\"},{\\\"content\\\":\\\"A timeout against the ledger service counts as a failure and is not retried.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"data\\\"],\\\"id\\\":\\\"01M1DQZDJEP2TG2V7Q4QKGVBD7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9065171247792249,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999488331032,\\\"rrf\\\":0.031280547"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "eval",
+        "query": "on call rotation incident outage credential rotation secret",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The eleven minute outage in February came from an expired credential.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M1DQZDNQB5WWE9M0ZJWSA10T\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.9624999957872715,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"retention\\\":0.9999999831490858,\\\"rrf\\\":0.032266458495966696,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:44:50.995172Z\\\"},{\\\"content\\\":\\\"Credentials for atlas rotate every ninety days.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M1DQZDNWYMX3WVTYQ57F79TJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9121152810247872,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999977273808232,\\\"rrf\\\":0.03"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "scenario": "consolidate_large",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall",
+    "consolidate"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.BFDghDfR40",
+  "answer": "I ran `consolidate` (read-only — it doesn't change anything) across all memory tagged with `atlas`, then read through the flagged pairs myself since the tool's own similarity groupings mix real duplicates with unrelated facts that just happen to be worded similarly. Here's what's actually worth acting on, sorted by importance. **Nothing has been changed.**\n\n## 🔴 Real contradiction — needs a decision before handover\n- **\"Merging to main deploys atlas to staging automatically.\"** *vs* **\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"**\n  These directly conflict on whether staging deploys are automatic or manual. This is the kind of thing a new owner would trip over in week one — worth resolving from source (check the CI config / actual practice) rather than guessing.\n\n- **\"Feature flags in atlas are an environment variable map and nothing more.\"** *vs* **\"Feature flags in atlas are additive only, so `cargo check --all-features` has to pass.\"**\n  These look like two different concepts both labeled \"feature flags\" — one sounds like runtime/product flags (env-var map, tied to the \"a flag is deleted within a month of full rollout\" policy), the other sounds like Cargo *build* features (compile-time, Rust-specific). If that's right it's not a contradiction so much as overloaded terminology that will confuse whoever inherits this — worth splitting into two clearly-named claims.\n\n## 🟡 Straight duplicates (same fact, different wording) — safe to merge\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\" / \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\" / \"Project atlas is deployed by running bin/ship.sh from the repository root.\" / \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" — three claims, one fact (the third adds the \"make deploy is gone\" detail worth keeping).\n\n## 🟠 Stale (time-boxed notes that outlived their shelf life)\nBoth were filed with a \"fast\" decay class (meant to be short-lived) but are still sitting in memory ~40 days after last use:\n- \"The branch under review is spike/consolidate.\"\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\"\n\nThese read like mid-sprint scratch notes, not durable project facts. Worth checking if that flaky test/branch is still relevant — if not, they should just be dropped, not carried forward to a new owner.\n\n## Noise I ruled out\nThe tool's own \"near duplicate\" grouping bundled 8 unrelated facts together (license, SDK languages, status page, repo access, etc.) — that's an artifact of chained similarity scoring, not real duplication, so I'm not flagging those. Same for most of its 18 \"contradiction\" pairs (e.g. connection-pool-size vs readiness-probe, Postgres-schema-location vs search-index-rebuild) — related topics, not conflicting claims.\n\nOne side note: everything above is stored in a space labeled `eval`, not your normal project space — worth confirming that's actually where you want atlas's memory to live before handing it off.\n\nWant me to fix the duplicates (merge via `supersedes`) and drop the two stale notes, once you've resolved the staging-deploy and feature-flag questions?",
+  "cost_usd": 0.25408200000000003,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1DPCZ0CEPCGM7QGBJETB9MW\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T05:17:17.613424Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1DPCYZRVR8ZFBG1SDXXNXNM\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1DPCYDGYJB098WWPXAQC6GB\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819980217028,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659279920868113,\\\"rrf\\\":0.032018442622950824,\\\"rrf_normalized\\\":1},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:17:17.612769Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1DPCYDZRDY2MSJTSERJBN4M\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8252829461395704,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"re"
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "all"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-09-01T05:17:17.789377Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1DPCYJXPTDP6MP1D9F5GYWA\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T05:17:18.71102Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-01T05:17:17.61298Z\\\"},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"created_at\\\":\\\"2026-09-01T05:17:17.652114Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id"
+    }
+  ]
+}

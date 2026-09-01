@@ -1,4 +1,4 @@
-//! The four scorers and the scorecard they fill (issue #32).
+//! The five scorers and the scorecard they fill (issue #32).
 //!
 //! Every number here is read off a tool call's *returned or stored* result —
 //! never off "the call happened". The scorecard is all integers except MRR:
@@ -28,6 +28,7 @@ pub struct ScenarioScore {
     pub timeline: Ratio,
     pub gate: Gate,
     pub context: Ratio,
+    pub staleness: Staleness,
 }
 
 /// How much of the labelled-relevant set the probes brought back, and how
@@ -64,6 +65,17 @@ pub struct Gate {
     pub wrong_original: u32,
 }
 
+/// Supersession honesty over live pages (FAMA-style, issue #79). `pages` is
+/// how many live recalls the scenario scripts; `stale_hits` how many of
+/// their hits were claims corrected before the query ran. Zero is the only
+/// honest number — anything above it means a superseded claim reached a
+/// caller who never asked for history.
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct Staleness {
+    pub stale_hits: u32,
+    pub pages: u32,
+}
+
 /// Scores every scenario with the given embedder.
 pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>) -> Scorecard {
     let mut scores = BTreeMap::new();
@@ -75,6 +87,7 @@ pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>) -> S
                 timeline: timeline(scenario, embedder.clone()).await,
                 gate: gate(scenario, embedder.clone()).await,
                 context: context(scenario, embedder.clone()).await,
+                staleness: staleness(scenario, embedder.clone()).await,
             },
         );
     }
@@ -172,6 +185,45 @@ pub async fn timeline(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Ratio
     Ratio {
         passed,
         total: scenario.timeline.len() as u32,
+    }
+}
+
+/// Replays every live page the scenario scripts — each probe at its own `k`,
+/// each timeline check without `as_of` at the timeline's k of 10 — and
+/// counts hits that are claims some later seed superseded. Ground truth is
+/// the fixture's `supersedes` graph, not the hit's own annotation: a closed
+/// claim that leaks unannotated still counts.
+pub async fn staleness(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Staleness {
+    let mut pages: Vec<(&str, u16)> = scenario
+        .probes
+        .iter()
+        .map(|probe| (probe.query.as_str(), probe.k))
+        .collect();
+    pages.extend(
+        scenario
+            .timeline
+            .iter()
+            .filter(|check| check.as_of.is_none())
+            .map(|check| (check.query.as_str(), 10)),
+    );
+    let mut stale_hits = 0;
+    for (query, k) in &pages {
+        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let answer = seeded.agmem.recall(json!({ "query": query, "k": k })).await;
+        let superseded: HashSet<&str> = scenario
+            .superseded_labels()
+            .iter()
+            .map(|label| seeded.id(label))
+            .collect();
+        stale_hits += hit_ids(&answer)
+            .iter()
+            .filter(|id| superseded.contains(*id))
+            .count() as u32;
+        seeded.shutdown().await;
+    }
+    Staleness {
+        stale_hits,
+        pages: pages.len() as u32,
     }
 }
 

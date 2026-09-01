@@ -17,6 +17,22 @@ pub const WEIGHT_RETENTION: f64 = 0.25;
 /// Weight of the standing importance implied by the decay class.
 pub const WEIGHT_IMPORTANCE: f64 = 0.15;
 
+/// Weight of the temporal fit when the caller gave `recall` a window
+/// (issue #78). A bonus term *outside* the unit sum of the three weights
+/// above, not a fourth share of it: renormalising would move every score on
+/// the path that passes no window, and the three weights are pinned by the
+/// recorded eval baseline. With no window, the term is exactly zero and the
+/// arithmetic above is untouched.
+pub const WEIGHT_TEMPORAL: f64 = 0.15;
+
+/// How fast temporal fit falls off outside the asked-for window, in days.
+///
+/// The same idiom as [`retention`]: a claim just outside the window is
+/// nearly as good as one inside it, and one a year out is not — a cliff at
+/// the boundary would make "since March" hide what became true in late
+/// February, which is usually exactly the claim the question is about.
+pub const TEMPORAL_TAU_DAYS: f64 = 30.0;
+
 /// Floor on Ebbinghaus stability, so a zero or corrupt `strength` decays fast
 /// instead of producing NaN.
 pub const MIN_STABILITY: f64 = 0.01;
@@ -159,6 +175,66 @@ pub fn is_valid_at(memory: &MemoryRecord, instant: Timestamp) -> bool {
     memory.valid_from <= instant && memory.invalid_at.is_none_or(|closed| instant < closed)
 }
 
+/// The temporal narrowing a `recall` may carry (issue #78): a validity
+/// window, a change cutoff, or both. Soft on purpose — it rescores, never
+/// filters — because a hard temporal cut is what `as_of` already is, and
+/// the eval's veto of the gap-only knee (issue #77) is the measured case
+/// for soft beating hard on this pipeline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TemporalQuery {
+    /// Keep claims still true at or after this instant ahead of the rest.
+    pub since: Option<Timestamp>,
+    /// Keep claims already true at or before this instant ahead of the rest.
+    pub until: Option<Timestamp>,
+    /// Keep claims created or corrected at or after this instant ahead of
+    /// the rest.
+    pub changed_since: Option<Timestamp>,
+}
+
+/// When a candidate was true: `[valid_from, invalid_at)` for a claim, the
+/// degenerate `[occurred_at, occurred_at]` for a slice of an episode — an
+/// event happened at a point, and one code path covers both.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Interval {
+    /// When it started being true, or when the event happened.
+    pub from: Timestamp,
+    /// When it stopped; `None` while it still holds.
+    pub to: Option<Timestamp>,
+}
+
+/// How well a candidate fits the asked-for window, in `[0, 1]`.
+///
+/// The window `[since, until]` (either side open) is compared against the
+/// candidate's validity: overlap at *any* point scores 1.0 — the claim
+/// corrected mid-window is the interesting one, so "true throughout" is
+/// deliberately not required — and a miss decays with the gap between the
+/// intervals, `exp(-gap_days / TAU)`. `changed_since` scores the same way
+/// on when the row last changed (created, or closed by a correction). When
+/// the query carries several conditions the *worst* fit decides: a product
+/// would over-punish a row that narrowly misses one of them.
+pub fn temporal_fit(query: &TemporalQuery, valid: Interval, changed: Timestamp) -> f64 {
+    let mut fit: f64 = 1.0;
+
+    if query.since.is_some() || query.until.is_some() {
+        // Distance between [valid.from, valid.to] and [since, until]; zero
+        // when they overlap. An open side never creates distance.
+        let starts_late = query
+            .until
+            .map_or(0.0, |until| days_between(until, valid.from));
+        let ended_early = match (query.since, valid.to) {
+            (Some(since), Some(to)) => days_between(to, since),
+            _ => 0.0,
+        };
+        let gap = starts_late.max(ended_early);
+        fit = fit.min((-gap / TEMPORAL_TAU_DAYS).exp());
+    }
+    if let Some(cutoff) = query.changed_since {
+        let gap = days_between(changed, cutoff);
+        fit = fit.min((-gap / TEMPORAL_TAU_DAYS).exp());
+    }
+    fit
+}
+
 /// The three raw signals behind one candidate's rank.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Signals {
@@ -171,6 +247,13 @@ pub struct Signals {
     /// min–max-normalised `rrf` cannot give.
     #[serde(default)]
     pub similarity: Option<f64>,
+    /// How well the candidate fits the temporal window the caller gave
+    /// (issue #78), in `[0, 1]`. `None` when the call carried no window —
+    /// the everyday case — or when the candidate is undatable; either way
+    /// the ranking term is zero and the neutral path's arithmetic is
+    /// untouched.
+    #[serde(default)]
+    pub temporal: Option<f64>,
     /// Retention at query time; 1.0 for anything that does not decay.
     pub retention: f64,
     /// Standing importance of the decay class.
@@ -183,6 +266,7 @@ impl Signals {
         Self {
             rrf,
             similarity: None,
+            temporal: None,
             retention: retention(
                 memory.decay_class,
                 memory.strength,
@@ -202,6 +286,7 @@ impl Signals {
         Self {
             rrf,
             similarity: None,
+            temporal: None,
             retention: 1.0,
             importance: DecayClass::Normal.importance(),
         }
@@ -211,6 +296,13 @@ impl Signals {
     #[must_use]
     pub fn with_similarity(mut self, similarity: Option<f64>) -> Self {
         self.similarity = similarity;
+        self
+    }
+
+    /// The same signals, with the temporal fit attached.
+    #[must_use]
+    pub fn with_temporal(mut self, temporal: Option<f64>) -> Self {
+        self.temporal = temporal;
         self
     }
 }
@@ -230,7 +322,9 @@ pub struct Ranked {
 /// Rank candidates best-first, returning each with its score breakdown.
 ///
 /// `score = 0.6·norm(rrf) + 0.25·retention + 0.15·importance` (design §5.3),
-/// where `norm` is min–max across the pool.
+/// where `norm` is min–max across the pool — plus `0.15·temporal` when the
+/// call carried a window (issue #78), a bonus that is exactly zero on the
+/// everyday path.
 ///
 /// RRF barely spreads: `1/(60 + rank)` differs by 3% between the first hit and
 /// the fourth, so dividing by the best candidate — the obvious normalisation,
@@ -270,7 +364,8 @@ pub fn rank<T>(candidates: impl IntoIterator<Item = (T, Signals)>) -> Vec<(T, Ra
             };
             let score = WEIGHT_RRF * rrf_normalized
                 + WEIGHT_RETENTION * signals.retention
-                + WEIGHT_IMPORTANCE * signals.importance;
+                + WEIGHT_IMPORTANCE * signals.importance
+                + WEIGHT_TEMPORAL * signals.temporal.unwrap_or(0.0);
             (
                 item,
                 Ranked {
@@ -460,6 +555,94 @@ mod tests {
         assert!(
             is_valid_at(&record, now()),
             "live records have no upper bound"
+        );
+    }
+
+    /// A window over the given RFC3339 dates; `None` leaves a side open.
+    fn window(since: Option<&str>, until: Option<&str>, changed: Option<&str>) -> TemporalQuery {
+        let parse = |stamp: &str| stamp.parse::<Timestamp>().expect("timestamp");
+        TemporalQuery {
+            since: since.map(parse),
+            until: until.map(parse),
+            changed_since: changed.map(parse),
+        }
+    }
+
+    fn interval(from: &str, to: Option<&str>) -> Interval {
+        Interval {
+            from: from.parse().expect("timestamp"),
+            to: to.map(|stamp| stamp.parse().expect("timestamp")),
+        }
+    }
+
+    #[test]
+    fn any_overlap_with_the_window_is_a_perfect_fit() {
+        let query = window(
+            Some("2026-03-01T00:00:00Z"),
+            Some("2026-06-01T00:00:00Z"),
+            None,
+        );
+        // Corrected mid-window: still what the question is about.
+        let corrected = interval("2026-01-01T00:00:00Z", Some("2026-04-01T00:00:00Z"));
+        let live = interval("2026-05-01T00:00:00Z", None);
+        let changed = "2026-01-01T00:00:00Z".parse().expect("timestamp");
+        assert_eq!(temporal_fit(&query, corrected, changed), 1.0);
+        assert_eq!(temporal_fit(&query, live, changed), 1.0);
+    }
+
+    #[test]
+    fn a_miss_decays_with_the_gap_instead_of_cliffing() {
+        let query = window(Some("2026-03-01T00:00:00Z"), None, None);
+        let changed = "2020-01-01T00:00:00Z".parse().expect("timestamp");
+        // Closed 30 days before the window opens: one tau.
+        let near = interval("2020-01-01T00:00:00Z", Some("2026-01-30T00:00:00Z"));
+        let fit = temporal_fit(&query, near, changed);
+        assert!((fit - (-1.0_f64).exp()).abs() < 1e-9, "{fit}");
+        // Closed years before: effectively zero, never negative.
+        let far = interval("2020-01-01T00:00:00Z", Some("2021-01-01T00:00:00Z"));
+        let distant = temporal_fit(&query, far, changed);
+        assert!(distant < 0.01 && distant > 0.0, "{distant}");
+    }
+
+    #[test]
+    fn changed_since_scores_creation_or_correction_and_the_worst_condition_decides() {
+        let cutoff = window(None, None, Some("2026-06-01T00:00:00Z"));
+        let always = interval("2020-01-01T00:00:00Z", None);
+        let fresh = "2026-07-01T00:00:00Z".parse().expect("timestamp");
+        let stale = "2026-05-02T00:00:00Z".parse().expect("timestamp");
+        assert_eq!(temporal_fit(&cutoff, always, fresh), 1.0);
+        let fit = temporal_fit(&cutoff, always, stale);
+        assert!(
+            (fit - (-1.0_f64).exp()).abs() < 1e-9,
+            "30 days short: {fit}"
+        );
+
+        // Window fits perfectly, cutoff misses: min wins, not the product.
+        let both = window(
+            Some("2026-01-01T00:00:00Z"),
+            None,
+            Some("2026-06-01T00:00:00Z"),
+        );
+        assert_eq!(
+            temporal_fit(&both, always, stale),
+            fit,
+            "the worst sub-fit is the fit"
+        );
+    }
+
+    #[test]
+    fn the_temporal_term_is_zero_exactly_when_no_window_was_given() {
+        let signals = Signals::for_episode_chunk(0.03);
+        let neutral = rank([("plain", signals)]);
+        let windowed = rank([("dated", signals.with_temporal(Some(1.0)))]);
+        assert!(
+            (windowed[0].1.score - neutral[0].1.score - WEIGHT_TEMPORAL).abs() < 1e-12,
+            "a perfect fit is worth exactly the bonus weight: {windowed:?}"
+        );
+        assert_eq!(
+            rank([("none", signals.with_temporal(None))])[0].1.score,
+            neutral[0].1.score,
+            "no window, identical arithmetic"
         );
     }
 

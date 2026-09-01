@@ -30,6 +30,9 @@ pub struct ScenarioScore {
     pub context: Ratio,
     pub staleness: Staleness,
     pub abstention: Abstention,
+    /// Time-aware ranking (issue #78): soft-window checks, one pass/fail
+    /// each, judged on the top claim exactly as `timeline`'s live rule is.
+    pub temporal: Ratio,
 }
 
 /// How much of the labelled-relevant set the probes brought back, and how
@@ -106,6 +109,7 @@ pub async fn scorecard(scenarios: &[Scenario], embedder: Arc<dyn Embedder>) -> S
                 context: context(scenario, embedder.clone()).await,
                 staleness: staleness(scenario, embedder.clone()).await,
                 abstention: abstention(scenario, embedder.clone()).await,
+                temporal: temporal(scenario, embedder.clone()).await,
             },
         );
     }
@@ -194,6 +198,46 @@ pub async fn abstention(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Abs
 
 fn round4(value: f64) -> f64 {
     (value * 10_000.0).round() / 10_000.0
+}
+
+/// Time-aware ranking (issue #78): each check recalls with its soft window
+/// and passes when the expected claim tops the page. The window rescores
+/// rather than filters, so what this measures is whether temporal intent
+/// can reorder a page the plain query would rank differently — the
+/// `WEIGHT_TEMPORAL = 0` counterfactual in `docs/eval/quality.md` is the
+/// proof of which checks the term itself carries.
+pub async fn temporal(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Ratio {
+    let mut passed = 0;
+    for check in &scenario.temporal {
+        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let mut arguments = json!({ "query": check.query, "k": 10 });
+        for (field, value) in [
+            ("since", &check.since),
+            ("until", &check.until),
+            ("changed_since", &check.changed_since),
+        ] {
+            if let Some(stamp) = value {
+                arguments[field] = json!(stamp);
+            }
+        }
+        if check.include_invalidated {
+            arguments["include_invalidated"] = json!(true);
+        }
+        let answer = seeded.agmem.recall(arguments).await;
+        // Judged on the first *claim*, as timeline's live rule is: an
+        // episode slice outranking it is a ranking fact with its own column.
+        let top = hits(&answer)
+            .iter()
+            .find(|hit| hit["kind"].as_str() != Some("episode"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        passed += u32::from(top["id"].as_str() == Some(seeded.id(check.expect_top.as_str())));
+        seeded.shutdown().await;
+    }
+    Ratio {
+        passed,
+        total: scenario.temporal.len() as u32,
+    }
 }
 
 /// Supersession correctness: what answers live, what answers as-of, and how

@@ -75,6 +75,19 @@
       "absent": ["fmt-black"]
     }
   ],
+  "temporal": [
+    {
+      "query": "python formatter",
+      "until": "2025-04-01T00:00:00Z",
+      "include_invalidated": true,
+      "expect_top": "fmt-black"
+    },
+    {
+      "query": "python formatter",
+      "changed_since": "2025-05-01T00:00:00Z",
+      "expect_top": "fmt-ruff"
+    }
+  ],
   "gate": [
     {
       "candidate": "The Python formatter is now ruff format, with black no longer used.",

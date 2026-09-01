@@ -65,6 +65,26 @@ pub struct RecallParams {
     #[serde(default)]
     pub as_of: Option<String>,
 
+    /// Rank claims still true at or after this instant (RFC3339) ahead of
+    /// the rest. A soft window, not a filter: nothing is hidden, and each
+    /// hit reports its fit in `signals.temporal`. Combine with `until` for
+    /// a range; use `as_of` instead when you want one instant's hard truth.
+    #[serde(default)]
+    pub since: Option<String>,
+
+    /// Rank claims already true at or before this instant (RFC3339) ahead
+    /// of the rest. Soft, like `since`. Note that an all-past window over a
+    /// live read cannot surface claims corrected since — add
+    /// `include_invalidated: true` to reach those.
+    #[serde(default)]
+    pub until: Option<String>,
+
+    /// Rank claims created or corrected at or after this instant (RFC3339)
+    /// ahead of the rest — "what changed since I last looked". Soft, like
+    /// `since`.
+    #[serde(default)]
+    pub changed_since: Option<String>,
+
     /// Include claims that have since been corrected or forgotten. Off by
     /// default: a closed claim is history, not an answer.
     #[serde(default)]
@@ -100,6 +120,31 @@ pub struct RecallResult {
     /// empty. Absent means every hit earned its slot on ranking alone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cut: Option<Cut>,
+
+    /// Present when the call carried a temporal window (issue #78): what
+    /// was asked, how well the page fits it, and what a soft window cannot
+    /// do. Absent on every call without `since`/`until`/`changed_since`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dated: Option<Dated>,
+}
+
+/// What the temporal window did to this page (issue #78).
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Dated {
+    /// The window as asked, echoed back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changed_since: Option<String>,
+
+    /// The best temporal fit on the page, absent when nothing was datable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub best_fit: Option<f64>,
+
+    /// The same thing in words.
+    pub note: String,
 }
 
 /// What the occupancy cap moved out of the page (issue #76).
@@ -325,6 +370,13 @@ pub struct HitSignals {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub similarity: Option<f64>,
 
+    /// How well this hit fits the `since`/`until`/`changed_since` window the
+    /// call carried, in `[0, 1]` — 1.0 for any overlap, decaying with the
+    /// distance outside it. Absent when the call had no window, or for a hit
+    /// with no date to judge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temporal: Option<f64>,
+
     /// How much of the memory has survived its decay curve since it was last
     /// used. 1.0 for a pinned memory, or for verbatim text.
     pub retention: f64,
@@ -349,12 +401,16 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         entities,
         tags,
         as_of,
+        since,
+        until,
+        changed_since,
         include_invalidated,
     } = params;
 
     let spaces = tools::spaces(service, space.as_deref()).await?;
     let k = usize::from(resolve_k(service, k)?);
     let liveness = resolve_liveness(as_of.as_deref(), include_invalidated)?;
+    let window = resolve_window(since.as_deref(), until.as_deref(), changed_since.as_deref())?;
     let filters = Filters {
         kinds,
         entities,
@@ -411,11 +467,39 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     let now = Timestamp::now();
     let mut ranked: Vec<(StoreHit, Ranked)> =
         scoring::rank(candidates.into_iter().map(|candidate| {
+            // The temporal fit rides at [`scoring::WEIGHT_TEMPORAL`] only
+            // when a window was asked for; a chunk is an event at its
+            // `occurred_at`, and one without a date stays out of the term
+            // entirely — undatable is not unfitting.
+            let temporal = match (&window, &candidate.hit) {
+                (Some(query), StoreHit::Memory(memory)) => Some(scoring::temporal_fit(
+                    query,
+                    scoring::Interval {
+                        from: memory.valid_from,
+                        to: memory.invalid_at,
+                    },
+                    memory
+                        .invalid_at
+                        .map_or(memory.created_at, |at| at.max(memory.created_at)),
+                )),
+                (Some(query), StoreHit::Chunk(chunk)) => chunk.occurred_at.map(|at| {
+                    scoring::temporal_fit(
+                        query,
+                        scoring::Interval {
+                            from: at,
+                            to: Some(at),
+                        },
+                        at,
+                    )
+                }),
+                (None, _) => None,
+            };
             let signals = match &candidate.hit {
                 StoreHit::Memory(memory) => Signals::for_memory(candidate.rrf, memory, now),
                 StoreHit::Chunk(_) => Signals::for_episode_chunk(candidate.rrf),
             }
-            .with_similarity(candidate.similarity);
+            .with_similarity(candidate.similarity)
+            .with_temporal(temporal);
             (candidate.hit, signals)
         }));
 
@@ -518,6 +602,14 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         None
     };
 
+    let dated = window.map(|_| {
+        let best_fit = ranked
+            .iter()
+            .filter_map(|(_, ranked)| ranked.signals.temporal)
+            .max_by(f64::total_cmp);
+        Dated::new(since, until, changed_since, best_fit, liveness)
+    });
+
     Ok(RecallResult {
         spaces: spaces.iter().map(ToString::to_string).collect(),
         hits: ranked
@@ -527,7 +619,44 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         capped,
         truncated,
         cut,
+        dated,
     })
+}
+
+impl Dated {
+    fn new(
+        since: Option<String>,
+        until: Option<String>,
+        changed_since: Option<String>,
+        best_fit: Option<f64>,
+        liveness: Liveness,
+    ) -> Self {
+        let mut note = "The window rescores rather than filters: hits fitting it rank higher, \
+                        nothing is hidden for missing it, and each hit's own fit is in \
+                        `signals.temporal`."
+            .to_owned();
+        // The one thing a soft window cannot do on a live read: a claim
+        // corrected since the window closed is off the page before ranking
+        // ever sees it. Say so exactly when it applies.
+        let past = until
+            .as_deref()
+            .and_then(|stamp| stamp.parse::<Timestamp>().ok())
+            .is_some_and(|instant| instant < Timestamp::now());
+        if past && liveness == Liveness::Live {
+            note.push_str(
+                " This read is live-only, so a claim corrected since then is not on the page \
+                 however well it fits — pass `include_invalidated: true`, or `as_of`, to reach \
+                 what was true then.",
+            );
+        }
+        Self {
+            since,
+            until,
+            changed_since,
+            best_fit,
+            note,
+        }
+    }
 }
 
 impl RecallHit {
@@ -537,6 +666,7 @@ impl RecallHit {
             rrf: ranked.signals.rrf,
             rrf_normalized: ranked.rrf_normalized,
             similarity: ranked.signals.similarity,
+            temporal: ranked.signals.temporal,
             retention: ranked.signals.retention,
             importance: ranked.signals.importance,
         };
@@ -610,6 +740,45 @@ fn resolve_k(service: &AgmemService, requested: Option<u16>) -> Result<u16, Erro
         return Err(invalid(format!("k must be between 1 and {max}")));
     }
     Ok(k)
+}
+
+/// The soft temporal window this call ranks through (issue #78), `None`
+/// when no temporal parameter was given — the everyday path, whose scoring
+/// arithmetic must stay untouched.
+///
+/// The one refusal is an inverted range: a caller who sent `since > until`
+/// believes the window means something, and no ranking of an empty
+/// intersection would honour it.
+fn resolve_window(
+    since: Option<&str>,
+    until: Option<&str>,
+    changed_since: Option<&str>,
+) -> Result<Option<scoring::TemporalQuery>, ErrorData> {
+    let parse = |field: &str, stamp: Option<&str>| {
+        stamp
+            .map(|stamp| {
+                stamp
+                    .parse::<Timestamp>()
+                    .map_err(|error| invalid(format!("{field}: {error}")))
+            })
+            .transpose()
+    };
+    let query = scoring::TemporalQuery {
+        since: parse("since", since)?,
+        until: parse("until", until)?,
+        changed_since: parse("changed_since", changed_since)?,
+    };
+    if query.since.is_none() && query.until.is_none() && query.changed_since.is_none() {
+        return Ok(None);
+    }
+    if query
+        .since
+        .zip(query.until)
+        .is_some_and(|(since, until)| since > until)
+    {
+        return Err(invalid("since must not be after until"));
+    }
+    Ok(Some(query))
 }
 
 /// The validity window this call reads through.

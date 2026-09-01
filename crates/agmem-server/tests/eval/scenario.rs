@@ -33,6 +33,8 @@ pub struct Scenario {
     #[serde(default)]
     pub abstain: Vec<AbstainCase>,
     #[serde(default)]
+    pub temporal: Vec<TemporalCheck>,
+    #[serde(default)]
     pub timeline: Vec<TimelineCheck>,
     #[serde(default)]
     pub gate: Vec<GateCase>,
@@ -79,6 +81,28 @@ pub struct Probe {
 pub struct AbstainCase {
     pub query: String,
     pub k: u16,
+}
+
+/// One time-aware retrieval check (issue #78): a query with a soft
+/// `since`/`until`/`changed_since` window, judged on which claim tops the
+/// page. The window rescores rather than filters, so this measures ranking
+/// under temporal intent — `as_of`'s hard cut is the timeline section's job.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TemporalCheck {
+    pub query: String,
+    #[serde(default)]
+    pub since: Option<String>,
+    #[serde(default)]
+    pub until: Option<String>,
+    #[serde(default)]
+    pub changed_since: Option<String>,
+    /// A past window over a live read cannot surface closed claims at all;
+    /// checks about what *was* true set this, exactly as a caller would.
+    #[serde(default)]
+    pub include_invalidated: bool,
+    /// The label the top claim hit must carry.
+    pub expect_top: String,
 }
 
 /// One supersession check: what should answer, live or as of an instant.

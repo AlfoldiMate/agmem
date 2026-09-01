@@ -367,6 +367,7 @@ pub(crate) struct ChunkReadRow {
     pub(crate) space: String,
     pub(crate) text: String,
     pub(crate) position: i64,
+    pub(crate) occurred_at: Option<Datetime>,
 }
 
 impl ChunkReadRow {
@@ -380,6 +381,7 @@ impl ChunkReadRow {
             episode: EpisodeId::new(self.episode)?,
             space: SpaceName::new(self.space)?,
             text: self.text,
+            occurred_at: self.occurred_at.as_ref().map(to_timestamp),
             embedding: None,
             // Positions are assigned from a `Vec` index, so this cannot be
             // negative unless the store was edited by hand.

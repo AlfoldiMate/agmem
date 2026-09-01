@@ -116,8 +116,8 @@ const MEMORY_FIELDS: &str = "record::id(id) AS id, space, kind, content, content
      created_at";
 
 /// Every `episode_chunk` column a read projects, minus `embedding`.
-const CHUNK_FIELDS: &str =
-    "record::id(id) AS id, record::id(episode) AS episode, space, text, position";
+const CHUNK_FIELDS: &str = "record::id(id) AS id, record::id(episode) AS episode,
+     space, text, position, occurred_at";
 
 /// Every `episode` column a read projects.
 const EPISODE_FIELDS: &str =

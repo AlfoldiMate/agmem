@@ -1263,6 +1263,109 @@ async fn a_query_nothing_matches_abstains_instead_of_filling_the_page() {
 }
 
 #[tokio::test]
+async fn a_temporal_window_rescores_without_hiding_anything() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let stored = agmem
+        .remember(json!({ "memories": [{
+            "content": "The header colour is blue across the site",
+            "valid_from": "2025-01-01T00:00:00Z"
+        }] }))
+        .await;
+    let old = ids(&stored["created"])[0].to_owned();
+    agmem
+        .remember(json!({ "memories": [{
+            "content": "The header colour is green now; blue is retired",
+            "valid_from": "2025-06-01T00:00:00Z",
+            "supersedes": [old]
+        }] }))
+        .await;
+
+    let found = agmem
+        .recall(json!({
+            "query": "header colour",
+            "until": "2025-03-01T00:00:00Z",
+            "include_invalidated": true
+        }))
+        .await;
+    assert_eq!(
+        hits(&found).len(),
+        2,
+        "soft window: nothing is hidden for missing it: {found}"
+    );
+    let fit_of = |needle: &str| {
+        hits(&found)
+            .iter()
+            .find(|hit| {
+                hit["content"]
+                    .as_str()
+                    .is_some_and(|text| text.contains(needle))
+            })
+            .expect("the row is on the page")["signals"]["temporal"]
+            .as_f64()
+            .expect("a windowed call reports each hit's fit")
+    };
+    assert_eq!(fit_of("blue across"), 1.0, "in the window: {found}");
+    assert!(
+        fit_of("green now") < 0.1,
+        "months outside the window: {found}"
+    );
+    let dated = &found["dated"];
+    assert_eq!(dated["until"].as_str(), Some("2025-03-01T00:00:00Z"));
+    assert!(
+        dated["note"].as_str().is_some_and(
+            |note| note.contains("rescores rather than filters") && !note.contains("live-only")
+        ),
+        "the live-only caveat only applies to live reads: {found}"
+    );
+    assert!(dated["best_fit"].as_f64() == Some(1.0), "{found}");
+
+    // A live read over a past window gets told what a soft window cannot do.
+    let live = agmem
+        .recall(json!({ "query": "header colour", "until": "2025-03-01T00:00:00Z" }))
+        .await;
+    assert!(
+        live["dated"]["note"]
+            .as_str()
+            .is_some_and(|note| note.contains("include_invalidated")),
+        "{live}"
+    );
+
+    // And the everyday path is untouched: no window, no field anywhere.
+    let plain = agmem.recall(json!({ "query": "header colour" })).await;
+    assert!(plain["dated"].is_null(), "{plain}");
+    for hit in hits(&plain) {
+        assert!(
+            hit["signals"].get("temporal").is_none(),
+            "no window, no fit to report: {hit}"
+        );
+    }
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn an_inverted_window_is_refused() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let error = agmem
+        .call(
+            "recall",
+            json!({
+                "query": "anything",
+                "since": "2026-01-01T00:00:00Z",
+                "until": "2025-01-01T00:00:00Z"
+            }),
+        )
+        .await
+        .expect_err("an empty window honours no intent");
+    assert!(
+        matches!(&error, ServiceError::McpError(data)
+            if data.code == ErrorCode::INVALID_PARAMS
+                && data.message.contains("since must not be after until")),
+        "{error}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn a_deployment_with_no_vectors_never_abstains() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
     agmem

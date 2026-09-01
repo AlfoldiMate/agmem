@@ -1185,6 +1185,14 @@ expression: "&tools.tools"
             "null"
           ]
         },
+        "changed_since": {
+          "default": null,
+          "description": "Rank claims created or corrected at or after this instant (RFC3339)\nahead of the rest — \"what changed since I last looked\". Soft, like\n`since`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "entities": {
           "default": [],
           "description": "Keep only memories about one of these subjects.",
@@ -1225,6 +1233,14 @@ expression: "&tools.tools"
             "null"
           ]
         },
+        "since": {
+          "default": null,
+          "description": "Rank claims still true at or after this instant (RFC3339) ahead of\nthe rest. A soft window, not a filter: nothing is hidden, and each\nhit reports its fit in `signals.temporal`. Combine with `until` for\na range; use `as_of` instead when you want one instant's hard truth.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "space": {
           "default": null,
           "description": "Where to look: `current` for this project, `user` for the person,\n`all` for every space, or a space name. Defaults to `current` and\n`user` together, which is almost always what you want.",
@@ -1240,6 +1256,14 @@ expression: "&tools.tools"
             "type": "string"
           },
           "type": "array"
+        },
+        "until": {
+          "default": null,
+          "description": "Rank claims already true at or before this instant (RFC3339) ahead\nof the rest. Soft, like `since`. Note that an all-past window over a\nlive read cannot surface claims corrected since — add\n`include_invalidated: true` to reach those.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -1316,6 +1340,46 @@ expression: "&tools.tools"
           ],
           "type": "object"
         },
+        "Dated": {
+          "description": "What the temporal window did to this page (issue #78).",
+          "properties": {
+            "best_fit": {
+              "description": "The best temporal fit on the page, absent when nothing was datable.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "changed_since": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "description": "The same thing in words.",
+              "type": "string"
+            },
+            "since": {
+              "description": "The window as asked, echoed back.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "until": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "note"
+          ],
+          "type": "object"
+        },
         "HitKind": {
           "description": "What a hit is.",
           "oneOf": [
@@ -1366,6 +1430,14 @@ expression: "&tools.tools"
             },
             "similarity": {
               "description": "Cosine similarity between the query and this hit, when a vector arm\nmeasured it — the one signal here with an absolute scale, comparable\nacross calls. Absent for a hit only the text arms or the entity hop\nsurfaced, and everywhere in a BM25-only deployment.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "temporal": {
+              "description": "How well this hit fits the `since`/`until`/`changed_since` window the\ncall carried, in `[0, 1]` — 1.0 for any overlap, decaying with the\ndistance outside it. Absent when the call had no window, or for a hit\nwith no date to judge.",
               "format": "double",
               "type": [
                 "number",
@@ -1527,6 +1599,17 @@ expression: "&tools.tools"
             }
           ],
           "description": "Present when match quality changed this page (issue #77): either the\ntail fell off a marked drop in retrieval quality, or — `kept: 0` —\nnothing matched well enough to answer at all and the page is honestly\nempty. Absent means every hit earned its slot on ranking alone."
+        },
+        "dated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present when the call carried a temporal window (issue #78): what\nwas asked, how well the page fits it, and what a soft window cannot\ndo. Absent on every call without `since`/`until`/`changed_since`."
         },
         "hits": {
           "description": "The matches, highest `score` first.",

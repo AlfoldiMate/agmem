@@ -1,0 +1,52 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.hihCSemR09",
+  "answer": "I recalled all stored memories tagged with `atlas` (49 hits, all in the `eval` space, all seeded at the same timestamp with no `supersedes` chain). Here's what's duplicated or contradictory — nothing has been changed.\n\n## Contradiction (needs a decision)\nThese two directly conflict on whether staging deploys are automatic:\n- *\"Merging to main deploys atlas to staging automatically.\"*\n- *\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"*\n\nOnly one can be current. Worth confirming with whoever owns deploy before the handover doc goes out.\n\n## Duplicates (same fact, restated)\n**Shipping via `bin/ship.sh`** — three near-identical entries:\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" ← most informative (also notes `make deploy` was retired), the other two add nothing beyond this.\n\n**Test runner** — two identical claims worded differently:\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n\n## Likely stale / time-bound (risky to hand over as-is)\nThese have low importance/retention scores and read like snapshot-of-the-moment notes rather than durable facts:\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — \"this week\" is undated; could easily be fixed already.\n- \"The branch under review is spike/consolidate.\" — sounds like a specific in-flight review, probably merged or dropped by now.\n\n## Worth double-checking (soft inconsistency, not a hard contradiction)\n- \"atlas stores its data in Postgres 16 and the schema lives under migrations/.\"\n- \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\"\n\nNot contradictory (prod could run 16 while 15 is still supported), but if 15 support has since been dropped too, the second entry is stale.\n\nWant me to fix these — merge the duplicates, flag the contradiction with a note asking for resolution, and drop or refresh the time-bound entries — or handle them differently?",
+  "cost_usd": 0.24452379999999999,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1ETE1QGFRRM96RRT09GXNV2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T15:47:02.322224Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1ETE1QB4WN63C8NWGCQAM4J\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1ETE1HMEYQM8FQ9VTNZRBNN\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819923733089,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.765927969493236,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8276705968295893},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-01T15:47:02.321942Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1ETE1JCCHS9EN4PKNAREZCE\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8495182035572283,\\\"sign"
+    }
+  ]
+}

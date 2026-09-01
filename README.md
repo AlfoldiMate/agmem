@@ -442,13 +442,15 @@ included), or `stats` for per-space counts.
       { "id": "01M14XY6T7RX…", "content": "The user prefers Go over Python…" } ] } }
 ```
 
-**`consolidate`** — what needs tidying up, and nothing done about it. Three
+**`consolidate`** — what needs tidying up, and nothing done about it. Four
 lists: `near_duplicates` (groups of live claims saying the same thing, each
 group one `remember(supersedes: [ … ])` call away from merged), `contradictions`
 (pairs naming one subject, offered so you can decide which is true — the same
 pair may also appear under `near_duplicates`, because a cosine carries the
-subject and not the polarity) and `stale_contexts` (notes filed `fast` that
-recall has kept alive far past the twenty-day horizon their class implies).
+subject and not the polarity), `stale_contexts` (notes filed `fast` that
+recall has kept alive far past the twenty-day horizon their class implies) and
+`over_full_tags` (tags carrying more live lessons than the three per tag the
+`context` briefing shows — merged the way a duplicate group is).
 Every candidate carries its full text, not just its id — there is no
 server-side LLM here, so the decision is the agent's, and an id and a number
 are not something to decide on.
@@ -465,7 +467,11 @@ are not something to decide on.
   "stale_contexts": [
     { "claim": { "id": "01M14Y1ZK9PQ…", "content": "The branch under review is spike",
                  "decay_class": "fast", "access_count": 30 },
-      "idle_days": 201.4, "expires_in_days": 418.1 } ] }
+      "idle_days": 201.4, "expires_in_days": 418.1 } ],
+  "over_full_tags": [
+    { "space": "myproject", "tag": "role:builder", "live": 7, "keep": 3,
+      "members": [
+        { "id": "01M14Y2Q0DAB…", "content": "Cold caches fail the first build…" } ] } ] }
 ```
 
 `min_similarity` is the weakest pair *in* a group, not the weakest link that

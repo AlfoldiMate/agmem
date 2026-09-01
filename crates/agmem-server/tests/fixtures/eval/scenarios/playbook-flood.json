@@ -1,0 +1,64 @@
+{
+  "name": "playbook-flood",
+  "about": "A playbook tag grown past the bound (issue #82): six lessons under role:reviewer, seeded after two lessons on other tags so the flood outranks them on recency. Unbounded, the Lessons section is all reviewer playbook; the per-tag cap must keep the flood to three and let the other tags' lessons through. The deferred lessons are the three seeded earliest — strength ties break most-recent-first — so the block must not carry them.",
+  "seeds": [
+    {
+      "label": "ops-lesson",
+      "content": "Rotating the deploy token invalidates running pipelines, so drain the queue first.",
+      "kind": "lesson",
+      "tags": ["ops"]
+    },
+    {
+      "label": "ci-lesson",
+      "content": "The macos runner image resets its simulator cache nightly, which explains the slow 6am builds.",
+      "kind": "lesson",
+      "tags": ["ci"]
+    },
+    {
+      "label": "reviewer-flood-1",
+      "content": "Review the migration file before the model file, because the schema is where reviewers miss breakage.",
+      "kind": "lesson",
+      "tags": ["role:reviewer"]
+    },
+    {
+      "label": "reviewer-flood-2",
+      "content": "Check the changelog entry matches the diff before approving anything user-facing.",
+      "kind": "lesson",
+      "tags": ["role:reviewer"]
+    },
+    {
+      "label": "reviewer-flood-3",
+      "content": "Flag any new dependency in review even when the lockfile change looks routine.",
+      "kind": "lesson",
+      "tags": ["role:reviewer"]
+    },
+    {
+      "label": "reviewer-flood-4",
+      "content": "Ask for a test when a bugfix diff carries none, since regressions here recur within weeks.",
+      "kind": "lesson",
+      "tags": ["role:reviewer"]
+    },
+    {
+      "label": "reviewer-flood-5",
+      "content": "Read the error-handling paths first in review; the happy path is always the polished one.",
+      "kind": "lesson",
+      "tags": ["role:reviewer"]
+    },
+    {
+      "label": "reviewer-flood-6",
+      "content": "Block merges that mix a refactor with a behaviour change, because bisecting them later is misery.",
+      "kind": "lesson",
+      "tags": ["role:reviewer"]
+    }
+  ],
+  "context": [
+    {
+      "must_contain": ["ops-lesson", "ci-lesson"],
+      "must_not_contain_text": [
+        "Review the migration file before the model file",
+        "Check the changelog entry matches the diff",
+        "Flag any new dependency in review"
+      ]
+    }
+  ]
+}

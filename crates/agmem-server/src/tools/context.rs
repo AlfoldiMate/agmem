@@ -13,7 +13,7 @@
 //! counting it as use would flatten every memory's decay curve to permanent
 //! within a handful of sessions and retire the whole idea of decay.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use agmem_core::scoring::{self, Signals};
 use agmem_core::{Kind, MemoryId, MemoryRecord, SpaceName};
@@ -25,7 +25,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::service::AgmemService;
-use crate::tools::{self, embed_query, invalid, store_error};
+use crate::tools::{self, LESSONS_PER_TAG, embed_query, invalid, store_error};
 
 /// How much room a call that does not say gets, in characters.
 const DEFAULT_BUDGET_CHARS: u32 = 6_000;
@@ -144,6 +144,7 @@ pub async fn run(
                     ..Filters::default()
                 },
                 pool,
+                None,
                 now,
             )
             .await?,
@@ -159,6 +160,7 @@ pub async fn run(
                     ..Filters::default()
                 },
                 pool,
+                None,
                 now,
             )
             .await?,
@@ -179,6 +181,7 @@ pub async fn run(
                             ..Filters::default()
                         },
                         RELEVANT_K,
+                        None,
                         now,
                     )
                     .await?
@@ -195,6 +198,7 @@ pub async fn run(
                     ..Filters::default()
                 },
                 LESSONS_K,
+                Some(LESSONS_PER_TAG),
                 now,
             )
             .await?,
@@ -225,6 +229,7 @@ async fn lookup_section(
     spaces: &[SpaceName],
     filters: Filters,
     keep: usize,
+    per_tag: Option<usize>,
     now: Timestamp,
 ) -> Result<Vec<Entry>, ErrorData> {
     let mut lookup = Lookup::new(spaces.to_vec());
@@ -239,6 +244,7 @@ async fn lookup_section(
             (memory, signals)
         }),
         keep,
+        per_tag,
     ))
 }
 
@@ -277,19 +283,68 @@ async fn search_section(
                 StoreHit::Chunk(_) => None,
             }),
         RELEVANT_K,
+        None,
     ))
 }
 
 /// Rank candidates the way `recall` does, and keep the best `keep`.
-fn rank(candidates: impl IntoIterator<Item = (MemoryRecord, Signals)>, keep: usize) -> Vec<Entry> {
-    scoring::rank(candidates)
+///
+/// `per_tag` bounds how many of the kept entries may share a tag: records over
+/// the quota are deferred behind everything under it before the cut, so a
+/// flooded tag yields slots it would otherwise monopolise without ever
+/// costing the section entries it had room for.
+fn rank(
+    candidates: impl IntoIterator<Item = (MemoryRecord, Signals)>,
+    keep: usize,
+    per_tag: Option<usize>,
+) -> Vec<Entry> {
+    let ranked = scoring::rank(candidates)
+        .into_iter()
+        .map(|(memory, _)| memory);
+    let ordered = match per_tag {
+        Some(cap) => cap_by_tag(ranked.collect(), cap),
+        None => ranked.collect(),
+    };
+    ordered
         .into_iter()
         .take(keep)
-        .map(|(memory, _)| Entry {
+        .map(|memory| Entry {
             id: memory.id,
             content: memory.content,
         })
         .collect()
+}
+
+/// Defer, never drop: re-order ranked records so no tag holds more than `cap`
+/// of the head of the list (issue #82, the same shape as `recall`'s
+/// per-source occupancy cap).
+///
+/// A record is deferred once *any* of its tags is at quota — the only honest
+/// reading for multi-tag records — and an admitted record counts against every
+/// tag it carries. Untagged records are never deferred: the cap exists for
+/// playbook-style tag floods, and a record no tag claims is not part of one.
+/// Order is otherwise preserved, deferred records included, so a `keep` larger
+/// than the survivors still reaches them strongest-first.
+fn cap_by_tag(records: Vec<MemoryRecord>, cap: usize) -> Vec<MemoryRecord> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut kept = Vec::with_capacity(records.len());
+    let mut deferred = Vec::new();
+    for record in records {
+        let at_quota = record
+            .tags
+            .iter()
+            .any(|tag| counts.get(tag).is_some_and(|held| *held >= cap));
+        if at_quota {
+            deferred.push(record);
+            continue;
+        }
+        for tag in &record.tags {
+            *counts.entry(tag.clone()).or_insert(0) += 1;
+        }
+        kept.push(record);
+    }
+    kept.append(&mut deferred);
+    kept
 }
 
 /// The block, and how many entries the budget cost it.
@@ -360,6 +415,8 @@ fn resolve_budget(requested: Option<u32>) -> Result<usize, ErrorData> {
 
 #[cfg(test)]
 mod tests {
+    use agmem_core::Source;
+
     use super::*;
 
     fn id(last: char) -> MemoryId {
@@ -479,6 +536,77 @@ mod tests {
             "{block}"
         );
         assert!(!block.contains(HEADING_RELEVANT), "{block}");
+    }
+
+    fn lesson(last: char, tags: &[&str]) -> MemoryRecord {
+        MemoryRecord {
+            id: id(last),
+            space: SpaceName::user(),
+            kind: Kind::Lesson,
+            content: format!("lesson {last}"),
+            content_hash: format!("hash-{last}"),
+            entities: vec![],
+            tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
+            embedding: None,
+            decay_class: Kind::Lesson.default_decay_class(),
+            strength: 1.0,
+            last_accessed: Timestamp::UNIX_EPOCH,
+            access_count: 0,
+            valid_from: Timestamp::UNIX_EPOCH,
+            invalid_at: None,
+            invalid_reason: None,
+            supersedes: Vec::new(),
+            superseded_by: None,
+            source: Source::Agent,
+            writer: None,
+            derived_from: Vec::new(),
+            created_at: Timestamp::UNIX_EPOCH,
+        }
+    }
+
+    fn order(records: &[MemoryRecord]) -> String {
+        records
+            .iter()
+            .map(|record| record.content.trim_start_matches("lesson ").to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn a_flooded_tag_yields_its_slots_past_the_cap() {
+        let capped = cap_by_tag(
+            vec![
+                lesson('A', &["role:architect"]),
+                lesson('B', &["role:architect"]),
+                lesson('C', &["role:architect"]),
+                lesson('D', &["role:architect"]),
+                lesson('E', &["ops"]),
+                lesson('F', &[]),
+            ],
+            3,
+        );
+        // D goes behind everything under quota; nothing is dropped.
+        assert_eq!(order(&capped), "ABCEFD");
+    }
+
+    #[test]
+    fn a_record_is_deferred_once_any_of_its_tags_is_at_quota() {
+        let capped = cap_by_tag(
+            vec![
+                lesson('A', &["role:architect"]),
+                lesson('B', &["role:architect", "ops"]),
+                lesson('C', &["ops", "ci"]),
+                lesson('D', &["ci"]),
+            ],
+            1,
+        );
+        // B shares role:architect with A, D shares ci with C.
+        assert_eq!(order(&capped), "ACBD");
+    }
+
+    #[test]
+    fn untagged_records_are_never_deferred() {
+        let capped = cap_by_tag(vec![lesson('A', &[]), lesson('B', &[]), lesson('C', &[])], 1);
+        assert_eq!(order(&capped), "ABC");
     }
 
     #[test]

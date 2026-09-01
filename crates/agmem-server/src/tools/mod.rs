@@ -64,7 +64,8 @@ mod hop;
 
 /// Not a tool: `recall`'s per-source occupancy cap (see its module doc).
 /// Private for the same reason as `hop` — `context` assembles its own page
-/// and is deliberately uncapped, a choice its module records.
+/// and is deliberately uncapped by *source*, a choice its module records.
+/// (Its Lessons section bounds by *tag* instead — [`LESSONS_PER_TAG`].)
 mod occupancy;
 
 use std::borrow::Cow;
@@ -95,6 +96,14 @@ use agmem_store::{StoreError, repo};
 use rmcp::{ErrorData, RoleServer, service::RequestContext};
 
 use crate::service::AgmemService;
+
+/// How many live lessons one tag may hold before the store calls it over-full
+/// (issue #82). Reflexion's measured result is that a bounded lesson window of
+/// about this size beats unbounded accumulation (arXiv:2303.11366); playbook
+/// tags (`role:<agent>`) make unbounded growth the default outcome otherwise.
+/// `context` reads it as a per-tag cap on the Lessons section; `consolidate`
+/// reads it as the bound whose excess is worth a merge.
+pub(crate) const LESSONS_PER_TAG: usize = 3;
 
 /// Which spaces a read looks in (design §3.1).
 ///

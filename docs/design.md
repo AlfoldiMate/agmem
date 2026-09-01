@@ -405,6 +405,8 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //     contradictions:  [{ space, shared_entities, a: MemoryView, b: MemoryView,
 //                         similarity }],
 //     stale_contexts:  [{ claim: MemoryView, idle_days, expires_in_days }],
+//     over_full_tags:  [{ space, tag, live, keep,        // fullest first (#82)
+//                         members: [MemoryView] }],      // strongest first
 //     note? }                          // present only when something limited it
 // Every candidate is a whole `MemoryView`, content included: the #38 finding
 // is that an id and a number are not something an agent can decide on.
@@ -470,7 +472,7 @@ Behavioral rules baked into the tools:
 ## Instructions        ← kind=instruction, live, all (pinned, cheap)
 ## Profile             ← facts tagged `identity`, live, ranked by strength
 ## Relevant            ← recall(query) top-k if query given, else recent high-strength facts
-## Lessons             ← kind=lesson, live, top 5 by strength·recency
+## Lessons             ← kind=lesson, live, top 5 by strength·recency, ≤3 per tag (#82)
 ```
 
 Sections are filled in that priority order until `budget_chars` is exhausted;

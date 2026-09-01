@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use agmem_server::config::{Cli, Config, ToolDescriptions};
-use agmem_server::daemon::{self, Handshake};
+use agmem_server::daemon::{self, Ack, Handshake};
 use clap::Parser as _;
 use rmcp::model::{CallToolRequestParams, ProtocolVersion};
 use rmcp::service::RunningService;
@@ -100,6 +100,14 @@ impl Shared {
             .write_all(&self.handshake_with(space, tool_desc))
             .await
             .expect("send the handshake");
+        // The daemon answers the handshake before MCP starts (issue #60);
+        // the buffered reader must carry into rmcp, or bytes it read ahead
+        // would be lost.
+        let mut read = BufReader::new(read);
+        let mut ack = String::new();
+        read.read_line(&mut ack).await.expect("read the ack");
+        let ack: Ack = serde_json::from_str(&ack).expect("the ack is JSON");
+        assert!(ack.ok, "the daemon takes the session: {ack:?}");
         ().serve((read, write)).await.expect("initialize")
     }
 }
@@ -196,11 +204,14 @@ async fn a_handshake_and_a_request_in_one_write_are_both_seen() {
         .await
         .expect("both lines in one write");
 
+    let mut read = BufReader::new(read);
+    let mut ack = String::new();
+    read.read_line(&mut ack).await.expect("the ack");
+    let ack: Ack = serde_json::from_str(&ack).expect("the ack is JSON");
+    assert!(ack.ok, "{ack:?}");
+
     let mut reply = String::new();
-    BufReader::new(read)
-        .read_line(&mut reply)
-        .await
-        .expect("a reply");
+    read.read_line(&mut reply).await.expect("a reply");
     let reply: Value = serde_json::from_str(&reply).expect("the reply is JSON");
     assert_eq!(
         reply["result"]["serverInfo"]["name"],
@@ -211,7 +222,7 @@ async fn a_handshake_and_a_request_in_one_write_are_both_seen() {
 }
 
 #[tokio::test]
-async fn a_session_expecting_another_store_is_refused() {
+async fn a_session_expecting_another_store_is_refused_and_told_so() {
     let shared = Shared::start().await;
     let mut asked = Handshake::new(&config(shared.data.path(), "elsewhere"));
     asked.db_url = "surrealkv:///somewhere/else".to_owned();
@@ -221,15 +232,64 @@ async fn a_session_expecting_another_store_is_refused() {
     let (read, mut write) = shared.connect().await.into_split();
     write.write_all(&line).await.expect("send the handshake");
 
+    let mut read = BufReader::new(read);
     let mut reply = String::new();
-    let bytes = BufReader::new(read)
-        .read_line(&mut reply)
-        .await
-        .expect("read");
+    read.read_line(&mut reply).await.expect("read the ack");
+    let ack: Ack = serde_json::from_str(&reply).expect("the refusal is an ack, not a bare close");
+    assert!(!ack.ok, "{ack:?}");
+    assert!(
+        ack.error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("--no-daemon"),
+        "the refusal names a way out (issue #60): {ack:?}"
+    );
+    assert!(
+        !ack.retiring,
+        "a misconfigured session is not a reason to stop serving everyone else: {ack:?}"
+    );
+
+    reply.clear();
+    let bytes = read.read_line(&mut reply).await.expect("read");
     assert_eq!(
         bytes, 0,
-        "a daemon that cannot serve what was asked for closes, rather than \
-         serving something else: {reply:?}"
+        "after refusing, the daemon closes rather than serving something \
+         else: {reply:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_session_from_another_release_retires_the_daemon() {
+    let mut shared = Shared::start().await;
+    let mut asked = Handshake::new(&config(shared.data.path(), "upgraded"));
+    asked.release = "999.0.0".to_owned();
+    let mut line = serde_json::to_vec(&asked).expect("serialize");
+    line.push(b'\n');
+
+    let (read, mut write) = shared.connect().await.into_split();
+    write.write_all(&line).await.expect("send the handshake");
+
+    let mut reply = String::new();
+    BufReader::new(read)
+        .read_line(&mut reply)
+        .await
+        .expect("read the ack");
+    let ack: Ack = serde_json::from_str(&reply).expect("the ack is JSON");
+    assert!(!ack.ok && ack.retiring, "{ack:?}");
+
+    // Retiring is not just a word: the daemon's run loop actually returns,
+    // releasing the socket and the store lock so the refused session can
+    // start a daemon from its own binary.
+    tokio::time::timeout(Duration::from_secs(10), &mut shared.daemon)
+        .await
+        .expect("the daemon shuts down after refusing another release")
+        .expect("cleanly")
+        .expect("without error");
+    assert!(
+        !daemon::socket_path(shared.data.path())
+            .expect("socket path")
+            .exists(),
+        "the retiring daemon unlinks its socket so the fresh one can bind"
     );
 }
 

@@ -12,11 +12,11 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
 use crate::config::Config;
-use crate::daemon::{DAEMON_LOG_FILE, Handshake, socket_path, spawn_lock_path};
+use crate::daemon::{Ack, DAEMON_LOG_FILE, Handshake, RELEASE, socket_path, spawn_lock_path};
 
 /// How long to queue for the right to start a daemon before giving up. Long
 /// enough for another session to finish starting one, short enough that a
@@ -29,6 +29,10 @@ const READY_DEADLINE: Duration = Duration::from_secs(120);
 
 /// How often to re-try the socket while waiting.
 const POLL: Duration = Duration::from_millis(50);
+
+/// How long a retiring daemon gets to unlink its socket before this session
+/// starts a fresh one anyway.
+const RETIRE_DEADLINE: Duration = Duration::from_secs(15);
 
 /// Attach this session to the shared store, starting the daemon if needed,
 /// and pump stdio until the client goes away.
@@ -43,16 +47,53 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
 }
 
 /// A connection to the shared daemon — found, or started — with this
-/// configuration's [`Handshake`] already sent. What flows next is MCP;
-/// [`run`] pumps stdio into it, `agmem context` (issue #46) speaks it itself.
+/// configuration's [`Handshake`] sent and the daemon's [`Ack`] consumed, so
+/// every byte after it is MCP. [`run`] pumps stdio into it, `agmem context`
+/// (issue #46) speaks it itself.
+///
+/// A daemon from another release answers "retiring" and shuts down (issue
+/// #60); this session waits it out and starts a fresh daemon from its own
+/// binary — once. Two retirements in a row means two binaries are fighting
+/// over the socket, and that is the user's to resolve.
 ///
 /// # Errors
-/// When no daemon can be reached or started, or the handshake will not land.
+/// When no daemon can be reached or started, or the daemon refuses the
+/// handshake. The refusal's message is surfaced here — never swallowed into
+/// a clean exit — because the alternative is a session with no memory tools
+/// and no explanation.
 pub async fn attach(cfg: &Config) -> anyhow::Result<UnixStream> {
     let path = socket_path(&cfg.data_dir)?;
-    let mut stream = match connect(&path).await {
+    match attach_once(cfg, &path).await? {
+        Attached::Serving(stream) => Ok(stream),
+        Attached::DaemonRetired => {
+            wait_for_retirement(&path).await;
+            match attach_once(cfg, &path).await? {
+                Attached::Serving(stream) => Ok(stream),
+                Attached::DaemonRetired => bail!(
+                    "the shared store on {} retired twice in a row: two different agmem \
+                     builds are attaching to it. Align them on one release, or pass \
+                     --no-daemon.",
+                    path.display()
+                ),
+            }
+        }
+    }
+}
+
+/// What one handshake attempt came to.
+enum Attached {
+    /// The daemon took the session; the stream is MCP from here.
+    Serving(UnixStream),
+    /// The daemon is from another release and is shutting down so this
+    /// session can start one from its own binary.
+    DaemonRetired,
+}
+
+/// Connect or start a daemon, hand it the handshake, and read its verdict.
+async fn attach_once(cfg: &Config, path: &Path) -> anyhow::Result<Attached> {
+    let mut stream = match connect(path).await {
         Some(stream) => stream,
-        None => start_one(cfg, &path).await?,
+        None => start_one(cfg, path).await?,
     };
     let mut handshake = serde_json::to_vec(&Handshake::new(cfg))?;
     handshake.push(b'\n');
@@ -60,7 +101,71 @@ pub async fn attach(cfg: &Config) -> anyhow::Result<UnixStream> {
         .write_all(&handshake)
         .await
         .context("the shared store closed before the handshake landed")?;
-    Ok(stream)
+
+    let ack = read_ack(&mut stream, cfg).await?;
+    if ack.ok {
+        return Ok(Attached::Serving(stream));
+    }
+    let why = ack
+        .error
+        .unwrap_or_else(|| "the shared store refused the handshake without saying why".to_owned());
+    if ack.retiring {
+        tracing::info!(%why, "waiting for the old daemon to retire");
+        return Ok(Attached::DaemonRetired);
+    }
+    bail!(why)
+}
+
+/// The daemon's one-line answer to the handshake, read a byte at a time: the
+/// bytes after the newline are MCP and belong to the pump, so nothing here
+/// may buffer past it.
+async fn read_ack(stream: &mut UnixStream, cfg: &Config) -> anyhow::Result<Ack> {
+    let mut line = Vec::new();
+    let mut byte = [0u8; 1];
+    loop {
+        let n = stream
+            .read(&mut byte)
+            .await
+            .context("reading the shared store's handshake ack")?;
+        if n == 0 {
+            // Pre-#60 daemons never wrote an ack: a refusal was a close the
+            // client pumped through and exited 0 on. Meeting that close here
+            // turns it into the message it always should have been.
+            bail!(
+                "the shared store closed without answering the handshake. It is probably \
+                 an agmem older than {RELEASE} still holding {}; stop that process (or \
+                 wait out its idle timeout) and retry. Its log is {}.",
+                cfg.data_dir.display(),
+                log_path(cfg).display()
+            );
+        }
+        if byte[0] == b'\n' {
+            break;
+        }
+        line.push(byte[0]);
+        if line.len() > 4096 {
+            bail!("the shared store's handshake ack never ended");
+        }
+    }
+    serde_json::from_slice(&line).context("the shared store's handshake ack is not JSON")
+}
+
+/// Wait for a retiring daemon to unlink its socket, then a beat longer for
+/// its store lock to release with its process — the fresh daemon this
+/// session is about to start needs both gone.
+async fn wait_for_retirement(path: &Path) {
+    let deadline = Instant::now() + RETIRE_DEADLINE;
+    while Instant::now() < deadline && path.exists() {
+        tokio::time::sleep(POLL).await;
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+}
+
+/// Where the daemon this configuration would start writes its log.
+fn log_path(cfg: &Config) -> std::path::PathBuf {
+    cfg.log_file
+        .clone()
+        .unwrap_or_else(|| cfg.data_dir.join(DAEMON_LOG_FILE))
 }
 
 /// A daemon that answers, or nothing. Every failure is "not there" — the
@@ -129,10 +234,7 @@ async fn queue_to_spawn(path: &Path) -> anyhow::Result<File> {
 fn spawn(cfg: &Config) -> anyhow::Result<()> {
     let exe = std::env::current_exe()
         .context("cannot find this binary to start the shared store from")?;
-    let log_file = cfg
-        .log_file
-        .clone()
-        .unwrap_or_else(|| cfg.data_dir.join(DAEMON_LOG_FILE));
+    let log_file = log_path(cfg);
 
     let mut command = Command::new(exe);
     command
@@ -182,14 +284,10 @@ async fn wait_until_ready(cfg: &Config, path: &Path) -> anyhow::Result<UnixStrea
         }
         tokio::time::sleep(POLL).await;
     }
-    let log = cfg
-        .log_file
-        .clone()
-        .unwrap_or_else(|| cfg.data_dir.join(DAEMON_LOG_FILE));
     bail!(
         "the shared store did not come up within {READY_DEADLINE:?}. Its log is {}; \
          --no-daemon opens the store in this process instead.",
-        log.display()
+        log_path(cfg).display()
     )
 }
 

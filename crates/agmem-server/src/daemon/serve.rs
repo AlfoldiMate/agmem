@@ -11,12 +11,12 @@ use agmem_embed::Embedder;
 use agmem_store::db::Db;
 use anyhow::Context;
 use rmcp::ServiceExt;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::mpsc;
 
 use crate::config::Config;
-use crate::daemon::{Handshake, socket_path};
+use crate::daemon::{Ack, Handshake, socket_path};
 use crate::service::AgmemService;
 use crate::{embedder, lock};
 
@@ -59,7 +59,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
 
     let idle = Duration::from_secs(cfg.idle_timeout);
     let daemon = Arc::new(cfg);
-    let (ended, mut endings) = mpsc::unbounded_channel::<()>();
+    let (ended, mut endings) = mpsc::unbounded_channel::<SessionEnd>();
     let mut attached: u32 = 0;
 
     loop {
@@ -70,16 +70,29 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
                 let (db, embedder, daemon, ended) =
                     (db.clone(), Arc::clone(&embedder), Arc::clone(&daemon), ended.clone());
                 tokio::spawn(async move {
-                    if let Err(error) = session(stream, db, embedder, &daemon).await {
-                        tracing::warn!(error = %format!("{error:#}"), "session ended badly");
-                    }
+                    let end = match session(stream, db, embedder, &daemon).await {
+                        Ok(end) => end,
+                        Err(error) => {
+                            tracing::warn!(error = %format!("{error:#}"), "session ended badly");
+                            SessionEnd::Detached
+                        }
+                    };
                     // The receiver lives as long as the loop, so this only
                     // fails once we are already shutting down.
-                    let _ = ended.send(());
+                    let _ = ended.send(end);
                 });
             }
-            Some(()) = endings.recv() => {
+            Some(end) = endings.recv() => {
                 attached = attached.saturating_sub(1);
+                if matches!(end, SessionEnd::Retiring) {
+                    // Sessions may still be attached, but they are attached
+                    // to code from a release that is no longer on disk;
+                    // cutting them loose is the fix, not the damage
+                    // (issue #60 — a stale daemon otherwise serves old
+                    // schema and scoring until its idle timeout).
+                    tracing::info!(attached, "another release attached; retiring so its binary can serve");
+                    break;
+                }
                 tracing::debug!(attached, "session detached");
             }
             () = idle_elapsed(idle, attached == 0) => {
@@ -106,14 +119,24 @@ async fn idle_elapsed(idle: Duration, nothing_attached: bool) {
     tokio::time::sleep(idle).await;
 }
 
-/// One attached session: find out who is asking, then hand rmcp the socket.
+/// How one attached session ended, as far as the accept loop cares.
+enum SessionEnd {
+    /// The ordinary way: the client went away, the daemon keeps serving.
+    Detached,
+    /// The session ran a different release; the daemon refused it and now
+    /// shuts down so that session can start a daemon from its own binary.
+    Retiring,
+}
+
+/// One attached session: find out who is asking, answer with an [`Ack`],
+/// then hand rmcp the socket.
 async fn session(
     stream: UnixStream,
     db: Db,
     embedder: Arc<dyn Embedder>,
     daemon: &Config,
-) -> anyhow::Result<()> {
-    let (read, write) = stream.into_split();
+) -> anyhow::Result<SessionEnd> {
+    let (read, mut write) = stream.into_split();
     let mut read = BufReader::new(read);
     let mut line = String::new();
     let bytes = read
@@ -123,11 +146,32 @@ async fn session(
     if bytes == 0 {
         // Connect-and-leave is how `--doctor` asks whether a daemon is here.
         tracing::debug!("a probe attached and left without a handshake");
-        return Ok(());
+        return Ok(SessionEnd::Detached);
     }
     let asked: Handshake = serde_json::from_str(line.trim())
         .context("the session handshake is not the JSON this daemon expects")?;
-    Handshake::new(daemon).accept(&asked)?;
+
+    // The ack goes over the socket either way (issue #60): a refusal that
+    // only lands in daemon.log is one the session pumps through as EOF and
+    // exits 0 on — no memory tools, no explanation.
+    let decision = Handshake::new(daemon).accept(&asked);
+    let ack = match &decision {
+        Ok(()) => Ack::accepted(),
+        Err(refusal) => Ack::refused(refusal),
+    };
+    let mut ack_line = serde_json::to_vec(&ack)?;
+    ack_line.push(b'\n');
+    write
+        .write_all(&ack_line)
+        .await
+        .context("writing the handshake ack")?;
+    if let Err(refusal) = decision {
+        if refusal.retire {
+            tracing::warn!(%refusal, "refused a session from another release");
+            return Ok(SessionEnd::Retiring);
+        }
+        return Err(refusal.into());
+    }
 
     // `main.rs` does this at startup for the in-process path (design §5.1
     // step 8). Here the connection is the startup: the daemon has never heard
@@ -153,7 +197,7 @@ async fn session(
     let running = service.serve((read, write)).await?;
     let reason = running.waiting().await?;
     tracing::info!(?reason, "session detached");
-    Ok(())
+    Ok(SessionEnd::Detached)
 }
 
 /// Keep the data dir to its owner: the socket has no password, and the

@@ -51,7 +51,19 @@ pub const DAEMON_LOG_FILE: &str = "daemon.log";
 /// v2 added `tool_desc`. A v1 daemon deserialises the extra field happily and
 /// then serves its own descriptions, so the bump is the only thing that turns
 /// "your override was ignored" into a message someone can read.
-pub const PROTOCOL_VERSION: u32 = 2;
+///
+/// v3 added `release` and the [`Ack`] the daemon now writes back (issue #60).
+/// A v2 daemon reads a v3 handshake, refuses it into its own log, and closes —
+/// which the v3 client, waiting on an ack that never comes, reports loudly
+/// instead of pumping EOF and exiting clean.
+pub const PROTOCOL_VERSION: u32 = 3;
+
+/// The version of the code actually serving. `PROTOCOL_VERSION` only moves
+/// when the wire changes, so it cannot tell a v0.1.3 daemon from a v0.1.4
+/// one — and a daemon that outlives a release keeps serving the old schema,
+/// scoring and tool wording until its idle timeout happens to recycle it
+/// (issue #60, and a real incident: a deleted binary's daemon kept serving).
+pub const RELEASE: &str = env!("CARGO_PKG_VERSION");
 
 /// The longest socket path a `sockaddr_un` can hold. macOS allows 104 bytes
 /// including the terminator and Linux 108; the smaller number travels.
@@ -106,6 +118,10 @@ pub fn spawn_lock_path(data_dir: &Path) -> PathBuf {
 pub struct Handshake {
     /// [`PROTOCOL_VERSION`] of the session that opened the connection.
     pub version: u32,
+    /// [`RELEASE`] of the binary that opened the connection. A mismatch means
+    /// the daemon is code from another release: it retires so the session can
+    /// start one from its own binary, rather than serving stale behaviour.
+    pub release: String,
     /// The store the session expects to be talking to.
     pub db_url: String,
     /// The embedding backend it expects.
@@ -126,6 +142,7 @@ impl Handshake {
     pub fn new(cfg: &Config) -> Self {
         Self {
             version: PROTOCOL_VERSION,
+            release: RELEASE.to_owned(),
             db_url: cfg.db_url.clone(),
             embedder: cfg.embedder,
             space: cfg.space.clone(),
@@ -138,35 +155,119 @@ impl Handshake {
     /// Refuse a session that expects something this daemon is not serving.
     ///
     /// # Errors
-    /// When the protocol version, the store or the embedder disagree. The
-    /// message is the session's to read, so it names both sides.
-    pub fn accept(&self, asked: &Self) -> anyhow::Result<()> {
+    /// When the release, the protocol version, the store or the embedder
+    /// disagree. The message is the session's to read, so it names both
+    /// sides; `retire` says whether this daemon should hand the socket over.
+    pub fn accept(&self, asked: &Self) -> Result<(), Refusal> {
+        // Release first: a version skew subsumes whatever else differs, and
+        // the newest attacher's binary is the one the user just installed —
+        // the daemon defers to it rather than serving code that no longer
+        // matches what is on disk.
+        if asked.release != self.release {
+            return Err(Refusal {
+                retire: true,
+                message: format!(
+                    "the running daemon is agmem {} and this session is agmem {}; the \
+                     daemon is retiring so a fresh one can serve this release.",
+                    self.release, asked.release
+                ),
+            });
+        }
         if asked.version != self.version {
-            bail!(
-                "this session speaks agmem daemon protocol v{} and the running daemon \
-                 speaks v{}; the daemon is an older or newer agmem. Stop it and let this \
-                 one start a fresh daemon.",
-                asked.version,
-                self.version
-            );
+            return Err(Refusal {
+                // Same release but different protocol should be impossible;
+                // if it happens anyway, the newer wire wins the socket.
+                retire: asked.version > self.version,
+                message: format!(
+                    "this session speaks agmem daemon protocol v{} and the running daemon \
+                     speaks v{}; the daemon is an older or newer agmem. Stop it and let \
+                     this one start a fresh daemon.",
+                    asked.version, self.version
+                ),
+            });
         }
         if asked.db_url != self.db_url {
-            bail!(
-                "the running daemon holds {} and this session asked for {}. One data dir \
-                 is one store; pass --no-daemon, or point both at the same --db.",
-                self.db_url,
-                asked.db_url
-            );
+            return Err(Refusal {
+                retire: false,
+                message: format!(
+                    "the running daemon holds {} and this session asked for {}. One data \
+                     dir is one store; pass --no-daemon, or point both at the same --db.",
+                    self.db_url, asked.db_url
+                ),
+            });
         }
         if asked.embedder != self.embedder {
-            bail!(
-                "the running daemon embeds with {} and this session asked for {}. Vectors \
-                 from two models cannot be compared; stop the daemon or match --embedder.",
-                self.embedder.as_str(),
-                asked.embedder.as_str()
-            );
+            return Err(Refusal {
+                retire: false,
+                message: format!(
+                    "the running daemon embeds with {} and this session asked for {}. \
+                     Vectors from two models cannot be compared; stop the daemon or match \
+                     --embedder.",
+                    self.embedder.as_str(),
+                    asked.embedder.as_str()
+                ),
+            });
         }
         Ok(())
+    }
+}
+
+/// Why a daemon turned a session away, and whether it is stepping aside.
+///
+/// `retire` is the difference between "you are misconfigured" (wrong store,
+/// wrong embedder — the daemon stays, the session gets an error) and "I am
+/// stale" (another release — the daemon shuts down so the refused session can
+/// start one from its own binary).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal {
+    /// What to tell the session. Names both sides and the way out.
+    pub message: String,
+    /// Whether the daemon shuts down after refusing.
+    pub retire: bool,
+}
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Refusal {}
+
+/// The one line the daemon writes back after reading a [`Handshake`], before
+/// any MCP flows (issue #60). Without it a refusal was an EOF the client
+/// pumped through and exited 0 on — the session came up with no memory tools
+/// and no explanation beyond a line in `daemon.log`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ack {
+    /// Whether the daemon accepted the session. When `true` the rest of the
+    /// stream is MCP; when `false`, `error` says why and the stream ends.
+    pub ok: bool,
+    /// The refusal, worded for the session that has to act on it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// The daemon is shutting down so the session can start a fresh one.
+    #[serde(default)]
+    pub retiring: bool,
+}
+
+impl Ack {
+    /// The daemon took the session.
+    pub fn accepted() -> Self {
+        Self {
+            ok: true,
+            error: None,
+            retiring: false,
+        }
+    }
+
+    /// The daemon turned the session away.
+    pub fn refused(refusal: &Refusal) -> Self {
+        Self {
+            ok: false,
+            error: Some(refusal.message.clone()),
+            retiring: refusal.retire,
+        }
     }
 }
 
@@ -210,13 +311,25 @@ mod tests {
             .accept(&asked)
             .expect("a different project is the whole point of sharing");
 
-        for (label, broken) in [
+        for (label, broken, retires) in [
+            (
+                "release",
+                Handshake {
+                    release: "0.0.0-elsewhere".to_owned(),
+                    ..daemon.clone()
+                },
+                // Another release means this daemon is the stale one: it
+                // steps aside rather than serving code that no longer
+                // matches the binary on disk.
+                true,
+            ),
             (
                 "version",
                 Handshake {
                     version: daemon.version + 1,
                     ..daemon.clone()
                 },
+                true,
             ),
             (
                 "store",
@@ -224,6 +337,9 @@ mod tests {
                     db_url: "surrealkv:///elsewhere".to_owned(),
                     ..daemon.clone()
                 },
+                // A wrong store is the session's misconfiguration; the
+                // daemon keeps serving everyone else.
+                false,
             ),
             (
                 "embedder",
@@ -231,16 +347,42 @@ mod tests {
                     embedder: EmbedderKind::None,
                     ..daemon.clone()
                 },
+                false,
             ),
         ] {
-            let error = daemon
+            let refusal = daemon
                 .accept(&broken)
                 .expect_err("{label} disagreeing must be refused");
             assert!(
-                !error.to_string().is_empty(),
+                !refusal.message.is_empty(),
                 "{label} must say what to do about it"
             );
+            assert_eq!(refusal.retire, retires, "{label}: wrong side gives way");
         }
+    }
+
+    #[test]
+    fn an_ack_survives_the_wire_and_a_refusal_carries_its_reason() {
+        for ack in [
+            Ack::accepted(),
+            Ack::refused(&Refusal {
+                message: "another release".to_owned(),
+                retire: true,
+            }),
+        ] {
+            let line = serde_json::to_string(&ack).expect("serialize");
+            assert!(!line.contains('\n'), "the ack is one line: {line}");
+            assert_eq!(
+                serde_json::from_str::<Ack>(&line).expect("deserialize"),
+                ack
+            );
+        }
+        let refused = Ack::refused(&Refusal {
+            message: "why".to_owned(),
+            retire: false,
+        });
+        assert_eq!(refused.error.as_deref(), Some("why"));
+        assert!(!refused.ok && !refused.retiring);
     }
 
     #[test]

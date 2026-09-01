@@ -749,7 +749,7 @@ remember(params)
     the probe's measurement is kept (issue #83): each surviving row stores
     novelty = clamp(1 − nearest similarity, 0, 1) — the store as it stood at
     write time, never recomputed (not even by --reindex); NONE where nothing
-    measured (a correction, an empty space, BM25-only, any pre-v7 row)
+    measured (a correction, an empty space, a vector-less row, any pre-v7 row)
  5. one transaction:
       episode? → insert episode + chunks (chunk.rs) + chunk embeddings
       inserts  → CREATE memory:ulid() CONTENT {...}, source.ref → episode
@@ -830,7 +830,7 @@ recall(q)
     envelope (≥ 0.10 and more than half the spread) marks the tail, and a
     tail row falls only when its own similarity is also under the floor.
     Policy-placed rows — occupancy promotions, hop rows — are trim-exempt;
-    unmeasured rows (BM25-only mode, hop rows, text-arm-only hits) never
+    unmeasured rows (vector-less rows, hop rows, text-arm-only hits) never
     abstain and never fall; a filters-only call is never cut. A changed
     page says so in `cut: {kept, considered, best_similarity, note}`,
     `kept: 0` being the abstention (`capped`/`truncated` then stay absent).
@@ -1058,7 +1058,7 @@ rather than details:
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `none` |
+| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only supported backend (`none` is a hidden test-only value) |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
 | `--log`, `--log-file` / `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |

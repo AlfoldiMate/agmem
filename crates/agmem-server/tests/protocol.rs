@@ -20,6 +20,7 @@ use agmem_core::{Kind, Source, Writer};
 use agmem_embed::NoopEmbedder;
 use agmem_server::config::ToolDescriptions;
 use agmem_store::repo::{self, Batch, Lookup, NewMemory};
+use harness::recorded::RecordedEmbedder;
 use harness::*;
 use rmcp::model::{
     ContentBlock, ErrorCode, GetPromptRequestParams, ReadResourceRequestParams, Role,
@@ -28,7 +29,7 @@ use rmcp::service::ServiceError;
 use serde_json::{Value, json};
 #[tokio::test]
 async fn initialize_announces_agmem_and_its_tool_capability() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let info = agmem
         .client
         .peer_info()
@@ -66,7 +67,7 @@ async fn initialize_announces_agmem_and_its_tool_capability() {
 
 #[tokio::test]
 async fn list_tools_matches_the_recorded_surface() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let tools = agmem.client.list_tools(None).await.expect("list_tools");
 
     // Every tool issue re-records this: it is the contract each agent reads.
@@ -81,7 +82,7 @@ async fn list_tools_matches_the_recorded_surface() {
 
 #[tokio::test]
 async fn list_prompts_matches_the_recorded_rituals() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let prompts = agmem.client.list_prompts(None).await.expect("list_prompts");
 
     // Same reasoning as the tool snapshot: this text is a contract with every
@@ -93,7 +94,7 @@ async fn list_prompts_matches_the_recorded_rituals() {
 
 #[tokio::test]
 async fn a_ritual_renders_one_instruction_for_the_model() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     for (name, must_name) in [
         ("recall_first", "`context`"),
@@ -133,7 +134,7 @@ async fn a_ritual_renders_one_instruction_for_the_model() {
 
 #[tokio::test]
 async fn a_ritual_takes_the_focus_it_was_given_and_runs_without_one() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     let arguments = json!({ "focus": "the auth refactor" })
         .as_object()
@@ -163,7 +164,7 @@ async fn a_ritual_takes_the_focus_it_was_given_and_runs_without_one() {
 
 #[tokio::test]
 async fn an_unknown_ritual_is_refused_rather_than_ignored() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let error = agmem
         .client
         .get_prompt(GetPromptRequestParams::new("no_such_ritual"))
@@ -188,7 +189,7 @@ fn text_of(result: &rmcp::model::GetPromptResult) -> &str {
 
 #[tokio::test]
 async fn resources_list_serves_one_index_per_space() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let listed = agmem
         .client
         .list_resources(None)
@@ -216,7 +217,7 @@ async fn resources_list_serves_one_index_per_space() {
 
 #[tokio::test]
 async fn resource_templates_publish_the_record_form() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let listed = agmem
         .client
         .list_resource_templates(None)
@@ -233,7 +234,7 @@ async fn resource_templates_publish_the_record_form() {
 
 #[tokio::test]
 async fn a_space_index_lists_live_claims_and_their_uris() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let first = agmem
         .remember(json!({ "memories": [{ "content": "The deploy target is Fly.io." }] }))
         .await;
@@ -272,7 +273,7 @@ async fn a_space_index_lists_live_claims_and_their_uris() {
 /// rendering 1000 entries beside a bigger number as if it were complete.
 #[tokio::test]
 async fn a_space_index_larger_than_one_read_marks_the_cut() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let over = repo::MAX_POOL + 1;
     repo::insert_batch(
         &agmem.db,
@@ -311,7 +312,7 @@ async fn a_space_index_larger_than_one_read_marks_the_cut() {
 
 #[tokio::test]
 async fn a_memory_uri_reads_the_inspect_answer() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let written = agmem
         .remember(
             json!({ "memories": [{ "content": "The CI cache key includes the rustc version." }] }),
@@ -341,7 +342,7 @@ async fn a_memory_uri_reads_the_inspect_answer() {
 
 #[tokio::test]
 async fn a_uri_naming_nothing_is_resource_not_found() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     for uri in [
         "memory://default/01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -392,14 +393,14 @@ async fn read_json(agmem: &Harness, uri: &str) -> Value {
 #[tokio::test]
 async fn an_override_is_what_the_agent_reads() {
     let built_in = {
-        let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+        let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
         let tools = agmem.client.list_tools(None).await.expect("list_tools");
         agmem.shutdown().await;
         tools.tools
     };
 
     let agmem = Harness::start_with(
-        Arc::new(NoopEmbedder),
+        Arc::new(RecordedEmbedder),
         ToolDescriptions::from_iter([("recall", "Ask the store before you answer.")]),
     )
     .await;
@@ -454,7 +455,7 @@ async fn an_override_is_what_the_agent_reads() {
 #[tokio::test]
 async fn an_overridden_tool_still_runs() {
     let agmem = Harness::start_with(
-        Arc::new(NoopEmbedder),
+        Arc::new(RecordedEmbedder),
         ToolDescriptions::from_iter([("remember", "Write it down.")]),
     )
     .await;
@@ -473,7 +474,7 @@ async fn an_overridden_tool_still_runs() {
 
 #[tokio::test]
 async fn an_unknown_tool_is_refused_rather_than_ignored() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let error = agmem
         .client
         .call_tool(rmcp::model::CallToolRequestParams::new("no_such_tool"))
@@ -566,7 +567,7 @@ async fn remember_stores_a_batch_and_provenances_it_to_the_episode() {
 /// rmcp's own build info — and `tool` names the verb that wrote the row.
 #[tokio::test]
 async fn a_write_records_its_writer_and_inspect_shows_it() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let diff = agmem
         .remember(json!({ "memories": [{ "content": "The deploy target moved to Railway." }] }))
         .await;
@@ -609,7 +610,7 @@ async fn a_write_records_its_writer_and_inspect_shows_it() {
 /// a leftover from another request.
 #[tokio::test]
 async fn a_meta_session_override_is_what_the_writer_records() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     let result = agmem
         .call_as(
@@ -809,7 +810,7 @@ async fn without_an_embedder_the_exact_gate_still_holds() {
     assert_eq!(
         agmem.contents().await,
         ["The user prefers Rust"],
-        "BM25-only mode still writes, and still refuses to write twice"
+        "without vectors the store still writes, and still refuses to write twice"
     );
     agmem.shutdown().await;
 }
@@ -1014,7 +1015,7 @@ async fn a_second_correction_reports_the_close_that_stands() {
 /// same word.
 #[tokio::test]
 async fn write_side_space_keywords_resolve_instead_of_becoming_slugs() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     agmem
         .remember(json!({
@@ -1201,7 +1202,7 @@ async fn one_call_merges_a_whole_duplicate_cluster() {
 
 #[tokio::test]
 async fn a_request_that_cannot_be_stored_names_what_is_wrong() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let cases = [
         (json!({ "memories": [] }), "nothing to remember"),
         (
@@ -1393,7 +1394,7 @@ async fn a_query_nothing_matches_abstains_instead_of_filling_the_page() {
 
 #[tokio::test]
 async fn a_temporal_window_rescores_without_hiding_anything() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let stored = agmem
         .remember(json!({ "memories": [{
             "content": "The header colour is blue across the site",
@@ -1473,7 +1474,7 @@ async fn a_temporal_window_rescores_without_hiding_anything() {
 
 #[tokio::test]
 async fn an_inverted_window_is_refused() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let error = agmem
         .call(
             "recall",
@@ -1504,7 +1505,7 @@ async fn a_deployment_with_no_vectors_never_abstains() {
         ] }))
         .await;
 
-    // BM25-only: nothing is ever measured, and the absence of a measurement
+    // No vectors: nothing is ever measured, and the absence of a measurement
     // is not evidence of irrelevance — the floor must stay off however weak
     // the match.
     let found = agmem.recall(json!({ "query": "gateway retries" })).await;
@@ -1581,7 +1582,7 @@ async fn every_id_a_recall_hands_out_is_inspectable() {
 
 #[tokio::test]
 async fn recall_unions_the_current_space_with_the_user_space() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({ "memories": [{ "content": "This project pins surrealdb to 3.x" }] }))
         .await;
@@ -1627,7 +1628,7 @@ async fn recall_unions_the_current_space_with_the_user_space() {
 
 #[tokio::test]
 async fn as_of_returns_the_claim_that_was_live_then() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let first = agmem
         .remember(json!({
             "memories": [{
@@ -1693,7 +1694,7 @@ async fn as_of_reads_only_episodes_that_had_already_happened() {
     // Episodes have no supersession, so before schema v4 they sat outside
     // as-of entirely: a chunk stored today came back — ranked first — for an
     // instant years before its episode occurred.
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [],
@@ -1771,7 +1772,7 @@ async fn a_filters_only_recall_ranks_on_decay_alone() {
 /// answer admits the cut the way `truncated` admits `k`'s.
 #[tokio::test]
 async fn one_dominant_episode_cannot_flood_a_page() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let flood = agmem
         .remember(json!({
             "memories": [
@@ -1851,7 +1852,7 @@ async fn a_full_page_says_how_much_of_the_store_it_is_not() {
     // answer as the whole store. That is true right up until the store outgrows
     // `k`, and a page of hits carries nothing that says which of the two
     // happened.
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({ "memories": [
             { "content": "The user prefers Rust" },
@@ -1889,7 +1890,7 @@ async fn a_full_page_says_how_much_of_the_store_it_is_not() {
 
 #[tokio::test]
 async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({ "memories": [{ "content": "The user prefers Rust" }] }))
         .await;
@@ -1930,7 +1931,7 @@ async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
 
 #[tokio::test]
 async fn a_historical_read_reinforces_nothing() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({ "memories": [{ "content": "The user prefers Rust" }] }))
         .await;
@@ -1969,7 +1970,7 @@ async fn a_historical_read_reinforces_nothing() {
 
 #[tokio::test]
 async fn context_lays_out_the_sections_in_a_fixed_order_and_reinforces_nothing() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let written = agmem
         .remember(json!({
             "memories": [
@@ -2052,7 +2053,7 @@ async fn a_query_aims_the_relevant_section_and_verbatim_text_stays_out() {
 
 #[tokio::test]
 async fn a_small_budget_keeps_the_first_section_and_says_it_trimmed() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [
@@ -2087,7 +2088,7 @@ async fn a_small_budget_keeps_the_first_section_and_says_it_trimmed() {
 
 #[tokio::test]
 async fn a_flooded_tag_yields_lessons_slots_and_recall_stays_uncapped() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [
@@ -2127,7 +2128,7 @@ async fn a_flooded_tag_yields_lessons_slots_and_recall_stays_uncapped() {
 
 #[tokio::test]
 async fn an_empty_space_says_so_and_an_unusable_budget_is_refused() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     let block = agmem.context(json!({})).await;
     assert!(
@@ -2158,7 +2159,7 @@ async fn an_empty_space_says_so_and_an_unusable_budget_is_refused() {
 
 #[tokio::test]
 async fn inspect_walks_a_chain_of_two_corrections_oldest_first() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let mut links = Vec::new();
     for (content, valid_from) in [
         ("The user deploys from a laptop", "2026-01-01T00:00:00Z"),
@@ -2216,7 +2217,7 @@ async fn inspect_walks_a_chain_of_two_corrections_oldest_first() {
 
 #[tokio::test]
 async fn a_claim_links_back_to_the_text_it_was_distilled_from() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let verbatim = "I'd rather write CLIs in Rust than Python.\n\nAlso cargo died on a cold cache.";
     let diff = agmem
         .remember(json!({
@@ -2277,7 +2278,7 @@ async fn a_claim_links_back_to_the_text_it_was_distilled_from() {
 
 #[tokio::test]
 async fn inspect_reports_a_subject_and_what_each_space_holds() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let first = agmem
         .remember(json!({
             "memories": [{
@@ -2357,7 +2358,7 @@ async fn inspect_reports_a_subject_and_what_each_space_holds() {
 
 #[tokio::test]
 async fn an_unanswerable_ref_says_what_the_grammar_is() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let stored = agmem
         .remember(json!({
             "space": "user",
@@ -2459,7 +2460,7 @@ async fn a_forgotten_claim_stops_answering_but_stays_readable() {
 
 #[tokio::test]
 async fn forgetting_by_query_needs_the_same_call_with_dry_run_first() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [
@@ -2517,7 +2518,7 @@ async fn forgetting_by_query_needs_the_same_call_with_dry_run_first() {
 /// scope surprise the two-step exists to prevent.
 #[tokio::test]
 async fn a_confirm_refuses_rows_the_dry_run_never_showed() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(
             json!({ "memories": [{ "content": "the kitchen renovation finished in March" }] }),
@@ -2564,7 +2565,7 @@ async fn a_confirm_refuses_rows_the_dry_run_never_showed() {
 /// proceeds on what is left rather than demanding a pointless re-run.
 #[tokio::test]
 async fn a_confirm_proceeds_when_the_store_only_shrank() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let written = agmem
         .remember(json!({
             "memories": [
@@ -2596,7 +2597,7 @@ async fn a_confirm_proceeds_when_the_store_only_shrank() {
 
 #[tokio::test]
 async fn a_purge_takes_the_whole_correction_chain_and_leaves_no_row() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let first = agmem
         .remember(json!({ "memories": [{ "content": "the office is on the third floor" }] }))
         .await;
@@ -2650,7 +2651,7 @@ async fn a_purge_takes_the_whole_correction_chain_and_leaves_no_row() {
 
 #[tokio::test]
 async fn verbatim_text_can_only_be_purged_and_its_claims_outlive_it() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let stored = agmem
         .remember(json!({
             "memories": [{ "content": "the user prefers Rust over Python" }],
@@ -2866,9 +2867,7 @@ async fn consolidate_offers_one_close_pair_as_both_a_merge_and_a_disagreement() 
 
 #[tokio::test]
 async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
-    // No embedder at all: the stale arm is the one finding that needs no
-    // vectors, and it has to keep working in BM25-only mode.
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let written = agmem
         .remember(json!({
             "memories": [
@@ -2905,16 +2904,31 @@ async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
          idle time, not the 559 days the raw strength would claim: {found:#}"
     );
 
-    let note = found["note"].as_str().expect("a note");
+    // Two unrelated claims: the similarity arms ran and found nothing, and
+    // an empty section that was actually compared carries no note.
     assert!(
-        note.contains("without an embedder"),
-        "an empty similarity section has to say whether it is empty or blind: {note}"
+        found["near_duplicates"]
+            .as_array()
+            .expect("an array")
+            .is_empty(),
+        "{found:#}"
+    );
+    assert!(
+        found["contradictions"]
+            .as_array()
+            .expect("an array")
+            .is_empty(),
+        "{found:#}"
+    );
+    assert!(
+        found["note"].is_null(),
+        "nothing limited this answer, so nothing to explain: {found:#}"
     );
 }
 
 #[tokio::test]
 async fn consolidate_reports_a_tag_holding_more_lessons_than_the_bound() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [
@@ -3058,7 +3072,7 @@ async fn consolidate_notes_the_cut_when_it_finds_more_than_one_answer_carries() 
 
 #[tokio::test]
 async fn a_reflection_is_recallable_and_walks_back_to_its_evidence() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let stored = agmem
         .remember(json!({
             "memories": [{
@@ -3138,7 +3152,7 @@ async fn a_reflection_is_recallable_and_walks_back_to_its_evidence() {
 
 #[tokio::test]
 async fn a_reflection_has_to_cite_something_the_store_holds() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     let claim = agmem
         .remember(json!({ "memories": [{ "content": "The project pins surrealdb to 3.x" }] }))
         .await["created"][0]
@@ -3190,7 +3204,7 @@ async fn a_reflection_has_to_cite_something_the_store_holds() {
 
 #[tokio::test]
 async fn a_summary_stands_in_for_its_children_and_expands_on_demand() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
 
     // A summary that cannot cite what it covers is refused where it was sent,
     // and the refusal names the verb that works.
@@ -3437,7 +3451,7 @@ async fn an_insight_blocked_by_an_uncited_claim_is_told_how_to_cite_it() {
 /// the row that answers the follow-up shares no word with the question — it
 /// is reachable only through that entity.
 async fn chain_store() -> Harness {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [
@@ -3497,7 +3511,7 @@ async fn the_hop_arm_cannot_outrank_what_matched() {
 
 #[tokio::test]
 async fn nothing_to_hop_from_changes_nothing() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem
         .remember(json!({
             "memories": [
@@ -3509,21 +3523,24 @@ async fn nothing_to_hop_from_changes_nothing() {
         .await;
     let found = agmem.recall(json!({ "query": "deploy approvals" })).await;
     // No row carries entities, so the hop has nothing to seed from: the
-    // answer is the primary arm alone, and every fused score is a pure
-    // 1 / (60 + rank) with nothing hop-weighted added on.
+    // answer is the primary arms alone. Both deploy rows rank first and
+    // second in the text arm and in the vector arm, so the fused scores add
+    // up to exactly two arms' two votes — 2 × (1/61 + 1/62) — with nothing
+    // hop-weighted on top.
     assert_eq!(
         hits(&found).len(),
         2,
-        "only what the words matched: {found}"
+        "only what the words and the meaning matched: {found}"
     );
-    for (rank, hit) in hits(&found).iter().enumerate() {
-        let pure = 1.0 / (60 + rank + 1) as f64;
-        let rrf = hit["signals"]["rrf"].as_f64().expect("rrf");
-        assert!(
-            (rrf - pure).abs() < 1e-9,
-            "rank {rank} scores exactly one arm's vote, got {rrf}: {hit}"
-        );
-    }
+    let two_arms = 2.0 * (1.0 / 61.0 + 1.0 / 62.0);
+    let total: f64 = hits(&found)
+        .iter()
+        .map(|hit| hit["signals"]["rrf"].as_f64().expect("rrf"))
+        .sum();
+    assert!(
+        (total - two_arms).abs() < 1e-9,
+        "the page scores exactly the primary arms' votes, got {total}: {found}"
+    );
     agmem.shutdown().await;
 }
 
@@ -3552,7 +3569,7 @@ async fn an_entity_filter_turns_the_hop_off() {
 
 #[tokio::test]
 async fn a_hub_entity_never_seeds() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     // Eight rows carrying the same entity make it the pool's topic — hopping
     // on it would re-fetch the pool — plus one row reachable only through it.
     let mut rows: Vec<Value> = (1..=8)
@@ -3567,21 +3584,32 @@ async fn a_hub_entity_never_seeds() {
     agmem.remember(json!({ "memories": rows })).await;
 
     let found = agmem.recall(json!({ "query": "atlas checklist" })).await;
-    assert_eq!(
-        hits(&found).len(),
-        8,
-        "the eight checklist rows, and nothing hopped in: {found}"
-    );
-    assert!(
-        !hit_contents(&found).contains(&"Nadia keeps the spare keys"),
-        "a hub entity is the topic, not a link, and never seeds a hop: {found}"
-    );
+    let contents = hit_contents(&found);
+    for n in 1..=8 {
+        let row = format!("Atlas checklist item number {n}");
+        assert!(
+            contents.contains(&row.as_str()),
+            "{row} is what the query asked for: {found}"
+        );
+    }
+    // The vector arm reaches the ninth row on its own — nine rows is one KNN
+    // page — but it arrives with that single vote and nothing stacked on it.
+    // A hop seeded from the hub entity would have added its own weight.
+    for hit in hits(&found) {
+        if hit["content"] == "Nadia keeps the spare keys" {
+            let rrf = hit["signals"]["rrf"].as_f64().expect("rrf");
+            assert!(
+                rrf <= 1.0 / 61.0 + 1e-9,
+                "a hub entity is the topic, not a link, and never seeds a hop: {hit}"
+            );
+        }
+    }
     agmem.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_full_page_reserves_its_last_slot_for_the_hop() {
-    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     // Eleven rows match the query's words and only the first names entities,
     // so the chain row enters through the hop alone and lands past a k of 10
     // — issue #43's shape, where the page used to cut the very row the hop

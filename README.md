@@ -335,8 +335,8 @@ called. Both are the gate for changes to ranking or wording.
 
 ### Contributing and releasing
 
-`main` is protected and PR-only. CI runs fmt, clippy with warnings denied, the
-full suite on Linux and macOS, and the BM25-only build check.
+`main` is protected and PR-only. CI runs fmt, clippy with warnings denied, and
+the full suite on Linux and macOS.
 
 A release is one merge. release-plz keeps a rolling PR open proposing the next
 version, and merging it pushes the tag. The tag fires cargo-dist, which builds

@@ -56,6 +56,10 @@ cap covers exactly the flood the gate lets through.
       "context": {
         "passed": 24,
         "total": 24
+      },
+      "staleness": {
+        "stale_hits": 0,
+        "pages": 3
       }
     },
     "episode-flood": {
@@ -78,6 +82,10 @@ cap covers exactly the flood the gate lets through.
       "context": {
         "passed": 0,
         "total": 0
+      },
+      "staleness": {
+        "stale_hits": 0,
+        "pages": 1
       }
     },
     "formatter-switch": {
@@ -100,6 +108,10 @@ cap covers exactly the flood the gate lets through.
       "context": {
         "passed": 0,
         "total": 0
+      },
+      "staleness": {
+        "stale_hits": 0,
+        "pages": 4
       }
     },
     "user-profile": {
@@ -122,6 +134,10 @@ cap covers exactly the flood the gate lets through.
       "context": {
         "passed": 8,
         "total": 8
+      },
+      "staleness": {
+        "stale_hits": 0,
+        "pages": 4
       }
     }
   }
@@ -143,6 +159,12 @@ Reading it:
 - **context** — the context-block checklist: section order, budget, no claim
   twice, no superseded or verbatim-episode text, every cited id resolves
   through `inspect`, plus each case's own must/must-not entries.
+- **staleness** — supersession honesty, FAMA-style (issue #79): across every
+  live page the scenario scripts (each probe at its own `k`, each timeline
+  check without `as_of` at 10), how many hits were claims already corrected
+  when the query ran. Ground truth is the fixture's `supersedes` graph, not
+  the hit's annotation, so a closed claim leaking unannotated still counts.
+  Zero is the only honest number.
 
 ## Re-running
 
@@ -182,6 +204,25 @@ Two mechanisms answer "would this harness notice a broken scoring change":
   | formatter-switch timeline passed | 2/2 | 1/2 |
   | user-profile retrieval found | 3/3 | 2/3 |
   | user-profile retrieval mrr | 0.8333 | 0.1778 |
+
+  Setting `resolve_liveness`'s live default (`agmem-server/src/tools/recall.rs`)
+  from `Liveness::Live` to `Liveness::Any` — corrected claims competing on
+  every live page, the failure class issue #79 targets — moved six fields
+  (run 2026-09-01):
+
+  | field | baseline | mutated |
+  |---|---|---|
+  | deploy-migration staleness stale_hits | 0 | 3 |
+  | formatter-switch retrieval mrr | 0.5556 | 0.5278 |
+  | formatter-switch timeline passed | 2/2 | 1/2 |
+  | formatter-switch staleness stale_hits | 0 | 4 |
+  | user-profile retrieval mrr | 0.8333 | 0.6111 |
+  | user-profile staleness stale_hits | 0 | 4 |
+
+  In deploy-migration the staleness column is the *only* field that moved:
+  before it existed, a broken live filter passed that scenario's baseline
+  clean. That gap — a run scoring honest while corrected claims surface —
+  is what the column closes.
 
 ## What the baseline says about the system
 

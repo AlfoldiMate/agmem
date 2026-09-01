@@ -50,6 +50,12 @@ pub mod recall;
 pub mod reflect;
 pub mod remember;
 
+/// Not a tool: `recall`'s abstention floor and knee trim (see its module
+/// doc). Private because only `recall` answers with a page it must be honest
+/// about — `context` budgets rather than ranks, and the write path's reads
+/// are its own gates.
+mod abstain;
+
 /// Not a tool: `recall`'s entity hop (see its module doc). Private because
 /// only `recall` may hop — `search_hybrid` also serves `forget`'s dry-run and
 /// `context`'s budgeted sections, where rows the query never matched must not

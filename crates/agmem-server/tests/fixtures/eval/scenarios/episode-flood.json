@@ -52,6 +52,16 @@
       "relevant": ["relevant-replica", "relevant-breaker"]
     }
   ],
+  "abstain": [
+    {
+      "query": "how do I claim travel expenses for the client visit?",
+      "k": 4
+    },
+    {
+      "query": "what is the recipe for the team's chilli cook-off entry?",
+      "k": 4
+    }
+  ],
   "timeline": [],
   "gate": [],
   "context": []

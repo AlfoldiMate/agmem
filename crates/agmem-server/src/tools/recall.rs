@@ -21,7 +21,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::service::AgmemService;
-use crate::tools::{self, embed_query, hop, invalid, occupancy, provenance, store_error};
+use crate::tools::{self, abstain, embed_query, hop, invalid, occupancy, provenance, store_error};
 
 /// How many hits a call that does not say gets back.
 const DEFAULT_K: u16 = 10;
@@ -93,6 +93,13 @@ pub struct RecallResult {
     /// matches these filters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncated: Option<Truncated>,
+
+    /// Present when match quality changed this page (issue #77): either the
+    /// tail fell off a marked drop in retrieval quality, or — `kept: 0` —
+    /// nothing matched well enough to answer at all and the page is honestly
+    /// empty. Absent means every hit earned its slot on ranking alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut: Option<Cut>,
 }
 
 /// What the occupancy cap moved out of the page (issue #76).
@@ -130,6 +137,60 @@ impl Capped {
             cap,
             displaced: resliced.displaced,
             sources: resliced.sources,
+            note,
+        }
+    }
+}
+
+/// What match quality did to the page (issue #77).
+///
+/// The struct-with-note shape [`Capped`] and [`Truncated`] already have: the
+/// numbers are what make the note checkable.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Cut {
+    /// How many hits survived; 0 is the abstention — nothing matched well
+    /// enough to act on, which is not the same as nothing being stored.
+    pub kept: usize,
+
+    /// How many hits the page held before the cut.
+    pub considered: usize,
+
+    /// The best cosine similarity a vector arm measured on the page, absent
+    /// when nothing was measured.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub best_similarity: Option<f64>,
+
+    /// The same thing in words, with the next move.
+    pub note: String,
+}
+
+impl Cut {
+    fn new(verdict: abstain::Verdict) -> Self {
+        let abstain::Verdict {
+            kept,
+            considered,
+            best_similarity,
+        } = verdict;
+        let note = if kept == 0 {
+            let best = best_similarity
+                .map_or_else(|| "nothing measurable".to_owned(), |s| format!("{s:.2}"));
+            format!(
+                "Nothing here matched well enough to answer: the best of {considered} \
+                 candidate(s) was {best} similar to the query. That is not an empty store — \
+                 it is a page with nothing on it worth acting on. Ask in different words, or \
+                 drop `query` and use `entities`/`tags` to list what is stored."
+            )
+        } else {
+            format!(
+                "{kept} of {considered} candidates are returned: the rest fell off a marked \
+                 drop in match quality, not off `k`. Raising `k` will not bring them back; a \
+                 filters-only call lists what is there."
+            )
+        };
+        Self {
+            kept,
+            considered,
+            best_similarity,
             note,
         }
     }
@@ -257,6 +318,13 @@ pub struct HitSignals {
     /// everywhere when nothing matched on words or meaning at all.
     pub rrf_normalized: f64,
 
+    /// Cosine similarity between the query and this hit, when a vector arm
+    /// measured it — the one signal here with an absolute scale, comparable
+    /// across calls. Absent for a hit only the text arms or the entity hop
+    /// surfaced, and everywhere in a BM25-only deployment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub similarity: Option<f64>,
+
     /// How much of the memory has survived its decay curve since it was last
     /// used. 1.0 for a pinned memory, or for verbatim text.
     pub retention: f64,
@@ -299,8 +367,10 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
 
     // 1. A call with nothing to match on is not a search — it is the tier-1
     //    indexed lookup, which costs no embedding and no fusion (§5.3 step 1).
+    let query = query.filter(|text| !text.trim().is_empty());
+    let is_search = query.is_some();
     let mut hopped = Vec::new();
-    let candidates = match query.filter(|text| !text.trim().is_empty()) {
+    let candidates = match query {
         Some(text) => {
             let mut search = Search::new(spaces.clone());
             search.vector = embed_query(service, &text).await?;
@@ -329,6 +399,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
                 .into_iter()
                 .map(|memory| Candidate {
                     rrf: 0.0,
+                    similarity: None,
                     hit: StoreHit::Memory(Box::new(memory)),
                 })
                 .collect()
@@ -343,9 +414,24 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             let signals = match &candidate.hit {
                 StoreHit::Memory(memory) => Signals::for_memory(candidate.rrf, memory, now),
                 StoreHit::Chunk(_) => Signals::for_episode_chunk(candidate.rrf),
-            };
+            }
+            .with_similarity(candidate.similarity);
             (candidate.hit, signals)
         }));
+
+    // The page as pure ranking would have cut it, before any policy touches
+    // it. The knee trim (2d) may only cut rows that earned their slot by
+    // score; a row the occupancy cap promoted was placed *because* it ranks
+    // lower than the page around it, and the rank skip it sits on reads as
+    // exactly the cliff the knee looks for — trimming it would undo the
+    // policy that put it there. Hop-voted rows are exempt by name for the
+    // same reason (issue #43): the arm is weak by design, so its row is the
+    // knee's natural first victim, full page or not.
+    let by_score: Vec<String> = ranked
+        .iter()
+        .take(k)
+        .map(|(hit, _)| hit_key(hit).to_owned())
+        .collect();
 
     // 2b. No single source may flood the page (issue #76): over-quota hits
     //     defer to the next-ranked ones from elsewhere. Before the hop's
@@ -374,6 +460,31 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     ranked.truncate(k);
     let considered = ranked.len();
 
+    // 2d. Cut what did not really match (issue #77): the knee trims the tail
+    //     that merely ranked, and the floor empties a page whose best
+    //     measured hit is not an answer. After the promotions, with the
+    //     promoted rows exempt from the trim (`by_score`) though not from
+    //     abstention; before reinforcement, because a row cut off the page
+    //     was not recalled. The filters-only path asked for a listing, not a
+    //     search, and is never cut.
+    let cut = if is_search {
+        abstain::apply(
+            &mut ranked,
+            |(_, ranked)| (ranked.signals.similarity, ranked.rrf_normalized),
+            |(hit, _)| {
+                !by_score.iter().any(|id| id == hit_key(hit))
+                    || matches!(hit, StoreHit::Memory(memory) if hopped.contains(&memory.id))
+            },
+        )
+        .map(Cut::new)
+    } else {
+        None
+    };
+    let abstained = cut.as_ref().is_some_and(|cut| cut.kept == 0);
+    // An abstention empties the page; `capped` and `truncated` both describe
+    // a page that no longer exists.
+    let capped = if abstained { None } else { capped };
+
     // 3. Being recalled is what keeps a memory alive; verbatim text has no
     //    curve to be pushed back up. Historical reads don't count (issue #63):
     //    an `as_of` or `include_invalidated` call asks what *was* believed,
@@ -394,7 +505,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     // 4. `take(k)` is silent, and a full page is the one shape that cannot be
     //    read as complete or partial from the outside. Count only when the
     //    page filled up: a short answer is its own evidence of being whole.
-    let truncated = if considered == k {
+    let truncated = if considered == k && !abstained {
         let mut lookup = Lookup::new(spaces.clone());
         lookup.filters = counted;
         lookup.liveness = liveness;
@@ -415,6 +526,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             .collect(),
         capped,
         truncated,
+        cut,
     })
 }
 
@@ -424,6 +536,7 @@ impl RecallHit {
         let signals = HitSignals {
             rrf: ranked.signals.rrf,
             rrf_normalized: ranked.rrf_normalized,
+            similarity: ranked.signals.similarity,
             retention: ranked.signals.retention,
             importance: ranked.signals.importance,
         };
@@ -474,6 +587,14 @@ impl From<Kind> for HitKind {
             Kind::Lesson => Self::Lesson,
             Kind::Instruction => Self::Instruction,
         }
+    }
+}
+
+/// The id a hit answers to, whichever table it lives in.
+fn hit_key(hit: &StoreHit) -> &str {
+    match hit {
+        StoreHit::Memory(memory) => memory.id.as_str(),
+        StoreHit::Chunk(chunk) => chunk.id.as_str(),
     }
 }
 

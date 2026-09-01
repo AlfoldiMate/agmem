@@ -164,6 +164,13 @@ pub fn is_valid_at(memory: &MemoryRecord, instant: Timestamp) -> bool {
 pub struct Signals {
     /// Fused retrieval score from SurrealDB's `search::rrf`.
     pub rrf: f64,
+    /// Cosine similarity between the query and this candidate, when a vector
+    /// arm measured it. Carried at **zero weight** — `rrf` already contains
+    /// the vector arm's vote — because it is the pool's one absolute
+    /// relevance signal, which the abstention floor (issue #77) reads and
+    /// min–max-normalised `rrf` cannot give.
+    #[serde(default)]
+    pub similarity: Option<f64>,
     /// Retention at query time; 1.0 for anything that does not decay.
     pub retention: f64,
     /// Standing importance of the decay class.
@@ -175,6 +182,7 @@ impl Signals {
     pub fn for_memory(rrf: f64, memory: &MemoryRecord, now: Timestamp) -> Self {
         Self {
             rrf,
+            similarity: None,
             retention: retention(
                 memory.decay_class,
                 memory.strength,
@@ -193,9 +201,17 @@ impl Signals {
     pub fn for_episode_chunk(rrf: f64) -> Self {
         Self {
             rrf,
+            similarity: None,
             retention: 1.0,
             importance: DecayClass::Normal.importance(),
         }
+    }
+
+    /// The same signals, with the vector arm's measurement attached.
+    #[must_use]
+    pub fn with_similarity(mut self, similarity: Option<f64>) -> Self {
+        self.similarity = similarity;
+        self
     }
 }
 

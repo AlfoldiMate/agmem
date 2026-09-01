@@ -1141,13 +1141,25 @@ async fn recall_fuses_claims_with_the_text_they_came_from_and_says_why() {
     );
     assert_eq!(
         hits(&found).len(),
-        3,
-        "both claims and the episode's one chunk compete in a single order: {found}"
+        2,
+        "the matching claim and the episode's one chunk compete in a single \
+         order; what the query is not about fell off the knee (issue #77): {found}"
+    );
+    assert!(
+        !hit_contents(&found).contains(&"The kitchen tap drips at night"),
+        "what the query is not about is not on the page: {found}"
     );
     assert_eq!(
-        hit_contents(&found).last(),
-        Some(&"The kitchen tap drips at night"),
-        "what the query is not about ranks last: {found}"
+        found["cut"]["kept"].as_u64(),
+        Some(2),
+        "the page admits the trim: {found}"
+    );
+    assert_eq!(found["cut"]["considered"].as_u64(), Some(3), "{found}");
+    assert!(
+        found["cut"]["note"]
+            .as_str()
+            .is_some_and(|note| note.contains("drop in match quality")),
+        "the note says why the tail is gone: {found}"
     );
 
     let best = &hits(&found)[0];
@@ -1155,6 +1167,10 @@ async fn recall_fuses_claims_with_the_text_they_came_from_and_says_why() {
         best["signals"]["rrf_normalized"].as_f64(),
         Some(1.0),
         "the strongest retrieval hit normalises to 1"
+    );
+    assert!(
+        best["signals"]["similarity"].as_f64().is_some(),
+        "a vector-measured hit reports its absolute similarity: {best}"
     );
     for hit in hits(&found) {
         let signals = &hit["signals"];
@@ -1185,6 +1201,90 @@ async fn recall_fuses_claims_with_the_text_they_came_from_and_says_why() {
     assert!(
         verbatim["valid_from"].is_null(),
         "verbatim text has no validity window to report: {verbatim}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_query_nothing_matches_abstains_instead_of_filling_the_page() {
+    let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [
+            { "content": "black formats the whole workspace" },
+            { "content": "black runs in CI on every push" }
+        ] }))
+        .await;
+
+    // No marker word and no shared term: the vector arm measures 0.0 to
+    // everything, the text arms match nothing — yet without the floor the
+    // page would still fill, best hit normalised to 1.0 (issue #77).
+    let found = agmem
+        .recall(json!({ "query": "harbour tides tomorrow" }))
+        .await;
+    assert_eq!(
+        found["hits"].as_array().map(Vec::len),
+        Some(0),
+        "nothing matched well enough to act on: {found}"
+    );
+    let cut = &found["cut"];
+    assert_eq!(cut["kept"].as_u64(), Some(0), "{found}");
+    assert!(
+        cut["considered"].as_u64().is_some_and(|count| count >= 1),
+        "the abstention says what it considered: {found}"
+    );
+    assert!(
+        cut["best_similarity"]
+            .as_f64()
+            .is_some_and(|best| best.abs() < 0.01),
+        "orthogonal vectors measure ~0.0: {found}"
+    );
+    assert!(
+        cut["note"]
+            .as_str()
+            .is_some_and(|note| note.contains("not an empty store")
+                && note.contains("Ask in different words")),
+        "the note carries the next move: {found}"
+    );
+    assert!(
+        found["capped"].is_null() && found["truncated"].is_null(),
+        "both describe a page that no longer exists: {found}"
+    );
+
+    // The same store, asked something it holds: cosine 0.87 clears the
+    // floor, and a two-row page has no knee.
+    let found = agmem.recall(json!({ "query": "ruff configuration" })).await;
+    assert_eq!(
+        found["hits"].as_array().map(Vec::len),
+        Some(2),
+        "a related question is answered, not abstained: {found}"
+    );
+    assert!(found["cut"].is_null(), "{found}");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_deployment_with_no_vectors_never_abstains() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [
+            { "content": "the payment gateway retries three times" },
+            { "content": "the payment gateway settles nightly" }
+        ] }))
+        .await;
+
+    // BM25-only: nothing is ever measured, and the absence of a measurement
+    // is not evidence of irrelevance — the floor must stay off however weak
+    // the match.
+    let found = agmem.recall(json!({ "query": "gateway retries" })).await;
+    assert!(
+        found["hits"]
+            .as_array()
+            .is_some_and(|hits| !hits.is_empty()),
+        "text matches stand on their own evidence: {found}"
+    );
+    assert!(
+        found["cut"].is_null(),
+        "no measurement, no floor and no knee: {found}"
     );
     agmem.shutdown().await;
 }

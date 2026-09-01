@@ -448,10 +448,24 @@ pub(crate) struct ScoreRow {
     pub(crate) rrf: f64,
 }
 
-/// The single object a hybrid search returns: the fused order, and the rows.
+/// One vector-arm candidate: which row, and its cosine distance to the query.
+///
+/// A row can appear in both vector arms' lists only by naming two tables at
+/// once, which it cannot — but the join is keyed on `(table, id)` anyway, the
+/// same pair `scored` resolves rows by.
+#[derive(SurrealValue)]
+pub(crate) struct NearestRow {
+    pub(crate) id: String,
+    pub(crate) table: String,
+    pub(crate) d: f64,
+}
+
+/// The single object a hybrid search returns: the fused order, the vector
+/// arms' distances, and the rows.
 #[derive(SurrealValue)]
 pub(crate) struct SearchRow {
     pub(crate) scored: Vec<ScoreRow>,
+    pub(crate) nearest: Vec<NearestRow>,
     pub(crate) memories: Vec<MemoryReadRow>,
     pub(crate) chunks: Vec<ChunkReadRow>,
 }

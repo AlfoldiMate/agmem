@@ -23,7 +23,9 @@ use agmem_store::repo::{self, Liveness, Lookup, SpaceStats};
 use clap::Parser as _;
 use rmcp::RoleClient;
 use rmcp::ServiceExt as _;
-use rmcp::model::{CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode, MetaObject, RequestMetaObject,
+};
 use rmcp::service::{RunningService, ServiceError};
 use serde_json::{Value, json};
 
@@ -123,6 +125,27 @@ impl Harness {
         self.client
             .call_tool(CallToolRequestParams::new(name).with_arguments(arguments))
             .await
+    }
+
+    /// One `tools/call` attributed to `session` via `_meta` (issue #75) —
+    /// the per-request override `tools::writer` honours before falling back
+    /// to the id the connection was minted. What per-seed writer attribution
+    /// in the eval fixtures (issue #86) will ride on.
+    pub async fn call_as(
+        &self,
+        session: &str,
+        name: &'static str,
+        arguments: Value,
+    ) -> Result<CallToolResult, ServiceError> {
+        let arguments = arguments
+            .as_object()
+            .expect("arguments are an object")
+            .clone();
+        let mut meta = rmcp::model::JsonObject::new();
+        meta.insert("agmem/session".to_owned(), json!(session));
+        let mut params = CallToolRequestParams::new(name).with_arguments(arguments);
+        params.meta = Some(RequestMetaObject(MetaObject(meta)));
+        self.client.call_tool(params).await
     }
 
     /// One successful `remember`, as the structured result an agent reads.

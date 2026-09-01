@@ -1,0 +1,14 @@
+{
+  "probed_at": "2026-09-01T21:24:00.984188+02:00",
+  "store": "/Users/Matthew/Library/Application Support/dev.agmem.agmem/agmem.db",
+  "counts": {
+    "schema_version": 4,
+    "memories": 159,
+    "live": 92,
+    "superseded": 65,
+    "live_with_citations": 0,
+    "cited_rows": 0,
+    "with_writer": 0,
+    "with_novelty": 0
+  }
+}

@@ -1913,6 +1913,89 @@ async fn forgetting_by_query_needs_the_same_call_with_dry_run_first() {
     agmem.shutdown().await;
 }
 
+/// Issue #66: the confirming call acts on the dry run's snapshot, not on a
+/// re-run of the query — a row written between the two calls was never
+/// previewed, and forgetting it on the strength of someone else's list is the
+/// scope surprise the two-step exists to prevent.
+#[tokio::test]
+async fn a_confirm_refuses_rows_the_dry_run_never_showed() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(
+            json!({ "memories": [{ "content": "the kitchen renovation finished in March" }] }),
+        )
+        .await;
+
+    let preview = agmem
+        .forget(json!({ "query": "kitchen", "dry_run": true }))
+        .await;
+    assert_eq!(match_ids(&preview["matched"]).len(), 1, "{preview}");
+
+    // A second session's write lands between preview and confirm.
+    let landed = agmem
+        .remember(json!({ "memories": [{ "content": "the kitchen tiles are still on order" }] }))
+        .await;
+    let unseen = ids(&landed["created"])[0].to_owned();
+
+    let refused = agmem
+        .call("forget", json!({ "query": "kitchen" }))
+        .await
+        .expect_err("a grown match list must not be acted on");
+    assert!(
+        refusal(&refused, &unseen) && refusal(&refused, "dry_run"),
+        "the refusal names the unpreviewed row and the way forward: {refused}"
+    );
+    assert_eq!(
+        agmem.stats().await.live,
+        2,
+        "nothing was forgotten on a stale confirmation"
+    );
+
+    // The fresh dry run shows both rows; its confirmation goes through.
+    let fresh = agmem
+        .forget(json!({ "query": "kitchen", "dry_run": true }))
+        .await;
+    assert_eq!(match_ids(&fresh["matched"]).len(), 2, "{fresh}");
+    let done = agmem.forget(json!({ "query": "kitchen" })).await;
+    assert_eq!(ids(&done["invalidated"]).len(), 2, "{done}");
+    agmem.shutdown().await;
+}
+
+/// The other direction of the same discipline: a store that *shrank* between
+/// the calls is safe — everything acted on was previewed — so the confirm
+/// proceeds on what is left rather than demanding a pointless re-run.
+#[tokio::test]
+async fn a_confirm_proceeds_when_the_store_only_shrank() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let written = agmem
+        .remember(json!({
+            "memories": [
+                { "content": "the kitchen renovation finished in March" },
+                { "content": "the kitchen budget closed at 12k" }
+            ]
+        }))
+        .await;
+    let first = ids(&written["created"])[0].to_owned();
+
+    let preview = agmem
+        .forget(json!({ "query": "kitchen", "dry_run": true }))
+        .await;
+    assert_eq!(match_ids(&preview["matched"]).len(), 2, "{preview}");
+
+    agmem
+        .forget(json!({ "ids": [first], "dry_run": false }))
+        .await;
+
+    let done = agmem.forget(json!({ "query": "kitchen" })).await;
+    assert_eq!(
+        ids(&done["invalidated"]).len(),
+        1,
+        "the surviving previewed row is closed; the already-closed one simply \
+         does not come back: {done}"
+    );
+    agmem.shutdown().await;
+}
+
 #[tokio::test]
 async fn a_purge_takes_the_whole_correction_chain_and_leaves_no_row() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;

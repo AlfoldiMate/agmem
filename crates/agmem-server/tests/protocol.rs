@@ -790,6 +790,64 @@ async fn a_second_correction_reports_the_close_that_stands() {
     agmem.shutdown().await;
 }
 
+/// Issue #65: the read side's space vocabulary works on writes too. Before
+/// this, `remember(space: "current")` created a literal space *named*
+/// `current` — real rows, unreachable by every future read that says the
+/// same word.
+#[tokio::test]
+async fn write_side_space_keywords_resolve_instead_of_becoming_slugs() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    agmem
+        .remember(json!({
+            "space": "current",
+            "memories": [{ "content": "the keyword lands in the configured space" }]
+        }))
+        .await;
+    let rows = agmem.memories().await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].space.as_str(),
+        "default",
+        "`current` is vocabulary, not a slug"
+    );
+
+    agmem
+        .remember(json!({
+            "space": "user",
+            "memories": [{ "content": "a fact that follows the person" }]
+        }))
+        .await;
+    let found = agmem.recall(json!({ "space": "user" })).await;
+    assert_eq!(
+        hits(&found).len(),
+        1,
+        "the write went where the read looks: {found}"
+    );
+
+    let refused = agmem
+        .call(
+            "remember",
+            json!({ "space": "all", "memories": [{ "content": "everywhere at once" }] }),
+        )
+        .await
+        .expect_err("a write into `all` is not a scope");
+    assert!(
+        matches!(&refused, ServiceError::McpError(data)
+            if data.code == ErrorCode::INVALID_PARAMS && data.message.contains("read-only")),
+        "{refused}"
+    );
+
+    let registry = repo::spaces(&agmem.db).await.expect("spaces");
+    assert!(
+        !registry
+            .iter()
+            .any(|space| matches!(space.as_str(), "current" | "all")),
+        "no keyword ever becomes a literal space: {registry:?}"
+    );
+    agmem.shutdown().await;
+}
+
 /// Issue #57: a word-for-word re-send with `supersedes` used to block at the
 /// exact-hash gate with the supersede riding on the blocked entry — so the
 /// retry the description asks for ("re-send yours with the id in supersedes")

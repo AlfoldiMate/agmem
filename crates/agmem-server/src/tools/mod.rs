@@ -143,22 +143,37 @@ pub(crate) async fn embed_query(
 
 /// The space a write lands in, registered if it is a new one.
 ///
+/// The read side's keywords resolve here too (issue #65): `current` is the
+/// configured space and `user` the reserved one, exactly as [`spaces`] reads
+/// them — before this, `remember(space: "current")` created a literal space
+/// *named* `current`, which no future read with the same word would ever look
+/// in. `all` is refused: a write lands in one space, and "all of them" is not
+/// one.
+///
 /// Startup registers the configured space (design §5.1 step 8); a call that
 /// names another one registers it here, so `inspect` can list every space that
 /// actually holds something.
 ///
 /// # Errors
-/// [`ErrorData`] with `INVALID_PARAMS` for a name that is not a valid slug.
+/// [`ErrorData`] with `INVALID_PARAMS` for `all`, or a name that is not a
+/// valid slug.
 pub(crate) async fn resolve_space(
     service: &AgmemService,
     requested: Option<&str>,
 ) -> Result<SpaceName, ErrorData> {
-    let Some(requested) = requested else {
-        return Ok(service.config().space.clone());
+    let space = match requested {
+        None | Some("current") => return Ok(service.config().space.clone()),
+        Some("user") => SpaceName::user(),
+        Some("all") => {
+            return Err(invalid(
+                "a write lands in one space; `all` is read-only vocabulary. Name the \
+                 space, or leave it unset for the current one.",
+            ));
+        }
+        Some(name) => name
+            .parse()
+            .map_err(|error| invalid(format!("space: {error}")))?,
     };
-    let space: SpaceName = requested
-        .parse()
-        .map_err(|error| invalid(format!("space: {error}")))?;
     if space != service.config().space {
         repo::ensure_space(service.db(), &space)
             .await

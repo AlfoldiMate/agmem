@@ -403,7 +403,10 @@ to you. They are stored on the insight and shown by `inspect`, so a later sessio
 conclusion was built on and check whether that evidence still stands, instead of taking it on \
 faith. An insight with nothing behind it is a `remember` call.\n\n\
 Stored as a `lesson` unless you say otherwise, which fades slowly and appears in the Lessons \
-section of `context`. Ids are looked for in this space and in the shared `user` space, so an \
+section of `context`. Send `kind: \"summary\"` for a digest that stands in for the claims it \
+cites — when `context` runs short of budget it shows the summary in their place, and `inspect` \
+expands the cited claims in full, so compressing a finished session this way costs no detail. \
+Ids are looked for in this space and in the shared `user` space, so an \
 insight about the project may cite what is known about the person.\n\n\
 Returns the id it was stored under. `created: false` means an equivalent insight was already \
 there and nothing was written — read `content`, and if yours says something different, send it \

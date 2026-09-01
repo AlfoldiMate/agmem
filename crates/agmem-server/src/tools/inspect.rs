@@ -20,7 +20,9 @@
 
 use std::fmt;
 
-use agmem_core::{ChunkId, DecayClass, EpisodeId, Kind, MemoryId, MemoryRecord, Source, SpaceName};
+use agmem_core::{
+    ChunkId, DecayClass, Derivation, EpisodeId, Kind, MemoryId, MemoryRecord, Source, SpaceName,
+};
 use agmem_store::StoreError;
 use agmem_store::repo::{self, Filters, Liveness, Lookup};
 use rmcp::ErrorData;
@@ -84,6 +86,14 @@ pub enum Inspected {
         /// from this rather than from the claim when precision matters.
         #[serde(skip_serializing_if = "Option::is_none")]
         episode: Option<EpisodeView>,
+
+        /// The full records behind the claim's `derived_from` citations —
+        /// what a `summary` stands in for, expanded one call deep (issue
+        /// #85). Only memory citations expand; an episode citation stays a
+        /// ref, reachable through its own `inspect`. Absent when the claim
+        /// cites no memories, or when every cited one has been purged.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expands: Option<Vec<MemoryView>>,
     },
 
     /// Stored verbatim text and everything that came out of it.
@@ -416,11 +426,48 @@ async fn memory(
         Source::Agent | Source::External { .. } => None,
     };
 
+    // The citations, expanded to their full records. A cited memory can live
+    // in another searched space (`reflect` resolves citations against the
+    // written space and `user` alike), so each is walked the way the target
+    // was; one that resolves nowhere was purged, which is history rather than
+    // an error — the ref itself still stands in `derived_from`.
+    let mut expands = Vec::new();
+    for cited in &target.derived_from {
+        let Derivation::Memory(cited) = cited else {
+            continue;
+        };
+        if let Some(found) = view(service, spaces, cited).await? {
+            expands.push(found);
+        }
+    }
+
     Ok(Some(Inspected::Memory {
         memory: Box::new(target.into()),
         chain: chain.into_iter().map(MemoryView::from).collect(),
         episode,
+        expands: (!expands.is_empty()).then_some(expands),
     }))
+}
+
+/// One memory's current row, from whichever searched space holds it.
+async fn view(
+    service: &AgmemService,
+    spaces: &[SpaceName],
+    id: &MemoryId,
+) -> Result<Option<MemoryView>, ErrorData> {
+    for space in spaces {
+        match repo::history_chain(service.db(), space, id).await {
+            Ok(chain) => {
+                return Ok(chain
+                    .into_iter()
+                    .find(|link| link.id == *id)
+                    .map(MemoryView::from));
+            }
+            Err(StoreError::UnknownMemory { .. }) => continue,
+            Err(error) => return Err(store_error(&error)),
+        }
+    }
+    Ok(None)
 }
 
 /// Verbatim text, its slices, and what was distilled from it.

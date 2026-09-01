@@ -42,7 +42,9 @@ pub struct ReflectParams {
     /// At least one; an insight with nothing behind it belongs in `remember`.
     pub derived_from: Vec<String>,
 
-    /// What the insight is; defaults to `lesson`.
+    /// What the insight is; defaults to `lesson`. Send `summary` for a
+    /// digest that stands in for the cited claims: under budget pressure
+    /// `context` shows it in their place, and `inspect` expands them.
     #[serde(default)]
     pub kind: Option<Kind>,
 
@@ -164,7 +166,8 @@ pub async fn run(
     //    the store is what turns one into `memory:` or `episode:`.
     let cited = resolve(service, &space, &derived_from).await?;
 
-    let mut memory = NewMemory::new(kind.unwrap_or(Kind::Lesson), insight.clone());
+    let kind = kind.unwrap_or(Kind::Lesson);
+    let mut memory = NewMemory::new(kind, insight.clone());
     memory.entities = entities;
     memory.tags = tags;
     memory.derived_from = cited.clone();
@@ -203,6 +206,16 @@ pub async fn run(
             .and_then(|list| list.first())
             .map(|neighbour| dedup::novelty(neighbour.similarity));
         for neighbour in neighbours.into_iter().flatten() {
+            // A summary reads like its evidence by construction — it carries
+            // its children's words — so a cited neighbour is what it stands
+            // in for, never a restatement of it (issue #85). Only summaries
+            // get this pass, and only for what they cite: an uncited
+            // neighbour (say, the last session's summary of the same work)
+            // still gates, and a lesson restating a cited claim is still the
+            // `uncited`-note case below.
+            if kind == Kind::Summary && cited.contains(&Derivation::Memory(neighbour.id.clone())) {
+                continue;
+            }
             if dedup::is_near_duplicate(neighbour.similarity) {
                 let note = uncited(service, &space, &neighbour.id).await;
                 return Ok(ReflectResult {

@@ -3145,6 +3145,116 @@ async fn a_reflection_has_to_cite_something_the_store_holds() {
 }
 
 #[tokio::test]
+async fn a_summary_stands_in_for_its_children_and_expands_on_demand() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+
+    // A summary that cannot cite what it covers is refused where it was sent,
+    // and the refusal names the verb that works.
+    let error = agmem
+        .call(
+            "remember",
+            json!({ "memories": [{ "content": "a digest", "kind": "summary" }] }),
+        )
+        .await
+        .expect_err("the call must be refused");
+    assert!(refusal(&error, "reflect"), "{error:?}");
+
+    let stored = agmem
+        .remember(json!({ "memories": [
+            { "content": "The token refresh timeout was raised to thirty seconds" },
+            { "content": "Login requests retry once when a refresh fails" },
+            { "content": "Deploys go out on Tuesday mornings" }
+        ] }))
+        .await;
+    let timeout = stored["created"][0].as_str().expect("an id").to_owned();
+    let retry = stored["created"][1].as_str().expect("an id").to_owned();
+
+    let reflected = agmem
+        .reflect(json!({
+            "insight": "The auth incident hardened refresh: a thirty-second timeout and one retry",
+            "derived_from": [timeout.clone(), retry.clone()],
+            "kind": "summary"
+        }))
+        .await;
+    assert_eq!(reflected["created"], json!(true), "{reflected}");
+    let summary = reflected["id"].as_str().expect("the summary id").to_owned();
+
+    // A recall hit says what it is and what it stands in for.
+    let page = agmem.recall(json!({ "kinds": ["summary"] })).await;
+    assert_eq!(page["hits"][0]["kind"], json!("summary"), "{page}");
+    assert_eq!(
+        page["hits"][0]["covers"],
+        json!([format!("memory:{timeout}"), format!("memory:{retry}")]),
+        "{page}"
+    );
+
+    // `inspect` expands the children in full, in citation order.
+    let audited = agmem.inspect(&summary).await;
+    let expands = audited["found"]["expands"]
+        .as_array()
+        .expect("the expanded children");
+    assert_eq!(expands.len(), 2, "{audited}");
+    assert_eq!(expands[0]["id"].as_str(), Some(timeout.as_str()));
+    assert_eq!(expands[1]["id"].as_str(), Some(retry.as_str()));
+
+    // Under budget pressure the emitted summary absorbs its children; the
+    // claim it does not cover still shows, and the block reads complete —
+    // nothing was dropped, it is standing in.
+    let squeezed = agmem.context(json!({ "budget_chars": 250 })).await;
+    assert!(squeezed.contains("hardened refresh"), "{squeezed}");
+    assert!(squeezed.contains("Tuesday mornings"), "{squeezed}");
+    assert!(!squeezed.contains("thirty seconds"), "{squeezed}");
+    assert!(!squeezed.contains("retry once"), "{squeezed}");
+    assert!(!squeezed.contains("Trimmed"), "{squeezed}");
+
+    // With room there is no roll-up: the children show beside the digest.
+    let generous = agmem.context(json!({})).await;
+    assert!(
+        generous.contains("thirty seconds") && generous.contains("retry once"),
+        "{generous}"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_summary_is_not_gated_against_what_it_cites() {
+    let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
+    let child = agmem
+        .remember(
+            json!({ "memories": [{ "content": "rust is the language this project reaches for" }] }),
+        )
+        .await["created"][0]
+        .as_str()
+        .expect("the claim id")
+        .to_owned();
+
+    // Reads exactly like its evidence (cosine 1.0 on these vectors) and
+    // still lands: a digest carries its children's words by construction,
+    // so a cited neighbour is what it stands in for, not a restatement.
+    let first = agmem
+        .reflect(json!({
+            "insight": "the project standardized on rust end to end",
+            "derived_from": [child.clone()],
+            "kind": "summary"
+        }))
+        .await;
+    assert_eq!(first["created"], json!(true), "{first}");
+
+    // The pass reaches only what the summary cites: a second digest of the
+    // same work is a near-duplicate of the first — uncited — and still gates.
+    let second = agmem
+        .reflect(json!({
+            "insight": "rust is what everything here is built in",
+            "derived_from": [child],
+            "kind": "summary"
+        }))
+        .await;
+    assert_eq!(second["created"], json!(false), "{second}");
+    assert_eq!(second["id"], first["id"], "{second}");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn the_same_insight_twice_is_reported_rather_than_stored_again() {
     let agmem = Harness::start(Arc::new(KeywordEmbedder)).await;
     let evidence = agmem

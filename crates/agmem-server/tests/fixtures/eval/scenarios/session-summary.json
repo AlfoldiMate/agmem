@@ -1,0 +1,58 @@
+{
+  "name": "session-summary",
+  "about": "A checkpoint ritual distills a session (issue #85): three auth-incident facts, one unrelated fact, and a summary reflected out of the three. With room, context shows the summary and its children side by side (the roll-up only runs when the plain fill dropped something). At budget 340 the plain fill cannot hold everything (title 41 + header 13 + summary line 170 + the other four lines total 643), so the roll-up fires: the emitted summary absorbs its three children, the uncovered deploy fact still shows (320 total), and the block carries no trimmed note — compression that names what it stands in for, with the detail one inspect away. The children's raw text staying out at the tight budget, and present at the default one, is the measured pair.",
+  "seeds": [
+    {
+      "label": "auth-timeout",
+      "content": "The auth service's token refresh timeout was raised from five seconds to thirty."
+    },
+    {
+      "label": "auth-retry",
+      "content": "Login requests now retry once when a token refresh fails before surfacing an error."
+    },
+    {
+      "label": "auth-cache",
+      "content": "The session cache is invalidated whenever a token refresh fails."
+    },
+    {
+      "label": "deploy-window",
+      "content": "Production deploys go out on Tuesday mornings, never on Fridays."
+    },
+    {
+      "label": "auth-summary",
+      "kind": "summary",
+      "content": "The August auth incident hardened token refresh end to end: a thirty-second timeout, one retry on failure, and session-cache invalidation.",
+      "derived_from": ["auth-timeout", "auth-retry", "auth-cache"]
+    }
+  ],
+  "probes": [
+    {
+      "query": "how was token refresh hardened after the auth incident?",
+      "k": 4,
+      "relevant": ["auth-summary", "auth-timeout", "auth-retry", "auth-cache"]
+    }
+  ],
+  "abstain": [],
+  "timeline": [],
+  "gate": [],
+  "context": [
+    {
+      "must_contain": [
+        "auth-summary",
+        "auth-timeout",
+        "auth-retry",
+        "auth-cache",
+        "deploy-window"
+      ]
+    },
+    {
+      "budget_chars": 340,
+      "must_contain": ["auth-summary", "deploy-window"],
+      "must_not_contain_text": [
+        "The auth service's token refresh timeout was raised from five seconds to thirty.",
+        "Login requests now retry once when a token refresh fails before surfacing an error.",
+        "The session cache is invalidated whenever a token refresh fails."
+      ]
+    }
+  ]
+}

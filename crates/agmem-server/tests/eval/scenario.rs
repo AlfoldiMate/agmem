@@ -62,6 +62,11 @@ pub struct Seed {
     /// Verbatim session text stored alongside this claim.
     #[serde(default)]
     pub episode: Option<String>,
+    /// Labels of earlier seeds this one was reflected out of (issue #85).
+    /// Non-empty routes the seed through `reflect` instead of `remember`,
+    /// which is the only way a `summary` can be written.
+    #[serde(default)]
+    pub derived_from: Vec<String>,
 }
 
 /// One retrieval question with its human-labelled answer set.
@@ -218,6 +223,11 @@ pub async fn seed(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Seeded {
     let agmem = Harness::start(embedder).await;
     let mut id_of: HashMap<String, String> = HashMap::new();
     for seed in &scenario.seeds {
+        if !seed.derived_from.is_empty() {
+            let id = reflect_seed(&agmem, scenario, seed, &id_of).await;
+            id_of.insert(seed.label.clone(), id);
+            continue;
+        }
         let mut memory = Map::new();
         memory.insert("content".into(), json!(seed.content));
         if let Some(kind) = &seed.kind {
@@ -260,4 +270,55 @@ pub async fn seed(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Seeded {
         id_of.insert(seed.label.clone(), created[0].to_owned());
     }
     Seeded { agmem, id_of }
+}
+
+/// One seed stored through `reflect`, citing earlier seeds by label.
+async fn reflect_seed(
+    agmem: &Harness,
+    scenario: &Scenario,
+    seed: &Seed,
+    id_of: &HashMap<String, String>,
+) -> String {
+    assert!(
+        seed.episode.is_none(),
+        "{}: `reflect` takes no episode; store it on a cited seed instead",
+        seed.label
+    );
+    assert!(
+        seed.supersedes.is_empty() && seed.valid_from.is_none(),
+        "{}: the reflect route does not carry these fields — wire them here \
+         when a fixture first needs them, rather than dropping them silently",
+        seed.label
+    );
+    let cited: Vec<&String> = seed
+        .derived_from
+        .iter()
+        .map(|label| {
+            id_of
+                .get(label)
+                .unwrap_or_else(|| panic!("{} cites unseeded {label:?}", seed.label))
+        })
+        .collect();
+    let mut arguments = json!({ "insight": seed.content, "derived_from": cited });
+    if let Some(kind) = &seed.kind {
+        arguments["kind"] = json!(kind);
+    }
+    if !seed.tags.is_empty() {
+        arguments["tags"] = json!(seed.tags);
+    }
+    if !seed.entities.is_empty() {
+        arguments["entities"] = json!(seed.entities);
+    }
+    let answer = agmem.reflect(arguments).await;
+    assert_eq!(
+        answer["created"],
+        Value::Bool(true),
+        "seed {:?} of {:?} must land before anything is scored: {answer}",
+        seed.label,
+        scenario.name
+    );
+    answer["id"]
+        .as_str()
+        .expect("reflect answers with the stored id")
+        .to_owned()
 }

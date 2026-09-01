@@ -16,7 +16,7 @@
 use std::collections::{HashMap, HashSet};
 
 use agmem_core::scoring::{self, Signals};
-use agmem_core::{Kind, MemoryId, MemoryRecord, SpaceName};
+use agmem_core::{Derivation, Kind, MemoryId, MemoryRecord, SpaceName};
 use agmem_store::repo::{self, Filters, Hit as StoreHit, Lookup, Search};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -92,6 +92,10 @@ struct Section {
 struct Entry {
     id: MemoryId,
     content: String,
+    /// The memories a `summary` stands in for (issue #85) — what a roll-up
+    /// render marks as shown once the summary itself is. Empty for anything
+    /// that is not a summary with memory citations.
+    covers: Vec<MemoryId>,
 }
 
 impl Entry {
@@ -171,13 +175,14 @@ pub async fn run(
                 Some(text) => search_section(service, &spaces, text, now).await?,
                 // No query is not "nothing to say" — it is the general case,
                 // and what a session wants then is the strongest facts that
-                // have held up (design §3.2).
+                // have held up (design §3.2), with the summaries that stand
+                // in for whole groups of them (issue #85) alongside.
                 None => {
                     lookup_section(
                         service,
                         &spaces,
                         Filters {
-                            kinds: vec![Kind::Fact],
+                            kinds: vec![Kind::Fact, Kind::Summary],
                             ..Filters::default()
                         },
                         RELEVANT_K,
@@ -205,17 +210,31 @@ pub async fn run(
         },
     ];
 
-    let (block, dropped) = render(&spaces, &sections, budget);
-    let markdown = if dropped == 0 {
-        block
-    } else {
-        // Room for the note is only known to be needed once the first fill has
-        // run, so the fill runs again with that room reserved.
-        let reserved = budget.saturating_sub(TRIMMED.chars().count());
-        let (block, _) = render(&spaces, &sections, reserved);
-        format!("{block}{TRIMMED}")
-    };
+    let markdown = assemble(&spaces, &sections, budget);
     Ok(CallToolResult::success(vec![ContentBlock::text(markdown)]))
+}
+
+/// The block, fitted to its budget in up to three fills.
+///
+/// The first fill shows everything that fits. Only when it dropped entries do
+/// summaries earn their keep (issue #85): the roll-up fill lets each emitted
+/// summary absorb the claims it covers, so the budget buys breadth instead of
+/// repeating what the digest already says — and if *that* fill fits whole,
+/// the block is complete and carries no note. Otherwise the fill runs once
+/// more with room reserved for [`TRIMMED`], which is only known to be needed
+/// once a fill has run.
+fn assemble(spaces: &[SpaceName], sections: &[Section], budget: usize) -> String {
+    let (block, dropped) = render(spaces, sections, budget, false);
+    if dropped == 0 {
+        return block;
+    }
+    let (rolled, dropped) = render(spaces, sections, budget, true);
+    if dropped == 0 {
+        return rolled;
+    }
+    let reserved = budget.saturating_sub(TRIMMED.chars().count());
+    let (block, _) = render(spaces, sections, reserved, true);
+    format!("{block}{TRIMMED}")
 }
 
 /// One tier-1 section: an indexed lookup, ranked and cut to `keep`.
@@ -305,14 +324,29 @@ fn rank(
         Some(cap) => cap_by_tag(ranked.collect(), cap),
         None => ranked.collect(),
     };
-    ordered
-        .into_iter()
-        .take(keep)
-        .map(|memory| Entry {
+    ordered.into_iter().take(keep).map(Entry::from).collect()
+}
+
+impl From<MemoryRecord> for Entry {
+    fn from(memory: MemoryRecord) -> Self {
+        let covers = if memory.kind == Kind::Summary {
+            memory
+                .derived_from
+                .into_iter()
+                .filter_map(|cited| match cited {
+                    Derivation::Memory(id) => Some(id),
+                    Derivation::Episode(_) => None,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Self {
             id: memory.id,
             content: memory.content,
-        })
-        .collect()
+            covers,
+        }
+    }
 }
 
 /// Defer, never drop: re-order ranked records so no tag holds more than `cap`
@@ -353,7 +387,17 @@ fn cap_by_tag(records: Vec<MemoryRecord>, cap: usize) -> Vec<MemoryRecord> {
 /// budgeted. A heading is charged to the first entry under it that fits, so a
 /// section whose entries all went over budget leaves no empty heading behind —
 /// and a section the store had nothing for never appears at all.
-fn render(spaces: &[SpaceName], sections: &[Section], budget: usize) -> (String, usize) {
+///
+/// `roll_up` is the budget-pressure mode (issue #85): an emitted summary
+/// marks everything it covers as already shown, so its children neither cost
+/// budget nor count as dropped — the digest is standing in for them, which is
+/// what it was written to do, and each one stays one `inspect` away.
+fn render(
+    spaces: &[SpaceName],
+    sections: &[Section],
+    budget: usize,
+    roll_up: bool,
+) -> (String, usize) {
     let names: Vec<String> = spaces.iter().map(ToString::to_string).collect();
     let title = format!("# Memory context (spaces: {})", names.join(" + "));
     let title_chars = title.chars().count();
@@ -387,6 +431,9 @@ fn render(spaces: &[SpaceName], sections: &[Section], budget: usize) -> (String,
             }
             text.push_str(&line);
             used += cost;
+            if roll_up {
+                seen.extend(&entry.covers);
+            }
         }
     }
 
@@ -427,6 +474,15 @@ mod tests {
         Entry {
             id: id(last),
             content: content.to_owned(),
+            covers: Vec::new(),
+        }
+    }
+
+    fn summary(last: char, content: &str, covers: &[char]) -> Entry {
+        Entry {
+            id: id(last),
+            content: content.to_owned(),
+            covers: covers.iter().map(|last| id(*last)).collect(),
         }
     }
 
@@ -461,7 +517,7 @@ mod tests {
                 entries: Vec::new(),
             },
         ];
-        let (block, dropped) = render(&spaces(), &sections, 6_000);
+        let (block, dropped) = render(&spaces(), &sections, 6_000, false);
 
         assert_eq!(dropped, 0);
         assert!(block.starts_with("# Memory context (spaces: default + user)"));
@@ -475,7 +531,7 @@ mod tests {
 
     #[test]
     fn an_empty_store_says_so_rather_than_answering_with_a_bare_title() {
-        let (block, dropped) = render(&spaces(), &[], 6_000);
+        let (block, dropped) = render(&spaces(), &[], 6_000, false);
         assert_eq!(dropped, 0);
         assert!(block.ends_with(NOTHING), "{block}");
     }
@@ -492,7 +548,7 @@ mod tests {
                 entries: vec![entry('B', &"long ".repeat(60))],
             },
         ];
-        let (block, dropped) = render(&spaces(), &sections, 200);
+        let (block, dropped) = render(&spaces(), &sections, 200, false);
 
         assert_eq!(dropped, 1, "{block}");
         assert!(block.chars().count() <= 200, "{block}");
@@ -509,7 +565,7 @@ mod tests {
                 entry('B', "The user works in Rust."),
             ],
         }];
-        let (block, dropped) = render(&spaces(), &sections, 200);
+        let (block, dropped) = render(&spaces(), &sections, 200, false);
 
         assert_eq!(dropped, 1);
         assert!(block.contains("The user works in Rust."), "{block}");
@@ -527,7 +583,7 @@ mod tests {
                 entries: vec![entry('A', "The user prefers Rust.")],
             },
         ];
-        let (block, dropped) = render(&spaces(), &sections, 6_000);
+        let (block, dropped) = render(&spaces(), &sections, 6_000, false);
 
         assert_eq!(dropped, 0);
         assert_eq!(
@@ -536,6 +592,64 @@ mod tests {
             "{block}"
         );
         assert!(!block.contains(HEADING_RELEVANT), "{block}");
+    }
+
+    /// The one section every roll-up test renders: a summary covering A and
+    /// B, its two children, and one claim outside its reach.
+    fn covered_sections() -> [Section; 1] {
+        [Section {
+            heading: HEADING_RELEVANT,
+            entries: vec![
+                summary('S', "Refresh was hardened end to end.", &['A', 'B']),
+                entry('A', "The refresh timeout was raised to thirty seconds."),
+                entry('B', "Login requests retry once on refresh failure."),
+                entry('C', "Deploys happen Tuesdays."),
+            ],
+        }]
+    }
+
+    #[test]
+    fn a_roll_up_absorbs_what_an_emitted_summary_covers() {
+        let sections = covered_sections();
+        let (plain, _) = render(&spaces(), &sections, 6_000, false);
+        assert!(
+            plain.contains("thirty seconds") && plain.contains("retry once"),
+            "with room, the children show alongside the summary: {plain}"
+        );
+
+        let (rolled, dropped) = render(&spaces(), &sections, 6_000, true);
+        assert_eq!(dropped, 0, "absorbed children are covered, not dropped");
+        assert!(
+            !rolled.contains("thirty seconds") && !rolled.contains("retry once"),
+            "{rolled}"
+        );
+        assert!(
+            rolled.contains("Deploys happen Tuesdays."),
+            "a claim the summary does not cover still shows: {rolled}"
+        );
+    }
+
+    #[test]
+    fn a_roll_up_that_fits_whole_carries_no_trimmed_note() {
+        // 180 drops both children on the plain fill (the summary and the last
+        // claim fit; each child would overflow), so assembly rolls up — and
+        // then everything left fits, which must read as complete.
+        let block = assemble(&spaces(), &covered_sections(), 180);
+        assert!(
+            block.contains("Refresh was hardened end to end."),
+            "{block}"
+        );
+        assert!(block.contains("Deploys happen Tuesdays."), "{block}");
+        assert!(!block.contains("thirty seconds"), "{block}");
+        assert!(!block.contains("Trimmed"), "{block}");
+    }
+
+    #[test]
+    fn a_roll_up_still_over_budget_says_so() {
+        // 130 holds the summary but not the uncovered claim even after the
+        // roll-up, so the note is earned.
+        let block = assemble(&spaces(), &covered_sections(), 130);
+        assert!(block.ends_with(TRIMMED), "{block}");
     }
 
     fn lesson(last: char, tags: &[&str]) -> MemoryRecord {
@@ -619,7 +733,7 @@ mod tests {
             heading: HEADING_LESSONS,
             entries: vec![entry('A', "  Builds fail\non a cold cache.\n")],
         }];
-        let (block, _) = render(&spaces(), &sections, 6_000);
+        let (block, _) = render(&spaces(), &sections, 6_000, false);
 
         assert!(
             block.contains("- Builds fail on a cold cache. `"),

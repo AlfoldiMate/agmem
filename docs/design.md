@@ -81,7 +81,7 @@ Key properties:
 | Reconciler (create/update/supersede/flag, confidence floor) | Caller-driven supersession (`supersedes:` param) + server-side dedup gate (exact hash + cosine ≥ 0.95 → report duplicate instead of insert) |
 | Tri-temporal (system/known/valid time) | **Bi-temporal-lite**: `created_at` (known) + `valid_from`/`invalid_at` (valid); supersede-don't-delete chains |
 | 8 retrieval signals, 4-tier ladder | **2 fused signals** (BM25 + vector, RRF in one SurrealQL query) + rescoring by recency/importance; a 2-step ladder (direct lookup → hybrid) |
-| 6 memory categories with per-category decay | `kind` (episode/fact/lesson/instruction) × `decay_class` (pinned/slow/normal/fast) |
+| 6 memory categories with per-category decay | `kind` (episode/fact/lesson/instruction/summary) × `decay_class` (pinned/slow/normal/fast) |
 | Background workers: elaboration, consolidation, decay sweeps | **No background jobs.** Decay is computed at read time; pruning runs lazily at startup; consolidation is agent-invoked (phase 3) |
 | decision/retrieval/response trace graph | Provenance (`source`) on every record + supersession chains; `inspect` walks them. Full trace tables deferred |
 | Grants, principals, key attenuation, delegation | Local trust model: space isolation + destructive-op flags. No auth in v1 |
@@ -106,7 +106,7 @@ memory together) trivial.
    ▲   (verbatim ground truth, append-only)
    │ source.ref (provenance link)
    │
- memory  (distilled: fact | lesson | instruction)
+ memory  (distilled: fact | lesson | instruction | summary)
    │  [FT + HNSW indexes; supersession chain within table]
    ├── supersedes / superseded_by ──▶ memory      (version chain)
    ├── derived_from: [record]      ──▶ memory | episode   (reflect citations)
@@ -183,7 +183,7 @@ DEFINE INDEX ec_vec ON episode_chunk FIELDS embedding HNSW DIMENSION 384 DIST CO
 DEFINE TABLE memory SCHEMAFULL;
 DEFINE FIELD space         ON memory TYPE string;
 DEFINE FIELD kind          ON memory TYPE string
-    ASSERT $value IN ["fact", "lesson", "instruction"];
+    ASSERT $value IN ["fact", "lesson", "instruction", "summary"];  -- summary since v8 (#85)
 DEFINE FIELD content       ON memory TYPE string;
 DEFINE FIELD content_hash  ON memory TYPE string;        -- blake3(normalized content)
 DEFINE FIELD entities      ON memory TYPE array<string> DEFAULT [];
@@ -258,6 +258,7 @@ Notes:
 | `fact` | Distilled statement about the world/user/project | `normal` | Supersedable; decays unless recalled |
 | `lesson` | Procedural insight ("X fails when Y; do Z") | `slow` | Supersedable; agent keeps these few and sharp (Reflexion evidence: bounded lessons beat accumulation) |
 | `instruction` | Standing behavioral rule | `pinned` | Active until superseded/forgotten; always in `context` output |
+| `summary` | Digest standing in for the claims it cites (issue #85) | `slow` | Written only through `reflect` (citations required); the near-dup gate skips its *cited* neighbours — a digest carries its children's words by construction — while uncited ones still gate; `context` shows it in place of its `derived_from` children under budget pressure; `inspect` expands them |
 
 Decay is **computed at read time** — no background sweeper exists:
 
@@ -322,7 +323,7 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
   "space": "optional string (default: configured space)",
   "memories": [{
     "content": "one atomic statement, self-contained, third person",
-    "kind": "fact | lesson | instruction (default fact)",
+    "kind": "fact | lesson | instruction (default fact; summary refused — reflect's)",
     "entities": ["Person/alice", "project-x"],      // optional
     "tags": ["identity"],                            // optional
     "decay_class": "pinned|slow|normal|fast",        // optional, defaults by kind
@@ -357,11 +358,12 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
   "include_invalidated": false          // ignored when as_of is set
 }
 // → { spaces: [names actually searched],
-//     hits: [{ id, kind: "fact|lesson|instruction|episode", content, space,
+//     hits: [{ id, kind: "fact|lesson|instruction|summary|episode", content, space,
 //              score, signals: { rrf, rrf_normalized, retention, importance },
 //              source: "agent|episode:<id>|external:<origin>",
 //              entities, tags,
-//              valid_from, invalid_at, invalid_reason, superseded_by }] }
+//              valid_from, invalid_at, invalid_reason, superseded_by,
+//              covers }] }   // summary hits only: the refs it stands in for
 // Episode chunks compete in the same order as memories (`kind: "episode"`);
 // they carry no validity window and rank on retrieval alone.
 
@@ -423,7 +425,7 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
   "space": "optional string (default: configured space)",
   "insight": "one atomic, self-contained statement — the conclusion",
   "derived_from": ["01J…", "memory:01J…", "episode:01J…"],  // required, non-empty
-  "kind": "fact | lesson | instruction (default lesson)",
+  "kind": "fact | lesson | instruction | summary (default lesson)",
   "entities": ["cargo"], "tags": ["identity"],              // optional
   "supersedes": ["memory:01J…"]                              // optional
 }

@@ -605,7 +605,10 @@ mod tests {
 
     #[test]
     fn untagged_records_are_never_deferred() {
-        let capped = cap_by_tag(vec![lesson('A', &[]), lesson('B', &[]), lesson('C', &[])], 1);
+        let capped = cap_by_tag(
+            vec![lesson('A', &[]), lesson('B', &[]), lesson('C', &[])],
+            1,
+        );
         assert_eq!(order(&capped), "ABC");
     }
 

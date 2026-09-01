@@ -474,7 +474,12 @@ fn overdue(claim: MemoryRecord) -> StaleContext {
 }
 
 /// Why an answer is thinner than the store is, when it is.
-fn note(service: &AgmemService, truncated: bool, capped: bool, tags_capped: bool) -> Option<String> {
+fn note(
+    service: &AgmemService,
+    truncated: bool,
+    capped: bool,
+    tags_capped: bool,
+) -> Option<String> {
     let mut reasons = Vec::new();
     if service.embedder().dim() == 0 {
         reasons.push(

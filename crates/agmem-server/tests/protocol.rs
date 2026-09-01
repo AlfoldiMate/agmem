@@ -1992,11 +1992,7 @@ async fn a_flooded_tag_yields_lessons_slots_and_recall_stays_uncapped() {
     // The cap is the briefing's, not the store's: a recall aimed at the tag —
     // the playbook path — still reaches every lesson under it.
     let found = agmem.recall(json!({ "tags": ["role:builder"] })).await;
-    assert_eq!(
-        found["hits"].as_array().map(Vec::len),
-        Some(6),
-        "{found:#}"
-    );
+    assert_eq!(found["hits"].as_array().map(Vec::len), Some(6), "{found:#}");
     agmem.shutdown().await;
 }
 
@@ -2822,7 +2818,10 @@ async fn consolidate_reports_a_tag_holding_more_lessons_than_the_bound() {
     for member in members {
         let content = member["content"].as_str().expect("readable");
         assert!(content.starts_with("builder:"), "{content}");
-        assert!(member["id"].as_str().is_some(), "and addressable: {member:#}");
+        assert!(
+            member["id"].as_str().is_some(),
+            "and addressable: {member:#}"
+        );
     }
 }
 

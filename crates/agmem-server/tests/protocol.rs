@@ -1957,6 +1957,46 @@ async fn a_small_budget_keeps_the_first_section_and_says_it_trimmed() {
 }
 
 #[tokio::test]
+async fn a_flooded_tag_yields_lessons_slots_and_recall_stays_uncapped() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "builder lesson: pin the toolchain", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder lesson: cold caches lie", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder lesson: strip debug info", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder lesson: vendor the grammar", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder lesson: fail on warnings", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder lesson: cache per target", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "ops lesson: rotate the token", "kind": "lesson", "tags": ["ops"] },
+                { "content": "ops lesson: snapshot before migrating", "kind": "lesson", "tags": ["ops"] }
+            ]
+        }))
+        .await;
+
+    // Six lessons on one tag against a section of five: unbounded, the flood
+    // takes every slot. The per-tag cap (issue #82) defers the excess instead,
+    // so the other tag's lessons still appear.
+    let block = agmem.context(json!({})).await;
+    assert_eq!(
+        block.matches("builder lesson:").count(),
+        3,
+        "the flooded tag keeps its bound and no more: {block}"
+    );
+    assert_eq!(
+        block.matches("ops lesson:").count(),
+        2,
+        "the slots the cap freed go to the other tag: {block}"
+    );
+
+    // The cap is the briefing's, not the store's: a recall aimed at the tag —
+    // the playbook path — still reaches every lesson under it.
+    let found = agmem.recall(json!({ "tags": ["role:builder"] })).await;
+    assert_eq!(found["hits"].as_array().map(Vec::len), Some(6), "{found:#}");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn an_empty_space_says_so_and_an_unusable_budget_is_refused() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
 
@@ -2744,6 +2784,48 @@ async fn consolidate_reports_short_lived_notes_that_recall_kept_alive() {
 }
 
 #[tokio::test]
+async fn consolidate_reports_a_tag_holding_more_lessons_than_the_bound() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({
+            "memories": [
+                { "content": "builder: pin the toolchain", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder: cold caches lie", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder: strip debug info", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "builder: vendor the grammar", "kind": "lesson", "tags": ["role:builder"] },
+                { "content": "ops: rotate the token", "kind": "lesson", "tags": ["ops"] },
+                { "content": "ops: snapshot before migrating", "kind": "lesson", "tags": ["ops"] },
+                { "content": "ops: pin the runner image", "kind": "lesson", "tags": ["ops"] },
+                { "content": "a fact carrying the tag counts for nothing here", "tags": ["role:builder"] },
+            ]
+        }))
+        .await;
+
+    let found = agmem.consolidate(json!({})).await;
+    let over_full = found["over_full_tags"].as_array().expect("an array");
+    assert_eq!(
+        over_full.len(),
+        1,
+        "ops holds exactly the bound and stays out, and only lessons count: {found:#}"
+    );
+    assert_eq!(over_full[0]["tag"], "role:builder");
+    assert_eq!(over_full[0]["space"], "default");
+    assert_eq!(over_full[0]["live"], 4);
+    assert_eq!(over_full[0]["keep"], 3);
+
+    let members = over_full[0]["members"].as_array().expect("an array");
+    assert_eq!(members.len(), 4, "{found:#}");
+    for member in members {
+        let content = member["content"].as_str().expect("readable");
+        assert!(content.starts_with("builder:"), "{content}");
+        assert!(
+            member["id"].as_str().is_some(),
+            "and addressable: {member:#}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn consolidate_on_an_empty_store_answers_empty_rather_than_failing() {
     let agmem = Harness::start(Arc::new(AngleEmbedder)).await;
     let found = agmem.consolidate(json!({})).await;
@@ -2751,6 +2833,7 @@ async fn consolidate_on_an_empty_store_answers_empty_rather_than_failing() {
     assert_eq!(found["near_duplicates"], json!([]));
     assert_eq!(found["contradictions"], json!([]));
     assert_eq!(found["stale_contexts"], json!([]));
+    assert_eq!(found["over_full_tags"], json!([]));
     assert_eq!(found["spaces"], json!(["default"]));
     assert_eq!(
         found["scanned"],

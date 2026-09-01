@@ -1,0 +1,65 @@
+{
+  "scenario": "consolidate_large",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "consolidate"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.0wRS1ueHOM",
+  "answer": "I ran a full consolidation scan across the memory store (120 atlas-related claims compared pairwise) rather than relying on the earlier partial listing. Here's what actually holds up on inspection — the algorithm flagged more pairs than are real issues, so I read each one rather than reporting the raw list.\n\n## Real duplicates (safe to merge)\n\n1. **Test runner** — two claims say the same thing: *\"Tests in atlas are run through cargo nextest run; plain cargo test is not used\"* (`01M1EVZT74BR...`) and *\"The atlas test suite is run with cargo nextest run, not cargo test\"* (`01M1EVZT36D4...`).\n2. **Deploy command** — three claims converge on one fact: *\"To ship atlas you run bin/ship.sh at the top of the repo\"* (`01M1EVZT4Y6V...`), *\"Project atlas is deployed by running bin/ship.sh from the repository root\"* (`01M1EVZT2755...`), and *\"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone\"* (`01M1EVZT8TNH...`). The third one carries an extra fact worth keeping (the old `make deploy` target was removed).\n3. **Semver/breaking changes** — *\"Breaking SDK changes for atlas wait for the next major release\"* (`01M1EVZTG5P5...`) and *\"atlas follows semver strictly, so a breaking change to atlas-core is a major bump\"* (`01M1EVZT4SB6...`) are the same policy stated twice.\n\n## Likely genuine contradiction (needs a decision, not a merge)\n\n**Feature flags described two incompatible ways:**\n- *\"Feature flags in atlas are an environment variable map and nothing more\"* (`01M1EVZTJA0F...`)\n- *\"Feature flags in atlas are additive only, so cargo check --all-features has to pass\"* (`01M1EVZT53KY...`)\n\nThe first describes a runtime env-var switch, the second describes Cargo compile-time feature flags. Either these are two different mechanisms that both got called \"feature flags\" (fine, but should be worded to disambiguate) or one is stale/wrong. Worth confirming before handoff so whoever inherits this doesn't get conflicting guidance.\n\n## Stale (session scratch state, not durable facts)\n\nBoth flagged by the tool as filed \"fast\" decay but never expired — 40 days idle, clearly leftover from a specific working session:\n- *\"The branch under review is spike/consolidate.\"* (`01M1EVZT9QHW...`)\n- *\"The flaky test being chased this week is pagination_ordering in atlas-api.\"* (`01M1EVZT9X6Y...`)\n\nThese read like \"this week\" scratch notes, not project facts — candidates to forget outright rather than merge.\n\n## False positives (flagged by similarity, but not actually duplicates/contradictions)\n\nThe scan surfaced a long tail of pairs that share topic/entity tags but state distinct facts — e.g. \"images pushed to GHCR\" vs \"container image built from distroless base,\" \"connection pool holds sixteen connections\" vs \"readiness probe waits on the pool,\" and a large billing/support/ops cluster (retention docs, account deletion window, status page, Postmark, trial length, per-seat billing, support routing) that only clustered because they're short and topically adjacent — the tool itself flagged that cluster's similarity was weak enough it \"may not be one claim at all.\" I'd leave all of these alone.\n\nNothing has been changed. Let me know if you want me to merge the three duplicate groups, drop the two stale scratch notes, and/or dig into which feature-flags claim is correct.",
+  "cost_usd": 0.20212940000000001,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1EVZTQ8AT75066HJ50G3MVS\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T16:14:13.060159Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1EVZTPJTD86JRE5T4HH25ZZ\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 150
+      },
+      "answer": "\"k must be between 1 and 50\""
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "all"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-09-01T16:14:13.221018Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1EVZT74BRHPW7PCDHP18H81\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-07-23T16:14:14.28963Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":3,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-01T16:14:13.059569Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"23616-1788279252599642000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, "
+    }
+  ]
+}

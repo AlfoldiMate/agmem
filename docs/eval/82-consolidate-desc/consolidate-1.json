@@ -1,0 +1,53 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.eT3mYEJwAK",
+  "answer": "Pulled everything tagged `atlas` from memory (47 live claims, all stored in a single batch on 2026-09-01, none previously superseded). Here's the audit — nothing has been changed.\n\n**Contradiction (needs resolution before handover):**\n- \"Merging to main deploys atlas to staging automatically.\" *(id ...A4TN)*\n- \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\" *(id ...D8DX)*\n\nThese directly conflict. One of them is wrong or outdated — worth checking the actual CI config before whoever inherits this project trusts either.\n\n**Exact duplicates (same fact, restated):**\n- Deploy command, said three separate ways:\n  - \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" *(...FR94)*\n  - \"To ship atlas you run the bin/ship.sh script at the top of the repo.\" *(...C5B4)*\n  - \"Project atlas is deployed by running bin/ship.sh from the repository root.\" *(...9DWA)*\n- Test runner, said twice:\n  - \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\" *(...EBYJ)*\n  - \"The atlas test suite is run with cargo nextest run, not cargo test.\" *(...ACD7)*\n\n**Soft overlap worth a glance (not contradictory, but redundant framing):**\n- \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" *(...F9AB)*\n- \"atlas stores its data in Postgres 16 and the schema lives under migrations/.\" *(...9WPD)*\n\n**Likely stale — time-bound claims that were true \"as of\" an unspecified moment and shouldn't be handed over as standing facts:**\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" *(...GV0Z)* — \"this week\" is undated; almost certainly no longer current.\n- \"The branch under review is spike/consolidate.\" *(...GNKF)* — same issue, reads like leftover session state rather than a durable fact.\n\nEverything else (crate layout, CI pipeline steps, API auth/rate-limiting, release process, branch naming, docs tooling, etc.) looks internally consistent and non-duplicated.\n\nWant me to fix the contradiction (once you tell me which behavior is actually true), merge the duplicates, and drop the two stale ephemeral entries?",
+  "cost_usd": 0.1612636,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1EVPAF480SSJHEENJ4AQ0H4\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T16:09:01.996169Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1EVPAEZ99ZK70XWTW9HE54H\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"cut\\\":{\\\"best_similarity\\\":0.8243113301078707,\\\"considered\\\":50,\\\"kept\\\":48,\\\"note\\\":\\\"48 of 50 candidates are returned: the rest fell off a marked drop in match quality, not off `k`. Raising `k` will not bring them back; a filters-only call lists what is there.\\\"},\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1EVPAA0MM8MB8TDHXW8ZTQ5\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8906533297805231,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8177555496342052,\\\"similarity\\\":0.7630027532577515},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_fr"
+    }
+  ]
+}

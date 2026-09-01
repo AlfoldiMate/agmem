@@ -1,0 +1,53 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.sA5crQU8HF",
+  "answer": "I pulled everything stored under `atlas` (44 distinct claims plus a couple of stray hits). All of them share the same `valid_from` timestamp (today, 2026-09-01), so there's no dating signal to lean on — staleness has to be judged by content, not age. Here's what I found:\n\n## Contradiction (real conflict, not just duplication)\n\n**Staging deploy automation** — two claims directly disagree:\n- *\"Merging to main deploys atlas to staging automatically.\"*\n- *\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"*\n\nOne says merges auto-deploy to staging, the other says staging deploys are always manual. These can't both be true — worth confirming which is current before handover.\n\n## Duplicates (same fact, restated separately)\n\n**How to ship atlas** (3 near-identical entries):\n- \"To ship atlas you run the `bin/ship.sh` script at the top of the repo.\"\n- \"Project atlas is deployed by running `bin/ship.sh` from the repository root.\"\n- \"Deploying atlas means executing `bin/ship.sh`; the old `make deploy` target is gone.\"\n\n**Test runner** (2 identical entries):\n- \"Tests in atlas are run through `cargo nextest run`; plain `cargo test` is not used.\"\n- \"The atlas test suite is run with `cargo nextest run`, not `cargo test`.\"\n\n## Worth double-checking (possible inconsistency, not clear-cut)\n\n**Postgres version support** — one claim says atlas \"stores its data in Postgres 16,\" another says it \"supports Postgres 15 and 16 (14 dropped in v2.0).\" Not necessarily contradictory (could support both but store on 16), but the phrasing is inconsistent enough that a reader could come away with two different impressions of what's required.\n\n## Likely to go stale immediately after handover\n\nTwo low-importance, short-shelf-life facts that were true \"this week\" but won't be relevant to whoever inherits the project:\n- \"The flaky test being chased this week is `pagination_ordering` in atlas-api.\"\n- \"The branch under review is `spike/consolidate`.\"\n\nThese are already flagged internally with low retention scores, so the system expects them to fade — but they'll be actively misleading if the new owner reads them as still-current status rather than a snapshot from today.\n\nNothing else in the set looked contradictory — the CI, API, release, and crate-layout facts are complementary rather than duplicated. I haven't changed or superseded anything; let me know which of these you want corrected/merged and I'll use `supersedes` rather than deleting, so the history stays intact.",
+  "cost_usd": 0.164081,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1EVQV8SCQP8YTHZY75X7RBR\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-01T16:09:51.965598Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1EVQV8MTT98A2B1FZYJ0T5K\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"cut\\\":{\\\"best_similarity\\\":0.8243113301078707,\\\"considered\\\":50,\\\"kept\\\":48,\\\"note\\\":\\\"48 of 50 candidates are returned: the rest fell off a marked drop in match quality, not off `k`. Raising `k` will not bring them back; a filters-only call lists what is there.\\\"},\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1EVQV3MY74E79N4F0S3KT9S\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8906533297805231,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8177555496342052,\\\"similarity\\\":0.7630027532577515},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_fr"
+    }
+  ]
+}

@@ -147,6 +147,43 @@ cap covers exactly the flood the gate lets through.
         "total": 2
       }
     },
+    "playbook-flood": {
+      "retrieval": {
+        "found": 0,
+        "expected": 0,
+        "returned": 0,
+        "mrr": 0.0
+      },
+      "timeline": {
+        "passed": 0,
+        "total": 0
+      },
+      "gate": {
+        "correct": 0,
+        "total": 0,
+        "false_gates": 0,
+        "missed": 0,
+        "wrong_original": 0
+      },
+      "context": {
+        "passed": 11,
+        "total": 11
+      },
+      "staleness": {
+        "stale_hits": 0,
+        "pages": 0
+      },
+      "abstention": {
+        "fired": 0,
+        "expected": 0,
+        "false_abstentions": 0,
+        "pages": 0
+      },
+      "temporal": {
+        "passed": 0,
+        "total": 0
+      }
+    },
     "user-profile": {
       "retrieval": {
         "found": 3,

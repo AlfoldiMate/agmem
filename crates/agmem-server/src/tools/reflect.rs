@@ -196,6 +196,12 @@ pub async fn run(
         let neighbours = repo::nearest_live(service.db(), &space, std::slice::from_ref(probe))
             .await
             .map_err(|error| store_error(&error))?;
+        // The gate's measurement rides along if the row gets written
+        // (issue #83): neighbours come back closest-first.
+        memory.novelty = neighbours
+            .first()
+            .and_then(|list| list.first())
+            .map(|neighbour| dedup::novelty(neighbour.similarity));
         for neighbour in neighbours.into_iter().flatten() {
             if dedup::is_near_duplicate(neighbour.similarity) {
                 let note = uncited(service, &space, &neighbour.id).await;

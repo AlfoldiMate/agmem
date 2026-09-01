@@ -377,6 +377,15 @@ pub struct HitSignals {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temporal: Option<f64>,
 
+    /// How much this claim added over its nearest neighbour when it was
+    /// written, in `[0, 1]` — measured once at write time, never updated.
+    /// Reported for the reader; it carries no rank weight (issue #83,
+    /// `docs/eval/novelty-prior.md`). Absent for rows from before the store
+    /// recorded it, for corrections, for verbatim text, and everywhere in a
+    /// BM25-only deployment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub novelty: Option<f64>,
+
     /// How much of the memory has survived its decay curve since it was last
     /// used. 1.0 for a pinned memory, or for verbatim text.
     pub retention: f64,
@@ -667,6 +676,7 @@ impl RecallHit {
             rrf_normalized: ranked.rrf_normalized,
             similarity: ranked.signals.similarity,
             temporal: ranked.signals.temporal,
+            novelty: ranked.signals.novelty,
             retention: ranked.signals.retention,
             importance: ranked.signals.importance,
         };

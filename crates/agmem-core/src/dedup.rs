@@ -41,6 +41,18 @@ pub fn similarity_from_distance(distance: f64) -> f64 {
     1.0 - distance
 }
 
+/// What a write adds over the store's nearest live neighbour (issue #83):
+/// `1 − similarity`, clamped to `[0, 1]`.
+///
+/// Clamped because cosine similarity may be negative — an *opposed* neighbour
+/// would otherwise score above 1 — and the value is persisted, so the range
+/// is a promise to every reader rather than a hope. Spelled here beside
+/// [`similarity_from_distance`] so the write path and any future caller agree
+/// on what "novel" means.
+pub fn novelty(best_similarity: f64) -> f64 {
+    (1.0 - best_similarity).clamp(0.0, 1.0)
+}
+
 /// Cosine similarity below which two memories are simply about different
 /// things, and a neighbour is not worth mentioning.
 ///

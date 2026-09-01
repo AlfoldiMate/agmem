@@ -1,5 +1,6 @@
 ---
 source: crates/agmem-server/tests/protocol.rs
+assertion_line: 73
 expression: "&tools.tools"
 ---
 [
@@ -1460,6 +1461,14 @@ expression: "&tools.tools"
               "description": "The standing importance of its decay class — what keeps a rarely\nmatched instruction ahead of a well matched scratch note.",
               "format": "double",
               "type": "number"
+            },
+            "novelty": {
+              "description": "How much this claim added over its nearest neighbour when it was\nwritten, in `[0, 1]` — measured once at write time, never updated.\nReported for the reader; it carries no rank weight (issue #83,\n`docs/eval/novelty-prior.md`). Absent for rows from before the store\nrecorded it, for corrections, for verbatim text, and everywhere in a\nBM25-only deployment.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "retention": {
               "description": "How much of the memory has survived its decay curve since it was last\nused. 1.0 for a pinned memory, or for verbatim text.",

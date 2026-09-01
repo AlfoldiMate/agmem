@@ -616,6 +616,7 @@ mod tests {
             superseded_by: None,
             source: Source::Agent,
             writer: None,
+            novelty: None,
             derived_from: Vec::new(),
             created_at: Timestamp::UNIX_EPOCH,
         }

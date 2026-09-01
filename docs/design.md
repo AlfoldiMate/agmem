@@ -205,6 +205,10 @@ DEFINE FIELD source        ON memory TYPE object;   -- { kind: "episode"|"agent"
 -- every sub-field option<string>; NONE on pre-v6 rows, never backfilled
 DEFINE FIELD writer        ON memory TYPE option<object>;
 DEFINE INDEX mem_writer_session ON memory COLUMNS writer.session;
+-- v7: what the dup-gate measured this claim adding over its nearest live
+-- neighbour at write time (issue #83): clamp(1 − similarity, 0, 1); NONE
+-- where nothing measured, never backfilled, never recomputed
+DEFINE FIELD novelty       ON memory TYPE option<float>;
 -- schema v2: what a `reflect` insight was drawn from; empty for every other write
 DEFINE FIELD derived_from  ON memory TYPE array<record<memory | episode>> DEFAULT [];
 DEFINE FIELD created_at    ON memory TYPE datetime DEFAULT time::now();
@@ -742,6 +746,10 @@ remember(params)
     correction and an id alone cannot be read (issue #38)
     skipped when the memory carries `supersedes` — the agent has already made
     the ADD/UPDATE call, and a correction usually *is* close to what it corrects
+    the probe's measurement is kept (issue #83): each surviving row stores
+    novelty = clamp(1 − nearest similarity, 0, 1) — the store as it stood at
+    write time, never recomputed (not even by --reindex); NONE where nothing
+    measured (a correction, an empty space, BM25-only, any pre-v7 row)
  5. one transaction:
       episode? → insert episode + chunks (chunk.rs) + chunk embeddings
       inserts  → CREATE memory:ulid() CONTENT {...}, source.ref → episode
@@ -787,6 +795,12 @@ recall(q)
  4. rescore in Rust (core::scoring):
       final = 0.6·norm(rrf) + 0.25·retention(m) + 0.15·importance(decay_class)
               [+ 0.15·temporal_fit when the call carried a window — issue #78]
+              [+ W_novelty·(novelty − pool mean) for rows measured at write
+               time — issue #83; pool-centred so an unmeasured row is exactly
+               neutral, never floored: absence here is per-row. W_novelty is
+               0.0, measured-and-held (docs/eval/novelty-prior.md): write-time
+               novelty peaks on the *first* claim of a topic, so in a same-tag
+               flood the term is anti-recency and regressed the briefing]
       norm  = min–max over the pool: (rrf − min) / (max − min)
       as_of? → filter valid_from ≤ T < invalid_at (walk chains for history);
               chunks filter on their denormalised occurred_at ≤ T (v4)

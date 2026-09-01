@@ -305,6 +305,32 @@ async fn a_repeated_episode_is_reused_rather_than_re_chunked() {
     );
 }
 
+/// Issue #83: the novelty the write path measured rides the row into the
+/// store and back out; a write nothing measured reads `None` rather than a
+/// sentinel.
+#[tokio::test]
+async fn novelty_round_trips_and_absence_reads_as_none() {
+    let db = store().await;
+    let mut measured = NewMemory::new(Kind::Fact, "the user prefers Rust");
+    measured.novelty = Some(0.42);
+    repo::insert_batch(
+        &db,
+        batch(vec![
+            measured,
+            NewMemory::new(Kind::Fact, "written before anything could measure it"),
+        ]),
+    )
+    .await
+    .expect("batch");
+
+    let mut rows = repo::direct_lookup(&db, &Lookup::new(vec![space()]))
+        .await
+        .expect("lookup");
+    rows.sort_by(|left, right| left.content.cmp(&right.content));
+    assert_eq!(rows[0].novelty, Some(0.42), "the measurement round-trips");
+    assert_eq!(rows[1].novelty, None, "no measurement reads as none");
+}
+
 #[tokio::test]
 async fn supersession_closes_the_old_row_and_keeps_it_readable() {
     let db = store().await;

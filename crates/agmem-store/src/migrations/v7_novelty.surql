@@ -1,0 +1,17 @@
+-- Schema v7 — the write path keeps the dup-gate's measurement (issue #83).
+--
+-- Every gated write already probes for its nearest live neighbour and threw
+-- the similarity away once the gate had ruled. Stored as `novelty`
+-- (`1 − nearest similarity`, clamped to [0, 1]), it records how much the
+-- claim added over what the store held *at the moment it arrived* — which is
+-- why `--reindex` must never recompute it: re-measuring against today's store
+-- would answer a different question.
+--
+-- Deliberately **no backfill**, and `option<float>` for the reason v3 and v6
+-- both paid for: any later UPDATE (`REINFORCE`, `PRUNE_EXPIRED`,
+-- `FORGET_SOFT`) re-coerces every field, so a required column would make rows
+-- predating this migration untouchable. A pre-v7 row reads as `NONE` — "not
+-- measured" — as does a correction (`supersedes` skips the gate) and a write
+-- into a space holding no vectors; ranking treats absence as neutral, never
+-- as a floor.
+DEFINE FIELD IF NOT EXISTS novelty ON memory TYPE option<float>;

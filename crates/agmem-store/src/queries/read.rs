@@ -111,6 +111,7 @@ const MEMORY_FIELDS: &str = "record::id(id) AS id, space, kind, content, content
      IF writer IS NONE { NONE } ELSE { { client: writer.client,
          client_version: writer.client_version, session: writer.session,
          tool: writer.tool } } AS writer,
+     novelty,
      array::map(derived_from ?? [],
          |$link| { table: record::table($link), id: record::id($link) }) AS derived_from,
      created_at";
@@ -456,7 +457,7 @@ pub(crate) const STATS: &str = "RETURN {
 /// The row and its vector come back as two projections over one selection
 /// rather than one wide row, because the `SurrealValue` derive has no
 /// `flatten`: spelling them together would mean a second copy of
-/// [`MEMORY_FIELDS`]'s nineteen columns in Rust. Both carry the id, so the
+/// [`MEMORY_FIELDS`]'s twenty columns in Rust. Both carry the id, so the
 /// caller pairs them by name and depends on nothing about their order.
 pub(crate) fn live_vectors(limit: usize) -> Script {
     let limit = limit.clamp(1, MAX_POOL);

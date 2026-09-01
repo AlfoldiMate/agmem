@@ -1307,6 +1307,45 @@ async fn a_returned_memory_is_reinforced_and_a_k_past_the_ceiling_is_refused() {
 }
 
 #[tokio::test]
+async fn a_historical_read_reinforces_nothing() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    agmem
+        .remember(json!({ "memories": [{ "content": "The user prefers Rust" }] }))
+        .await;
+
+    // Both audit shapes return the row and leave its ranking state alone
+    // (issue #63): "what was believed at T" must not change what is believed
+    // to matter now.
+    let audit = agmem
+        .recall(json!({ "as_of": "2999-01-01T00:00:00Z" }))
+        .await;
+    assert_eq!(hits(&audit).len(), 1, "{audit}");
+    let memory = agmem.memories().await.remove(0);
+    assert_eq!(
+        (memory.strength, memory.access_count),
+        (1.0, 0),
+        "an as_of read mutates nothing"
+    );
+
+    let everything = agmem.recall(json!({ "include_invalidated": true })).await;
+    assert_eq!(hits(&everything).len(), 1, "{everything}");
+    assert_eq!(
+        agmem.memories().await.remove(0).access_count,
+        0,
+        "an include_invalidated read mutates nothing"
+    );
+
+    let present = agmem.recall(json!({})).await;
+    assert_eq!(hits(&present).len(), 1, "{present}");
+    assert_eq!(
+        agmem.memories().await.remove(0).access_count,
+        1,
+        "a live-present read still reinforces"
+    );
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn context_lays_out_the_sections_in_a_fixed_order_and_reinforces_nothing() {
     let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
     let written = agmem

@@ -313,7 +313,11 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     let considered = ranked.len();
 
     // 3. Being recalled is what keeps a memory alive; verbatim text has no
-    //    curve to be pushed back up.
+    //    curve to be pushed back up. Historical reads don't count (issue #63):
+    //    an `as_of` or `include_invalidated` call asks what *was* believed,
+    //    and a read that mutates present ranking state answers a different
+    //    question than it was asked — the same reasoning that keeps `context`
+    //    from reinforcing on a schedule.
     let touched: Vec<MemoryId> = ranked
         .iter()
         .filter_map(|(hit, _)| match hit {
@@ -321,7 +325,9 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
             StoreHit::Chunk(_) => None,
         })
         .collect();
-    reinforce(service, &touched).await;
+    if liveness == Liveness::Live {
+        reinforce(service, &touched).await;
+    }
 
     // 4. `take(k)` is silent, and a full page is the one shape that cannot be
     //    read as complete or partial from the outside. Count only when the

@@ -202,11 +202,51 @@ pub struct AlreadyClosed {
 /// `supersedes` still closes its targets — in favour of the row that already
 /// holds the content, minus that row itself (issue #57).
 ///
+/// Two *sessions* writing the same claim both pass their own in-transaction
+/// lookup, and the loser's whole batch aborts on the unique index (issue
+/// #64). That is a timing accident, not an error the caller can act on, so
+/// it is retried once: the second pass finds the winner live in the gate and
+/// reports the promised `Duplicate`, and the rest of the batch lands.
+///
 /// # Errors
 /// [`StoreError::UnknownMemory`] when a `supersedes` target is not in this
 /// space, and [`StoreError::Db`] for anything the engine rejects — in which
 /// case nothing at all was written.
 pub async fn insert_batch(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreError> {
+    let mut attempts = 0;
+    loop {
+        match insert_batch_once(db, batch.clone()).await {
+            Err(StoreError::Db(error)) if attempts < 2 && is_write_race(&error) => {
+                attempts += 1;
+                tracing::info!(%error, attempt = attempts, "the batch lost a write race; retrying");
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
+/// Whether an engine error is this batch losing a race, in either of the two
+/// shapes the engine reports one.
+///
+/// A loser whose `CREATE` runs after the winner committed hits the unique
+/// index and the error names it — the two content-hash indexes are the only
+/// ones a batch can legitimately collide on. A loser whose transaction truly
+/// interleaved fails at commit instead, and all the engine says is "failed
+/// transaction" / "Cannot COMMIT" on every statement (the same phrases
+/// [`checked`] classifies as follow-on): an optimistic-concurrency conflict
+/// with no index named. Both mean the same thing here — nothing landed, and
+/// a re-run will see whatever won — so both are retried rather than handed
+/// to a caller who can do nothing but retry blind.
+fn is_write_race(error: &surrealdb::Error) -> bool {
+    let text = error.to_string();
+    text.contains("mem_hash_live")
+        || text.contains("episode_hash")
+        || text.contains("failed transaction")
+        || text.contains("Cannot COMMIT")
+}
+
+/// One attempt at the batch; [`insert_batch`] owns the retry.
+async fn insert_batch_once(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreError> {
     let Batch {
         space,
         episode,

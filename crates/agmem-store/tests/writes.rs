@@ -883,6 +883,48 @@ async fn a_supersede_never_rewrites_another_close() {
     );
 }
 
+/// Issue #64: two sessions writing the same claim both pass their own
+/// in-transaction dup lookup; the loser used to surface the unique-index
+/// abort as a raw DB error. The retry turns it into the promised
+/// `Duplicate`. The engine does not collide on every run, so this drives
+/// many rounds — a pass proves no raw error ever escapes and every round
+/// converges on one row, whichever interleaving happened.
+#[tokio::test]
+async fn concurrent_identical_writes_converge_on_one_row_without_an_error() {
+    let db = store().await;
+    const ROUNDS: usize = 16;
+    for round in 0..ROUNDS {
+        let content = format!("racing claim number {round}");
+        let (left, right) = tokio::join!(
+            repo::insert_batch(
+                &db,
+                batch(vec![NewMemory::new(Kind::Fact, content.clone())])
+            ),
+            repo::insert_batch(&db, batch(vec![NewMemory::new(Kind::Fact, content)])),
+        );
+        let (left, right) = (
+            left.expect("the race is never the caller's error"),
+            right.expect("the race is never the caller's error"),
+        );
+        assert_eq!(
+            left.memories[0].id(),
+            right.memories[0].id(),
+            "both callers are told about the same row"
+        );
+        assert!(
+            left.memories[0].is_created() || right.memories[0].is_created(),
+            "somebody actually wrote it"
+        );
+    }
+    assert_eq!(
+        column::<String>(&db, "SELECT VALUE record::id(id) FROM memory")
+            .await
+            .len(),
+        ROUNDS,
+        "one row per claim, however the interleavings fell"
+    );
+}
+
 #[tokio::test]
 async fn a_standalone_supersede_refuses_a_closed_target() {
     let db = store().await;

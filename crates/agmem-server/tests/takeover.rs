@@ -134,7 +134,10 @@ fn a_retiring_daemon_lets_go_of_the_store_before_the_data_dir_lock() {
     }
 
     let status = daemon.wait().expect("wait for the daemon");
-    assert!(status.success(), "the retiring daemon exits cleanly: {status}");
+    assert!(
+        status.success(),
+        "the retiring daemon exits cleanly: {status}"
+    );
 }
 
 #[test]
@@ -150,7 +153,10 @@ fn a_daemon_that_cannot_take_the_store_says_so_in_its_log() {
     let status = start_daemon(data.path())
         .wait()
         .expect("wait for the second daemon");
-    assert!(!status.success(), "a daemon without the store exits non-zero");
+    assert!(
+        !status.success(),
+        "a daemon without the store exits non-zero"
+    );
 
     let log = std::fs::read_to_string(data.path().join(daemon::DAEMON_LOG_FILE))
         .expect("read the daemon log");

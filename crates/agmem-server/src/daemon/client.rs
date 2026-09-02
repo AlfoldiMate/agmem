@@ -8,7 +8,7 @@
 
 use std::fs::{File, TryLockError};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
@@ -226,6 +226,10 @@ async fn wait_for_retirement(path: &Path) {
 /// still held past the deadline is a process that is not going anywhere: a
 /// `--no-daemon` session, or a daemon that stopped answering.
 ///
+/// A daemon from before issue #124 released this lock a few milliseconds
+/// before it let go of the store itself; [`start_one`] allows one more start
+/// for that gap.
+///
 /// # Errors
 /// When the lock is still held after `RETIRE_DEADLINE`.
 async fn wait_for_store_lock(cfg: &Config) -> anyhow::Result<()> {
@@ -284,8 +288,57 @@ async fn start_one(cfg: &Config, path: &Path, takeover: Takeover) -> anyhow::Res
     // only from the ready timeout.
     wait_for_store_lock(cfg).await?;
 
-    spawn(cfg, takeover)?;
-    wait_until_ready(cfg, path).await
+    // A daemon that retired from a release before issue #124 released the
+    // data-dir lock a moment before the store's own lock, and a daemon
+    // started in that gap dies on the store. One more start, once the gap
+    // has closed, is the whole allowance: a second death is a real error.
+    let mut starts_left = match takeover {
+        Takeover::No => 1,
+        Takeover::FromRetired => 2,
+    };
+    loop {
+        let mut child = spawn(cfg, takeover)?;
+        match wait_until_ready(cfg, path, &mut child).await? {
+            Ready::Serving(stream) => {
+                reap_in_background(child);
+                return Ok(stream);
+            }
+            Ready::Died(status) => {
+                starts_left -= 1;
+                if starts_left == 0 {
+                    bail!(
+                        "the shared store exited ({status}) before it accepted a session. \
+                         Its log is {}; --no-daemon opens the store in this process instead.",
+                        log_path(cfg).display()
+                    );
+                }
+                tracing::info!(
+                    %status,
+                    "the shared store died at startup right after a retirement; starting it once more"
+                );
+                wait_for_store_lock(cfg).await?;
+            }
+        }
+    }
+}
+
+/// What became of a daemon this session started.
+enum Ready {
+    /// It accepted; the stream is the session's.
+    Serving(UnixStream),
+    /// It exited before it accepted. Its reason is in its log, not here: its
+    /// stderr was closed at spawn.
+    Died(ExitStatus),
+}
+
+/// Collect the daemon's exit status when it comes, so the process does not
+/// linger as a zombie for as long as this session lives (issue #124). The
+/// daemon is in its own process group and outlives this session as a rule;
+/// then the thread simply ends with the session.
+fn reap_in_background(mut child: Child) {
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
 }
 
 /// Wait for the right to start a daemon.
@@ -322,7 +375,7 @@ async fn queue_to_spawn(path: &Path) -> anyhow::Result<File> {
 }
 
 /// Start a detached daemon from this same binary.
-fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<()> {
+fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<Child> {
     let exe = std::env::current_exe()
         .context("cannot find this binary to start the shared store from")?;
     let log_file = log_path(cfg);
@@ -359,22 +412,37 @@ fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<()> {
         command.process_group(0);
     }
 
-    command.spawn().with_context(|| {
+    let child = command.spawn().with_context(|| {
         format!(
             "cannot start the shared store; its log is {}",
             log_file.display()
         )
     })?;
     tracing::info!(log = %log_file.display(), ?takeover, "started the shared store");
-    Ok(())
+    Ok(child)
 }
 
-/// Poll the socket until the daemon we started accepts, or time runs out.
-async fn wait_until_ready(cfg: &Config, path: &Path) -> anyhow::Result<UnixStream> {
+/// Poll the socket until the daemon we started accepts, exits, or time runs
+/// out.
+///
+/// The exit is checked on every turn (issue #124): a daemon that died at
+/// startup — on the store's lock, most often — used to cost the session the
+/// whole `READY_DEADLINE`, with nothing to read at the end of it.
+///
+/// # Errors
+/// When the deadline passes with the daemon alive and silent, or the child
+/// cannot be checked on.
+async fn wait_until_ready(cfg: &Config, path: &Path, child: &mut Child) -> anyhow::Result<Ready> {
     let deadline = Instant::now() + READY_DEADLINE;
     while Instant::now() < deadline {
         if let Some(stream) = connect(path).await {
-            return Ok(stream);
+            return Ok(Ready::Serving(stream));
+        }
+        if let Some(status) = child
+            .try_wait()
+            .context("checking whether the shared store is still starting")?
+        {
+            return Ok(Ready::Died(status));
         }
         tokio::time::sleep(POLL).await;
     }
@@ -476,6 +544,35 @@ mod tests {
         assert!(
             message.contains("kill 4242"),
             "the way out is a command, not a hunt: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_daemon_that_exits_at_startup_is_reported_at_once_with_its_log() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = config(dir.path());
+        let path = socket_path(dir.path()).expect("socket path");
+
+        // `spawn` starts this same binary — here the test executable, which
+        // does not know `--daemon-serve` and exits at once: exactly a daemon
+        // that died at startup (issue #124).
+        let started = Instant::now();
+        let error = start_one(&cfg, &path, Takeover::No)
+            .await
+            .expect_err("a child that exited never accepts");
+        let message = format!("{error:#}");
+        assert!(
+            started.elapsed() < READY_DEADLINE / 4,
+            "the exit is seen when it happens, not at the ready deadline: {:?}",
+            started.elapsed()
+        );
+        assert!(
+            message.contains("exited"),
+            "the message says what happened: {message}"
+        );
+        assert!(
+            message.contains(&log_path(&cfg).display().to_string()),
+            "and where the daemon wrote why: {message}"
         );
     }
 }

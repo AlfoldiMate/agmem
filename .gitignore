@@ -1,10 +1,8 @@
 .DS_Store
 
-# .claude is a mount of the context-flow framework, its own repo:
-# https://github.com/AlfoldiMate/context-flow — a symlink, never tracked here
-# (bare entry: dir patterns do not match symlinks)
-.claude
-.claude.premount-backup/
+# .claude is this repo's own Claude Code framework (ctx-flow, tuned to the
+# agmem plugin) and is tracked; its machine-local parts are listed in
+# .claude/.gitignore
 
 # Rust
 target/

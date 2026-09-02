@@ -26,6 +26,7 @@ pub mod client;
 #[cfg(unix)]
 pub mod serve;
 
+use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 use agmem_core::SpaceName;
@@ -159,19 +160,49 @@ impl Handshake {
     /// disagree. The message is the session's to read, so it names both
     /// sides; `retire` says whether this daemon should hand the socket over.
     pub fn accept(&self, asked: &Self) -> Result<(), Refusal> {
-        // Release first: a version skew subsumes whatever else differs, and
-        // the newest attacher's binary is the one the user just installed —
-        // the daemon defers to it rather than serving code that no longer
-        // matches what is on disk.
-        if asked.release != self.release {
-            return Err(Refusal {
-                retire: true,
-                message: format!(
-                    "the running daemon is agmem {} and this session is agmem {}; the \
-                     daemon is retiring so a fresh one can serve this release.",
-                    self.release, asked.release
-                ),
-            });
+        // Release first: a version skew subsumes whatever else differs. The
+        // *newer* binary is the one the user just installed, so the daemon
+        // defers to a newer attacher rather than serving code that no longer
+        // matches what is on disk — and keeps serving when the attacher is
+        // the older one (issue #112): two installs on PATH would otherwise
+        // retire each other's daemon in turn, cutting live sessions each time.
+        match newer(&asked.release, &self.release) {
+            Some(Ordering::Greater) => {
+                return Err(Refusal {
+                    retire: true,
+                    message: format!(
+                        "the running daemon is agmem {} and this session is agmem {}; the \
+                         daemon is retiring so a fresh one can serve this release. Sessions \
+                         still attached to it need a restart.",
+                        self.release, asked.release
+                    ),
+                });
+            }
+            Some(Ordering::Less) => {
+                return Err(Refusal {
+                    retire: false,
+                    message: format!(
+                        "the running daemon is agmem {} and this session is an older agmem \
+                         {}; the daemon keeps serving the newer release. Run this session \
+                         from the same agmem, or pass --no-daemon.",
+                        self.release, asked.release
+                    ),
+                });
+            }
+            Some(Ordering::Equal) => {}
+            None => {
+                // One side is not a version this code can read. Nothing says
+                // which is newer, so the rule from before #112 stands: the
+                // attacher's binary is the one on disk.
+                return Err(Refusal {
+                    retire: true,
+                    message: format!(
+                        "the running daemon is agmem {} and this session is agmem {}; the \
+                         daemon is retiring so a fresh one can serve this release.",
+                        self.release, asked.release
+                    ),
+                });
+            }
         }
         if asked.version != self.version {
             return Err(Refusal {
@@ -224,6 +255,33 @@ pub struct Refusal {
     pub message: String,
     /// Whether the daemon shuts down after refusing.
     pub retire: bool,
+}
+
+impl Refusal {
+    /// What a session hears when it attaches to a daemon another session
+    /// already retired (issue #112): the same "wait for the fresh one" the
+    /// first one got, so it waits instead of coming up on a socket about to
+    /// close.
+    pub fn already_retiring() -> Self {
+        Self {
+            retire: true,
+            message: format!(
+                "the running daemon (agmem {RELEASE}) is retiring for a newer release; \
+                 this session waits for the fresh one."
+            ),
+        }
+    }
+}
+
+/// Which of two releases is newer, if both are versions this code can read.
+///
+/// `Greater` means `asked` is newer than `daemon`. Both are `CARGO_PKG_VERSION`
+/// strings in practice, so the `None` branch is for a hand-built binary
+/// somebody gave a release name that is not one.
+fn newer(asked: &str, daemon: &str) -> Option<Ordering> {
+    let asked = semver::Version::parse(asked).ok()?;
+    let daemon = semver::Version::parse(daemon).ok()?;
+    Some(asked.cmp(&daemon))
 }
 
 impl std::fmt::Display for Refusal {
@@ -313,14 +371,37 @@ mod tests {
 
         for (label, broken, retires) in [
             (
-                "release",
+                "newer release",
                 Handshake {
-                    release: "0.0.0-elsewhere".to_owned(),
+                    release: "999.0.0".to_owned(),
                     ..daemon.clone()
                 },
-                // Another release means this daemon is the stale one: it
+                // A newer release means this daemon is the stale one: it
                 // steps aside rather than serving code that no longer
                 // matches the binary on disk.
+                true,
+            ),
+            (
+                "older release",
+                Handshake {
+                    release: "0.0.1".to_owned(),
+                    ..daemon.clone()
+                },
+                // An older attacher is a second install on PATH, not an
+                // upgrade (issue #112): retiring for it would let the two
+                // binaries retire each other's daemon in turn.
+                false,
+            ),
+            (
+                "unreadable release",
+                Handshake {
+                    // Not a version at all — "0.0.0-elsewhere" would be, and
+                    // would sort as older.
+                    release: "elsewhere".to_owned(),
+                    ..daemon.clone()
+                },
+                // Nothing says which side is newer; the rule from before
+                // #112 stands and the attacher's binary wins.
                 true,
             ),
             (

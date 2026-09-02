@@ -17,6 +17,7 @@ use tokio::net::UnixStream;
 
 use crate::config::Config;
 use crate::daemon::{Ack, DAEMON_LOG_FILE, Handshake, RELEASE, socket_path, spawn_lock_path};
+use crate::lock;
 
 /// How long to queue for the right to start a daemon before giving up. Long
 /// enough for another session to finish starting one, short enough that a
@@ -30,9 +31,15 @@ const READY_DEADLINE: Duration = Duration::from_secs(120);
 /// How often to re-try the socket while waiting.
 const POLL: Duration = Duration::from_millis(50);
 
-/// How long a retiring daemon gets to unlink its socket before this session
-/// starts a fresh one anyway.
+/// How long a retiring daemon gets to unlink its socket and release the
+/// store lock before this session starts a fresh one anyway.
 const RETIRE_DEADLINE: Duration = Duration::from_secs(15);
+
+/// How long the daemon has to answer the handshake (issue #112). A daemon
+/// that accepted the connection and says nothing is wedged, not slow: the
+/// ack is one line written before any work, so a read that outlives this is
+/// a session that would otherwise hang with no memory tools and no message.
+const ACK_DEADLINE: Duration = Duration::from_secs(10);
 
 /// Attach this session to the shared store, starting the daemon if needed,
 /// and pump stdio until the client goes away.
@@ -51,7 +58,7 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
 /// every byte after it is MCP. [`run`] pumps stdio into it, `agmem context`
 /// (issue #46) speaks it itself.
 ///
-/// A daemon from another release answers "retiring" and shuts down (issue
+/// A daemon from an older release answers "retiring" and shuts down (issue
 /// #60); this session waits it out and starts a fresh daemon from its own
 /// binary — once. Two retirements in a row means two binaries are fighting
 /// over the socket, and that is the user's to resolve.
@@ -63,11 +70,11 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
 /// and no explanation.
 pub async fn attach(cfg: &Config) -> anyhow::Result<UnixStream> {
     let path = socket_path(&cfg.data_dir)?;
-    match attach_once(cfg, &path).await? {
+    match attach_once(cfg, &path, Takeover::No).await? {
         Attached::Serving(stream) => Ok(stream),
         Attached::DaemonRetired => {
             wait_for_retirement(&path).await;
-            match attach_once(cfg, &path).await? {
+            match attach_once(cfg, &path, Takeover::FromRetired).await? {
                 Attached::Serving(stream) => Ok(stream),
                 Attached::DaemonRetired => bail!(
                     "the shared store on {} retired twice in a row: two different agmem \
@@ -89,11 +96,24 @@ enum Attached {
     DaemonRetired,
 }
 
+/// Whether a daemon this session starts is replacing one that just retired.
+///
+/// It changes one thing: the fresh daemon's ready line, which then says that
+/// the sessions still attached to the old daemon need a restart (issue
+/// #112). That fact is otherwise recorded nowhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Takeover {
+    /// The ordinary start: nothing was serving.
+    No,
+    /// The daemon that was serving retired for this session's release.
+    FromRetired,
+}
+
 /// Connect or start a daemon, hand it the handshake, and read its verdict.
-async fn attach_once(cfg: &Config, path: &Path) -> anyhow::Result<Attached> {
+async fn attach_once(cfg: &Config, path: &Path, takeover: Takeover) -> anyhow::Result<Attached> {
     let mut stream = match connect(path).await {
         Some(stream) => stream,
-        None => start_one(cfg, path).await?,
+        None => start_one(cfg, path, takeover).await?,
     };
     let mut handshake = serde_json::to_vec(&Handshake::new(cfg))?;
     handshake.push(b'\n');
@@ -102,7 +122,7 @@ async fn attach_once(cfg: &Config, path: &Path) -> anyhow::Result<Attached> {
         .await
         .context("the shared store closed before the handshake landed")?;
 
-    let ack = read_ack(&mut stream, cfg).await?;
+    let ack = read_ack(&mut stream, cfg, ACK_DEADLINE).await?;
     if ack.ok {
         return Ok(Attached::Serving(stream));
     }
@@ -110,7 +130,10 @@ async fn attach_once(cfg: &Config, path: &Path) -> anyhow::Result<Attached> {
         .error
         .unwrap_or_else(|| "the shared store refused the handshake without saying why".to_owned());
     if ack.retiring {
-        tracing::info!(%why, "waiting for the old daemon to retire");
+        tracing::info!(
+            %why,
+            "waiting for the old daemon to retire; sessions still attached to it need a restart"
+        );
         return Ok(Attached::DaemonRetired);
     }
     bail!(why)
@@ -119,7 +142,28 @@ async fn attach_once(cfg: &Config, path: &Path) -> anyhow::Result<Attached> {
 /// The daemon's one-line answer to the handshake, read a byte at a time: the
 /// bytes after the newline are MCP and belong to the pump, so nothing here
 /// may buffer past it.
-async fn read_ack(stream: &mut UnixStream, cfg: &Config) -> anyhow::Result<Ack> {
+///
+/// Bounded by `deadline` (issue #112): before it, a daemon that accepted and
+/// then hung — mid-migration on a store it could not finish opening, say —
+/// held every new session here forever.
+async fn read_ack(
+    stream: &mut UnixStream,
+    cfg: &Config,
+    deadline: Duration,
+) -> anyhow::Result<Ack> {
+    match tokio::time::timeout(deadline, read_ack_line(stream, cfg)).await {
+        Ok(ack) => ack,
+        Err(_elapsed) => bail!(
+            "the shared store accepted the connection but did not answer the handshake \
+             within {deadline:?}. It is wedged rather than slow{}; stop it and retry. Its \
+             log is {}.",
+            holder_hint(cfg),
+            log_path(cfg).display()
+        ),
+    }
+}
+
+async fn read_ack_line(stream: &mut UnixStream, cfg: &Config) -> anyhow::Result<Ack> {
     let mut line = Vec::new();
     let mut byte = [0u8; 1];
     loop {
@@ -130,12 +174,15 @@ async fn read_ack(stream: &mut UnixStream, cfg: &Config) -> anyhow::Result<Ack> 
         if n == 0 {
             // Pre-#60 daemons never wrote an ack: a refusal was a close the
             // client pumped through and exited 0 on. Meeting that close here
-            // turns it into the message it always should have been.
+            // turns it into the message it always should have been — and
+            // since a daemon that old cannot be retired over the wire, the
+            // message carries the pid to stop by hand (issue #112).
             bail!(
                 "the shared store closed without answering the handshake. It is probably \
-                 an agmem older than {RELEASE} still holding {}; stop that process (or \
+                 an agmem older than {RELEASE} still holding {}{}; stop that process (or \
                  wait out its idle timeout) and retry. Its log is {}.",
                 cfg.data_dir.display(),
+                holder_hint(cfg),
                 log_path(cfg).display()
             );
         }
@@ -150,15 +197,54 @@ async fn read_ack(stream: &mut UnixStream, cfg: &Config) -> anyhow::Result<Ack> 
     serde_json::from_slice(&line).context("the shared store's handshake ack is not JSON")
 }
 
-/// Wait for a retiring daemon to unlink its socket, then a beat longer for
-/// its store lock to release with its process — the fresh daemon this
-/// session is about to start needs both gone.
+/// The pid on the store lock, worded to drop into a message — with the
+/// command to run, because a session that has to kill a daemon by hand
+/// should not also have to work out how.
+fn holder_hint(cfg: &Config) -> String {
+    match lock::owner(&cfg.data_dir) {
+        Some(pid) => format!(" (pid {pid} by its lock file: `kill {pid}`)"),
+        None => String::new(),
+    }
+}
+
+/// Wait for a retiring daemon to unlink its socket. Its store lock goes
+/// with its process, a little later; [`start_one`] waits for that.
 async fn wait_for_retirement(path: &Path) {
     let deadline = Instant::now() + RETIRE_DEADLINE;
     while Instant::now() < deadline && path.exists() {
         tokio::time::sleep(POLL).await;
     }
-    tokio::time::sleep(Duration::from_millis(200)).await;
+}
+
+/// Wait for the store lock to be free, so the daemon about to be started
+/// does not die on it.
+///
+/// A retiring daemon drains its sessions for a moment after it unlinks the
+/// socket; the lock is what says its process is actually gone (issue #112 —
+/// before this, a fixed sleep guessed, and a guess too short cost the
+/// session the whole `READY_DEADLINE` before it learned anything). A lock
+/// still held past the deadline is a process that is not going anywhere: a
+/// `--no-daemon` session, or a daemon that stopped answering.
+///
+/// # Errors
+/// When the lock is still held after `RETIRE_DEADLINE`.
+async fn wait_for_store_lock(cfg: &Config) -> anyhow::Result<()> {
+    let deadline = Instant::now() + RETIRE_DEADLINE;
+    loop {
+        if lock::probe(&cfg.data_dir)? {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            bail!(
+                "another agmem process{} still owns the store in {} after {RETIRE_DEADLINE:?}, \
+                 and no daemon is answering on its socket. It is a --no-daemon session or a \
+                 daemon that stopped serving; stop it, or pass --no-daemon here.",
+                holder_hint(cfg),
+                cfg.data_dir.display()
+            );
+        }
+        tokio::time::sleep(POLL).await;
+    }
 }
 
 /// Where the daemon this configuration would start writes its log.
@@ -176,7 +262,7 @@ async fn connect(path: &Path) -> Option<UnixStream> {
 }
 
 /// Take the spawn lock, start a daemon, and wait for it to accept.
-async fn start_one(cfg: &Config, path: &Path) -> anyhow::Result<UnixStream> {
+async fn start_one(cfg: &Config, path: &Path, takeover: Takeover) -> anyhow::Result<UnixStream> {
     std::fs::create_dir_all(&cfg.data_dir)
         .with_context(|| format!("cannot create data dir {}", cfg.data_dir.display()))?;
     let _guard = queue_to_spawn(&spawn_lock_path(&cfg.data_dir)).await?;
@@ -192,8 +278,13 @@ async fn start_one(cfg: &Config, path: &Path) -> anyhow::Result<UnixStream> {
         std::fs::remove_file(path)
             .with_context(|| format!("cannot clear the stale socket {}", path.display()))?;
     }
+    // Nothing answers on the socket, but the store may still be held — by
+    // the daemon that just retired and is draining, most often. A daemon
+    // started now would exit on the lock, and this session would learn that
+    // only from the ready timeout.
+    wait_for_store_lock(cfg).await?;
 
-    spawn(cfg)?;
+    spawn(cfg, takeover)?;
     wait_until_ready(cfg, path).await
 }
 
@@ -231,7 +322,7 @@ async fn queue_to_spawn(path: &Path) -> anyhow::Result<File> {
 }
 
 /// Start a detached daemon from this same binary.
-fn spawn(cfg: &Config) -> anyhow::Result<()> {
+fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<()> {
     let exe = std::env::current_exe()
         .context("cannot find this binary to start the shared store from")?;
     let log_file = log_path(cfg);
@@ -256,6 +347,9 @@ fn spawn(cfg: &Config) -> anyhow::Result<()> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    if takeover == Takeover::FromRetired {
+        command.arg("--took-over");
+    }
 
     // Its own process group. The daemon has to outlive the session that
     // happened to start it, including a Ctrl-C in the terminal that owns it.
@@ -271,7 +365,7 @@ fn spawn(cfg: &Config) -> anyhow::Result<()> {
             log_file.display()
         )
     })?;
-    tracing::info!(log = %log_file.display(), "started the shared store");
+    tracing::info!(log = %log_file.display(), ?takeover, "started the shared store");
     Ok(())
 }
 
@@ -312,4 +406,76 @@ async fn pump(stream: UnixStream) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(data: &Path) -> Config {
+        use clap::Parser as _;
+        crate::config::Cli::try_parse_from([
+            "agmem",
+            "--embedder",
+            "none",
+            "--data",
+            &data.display().to_string(),
+        ])
+        .expect("parse")
+        .resolve()
+        .expect("resolve")
+    }
+
+    #[tokio::test]
+    async fn a_daemon_that_accepts_and_says_nothing_is_reported_not_waited_on() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = config(dir.path());
+        let path = socket_path(dir.path()).expect("socket path");
+        let listener = tokio::net::UnixListener::bind(&path).expect("bind");
+        // Accept and hold: what a daemon wedged between accept and ack does.
+        let wedged = tokio::spawn(async move {
+            let (held, _) = listener.accept().await.expect("accept");
+            std::future::pending::<()>().await;
+            drop(held);
+        });
+
+        let mut stream = UnixStream::connect(&path).await.expect("connect");
+        let error = read_ack(&mut stream, &cfg, Duration::from_millis(100))
+            .await
+            .expect_err("no ack within the deadline is an error");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("did not answer the handshake"),
+            "the message says what happened: {message}"
+        );
+        assert!(
+            message.contains(&cfg.data_dir.join(DAEMON_LOG_FILE).display().to_string()),
+            "and where to look: {message}"
+        );
+        wedged.abort();
+    }
+
+    #[tokio::test]
+    async fn a_close_without_an_ack_names_the_pid_on_the_lock() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = config(dir.path());
+        let path = socket_path(dir.path()).expect("socket path");
+        let listener = tokio::net::UnixListener::bind(&path).expect("bind");
+        // What a pre-v3 daemon does with a handshake it refuses: close.
+        tokio::spawn(async move {
+            let (accepted, _) = listener.accept().await.expect("accept");
+            drop(accepted);
+        });
+        std::fs::write(dir.path().join(lock::LOCK_FILE), "4242\n").expect("a lock file");
+
+        let mut stream = UnixStream::connect(&path).await.expect("connect");
+        let error = read_ack(&mut stream, &cfg, ACK_DEADLINE)
+            .await
+            .expect_err("a close is not an ack");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("kill 4242"),
+            "the way out is a command, not a hunt: {message}"
+        );
+    }
 }

@@ -32,6 +32,10 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 directories = { workspace = true }
 jiff = { workspace = true }
+# The daemon retires for a *newer* attacher and keeps serving an older one
+# (issue #112); telling the two apart is a version comparison, not a string
+# one. Already in the tree through surrealdb.
+semver = "1.0"
 # `client` is not only for tests: `agmem context` (issue #46) speaks MCP to
 # the shared daemon from the client side, over the same socket a session uses.
 rmcp = { workspace = true, features = ["client"] }

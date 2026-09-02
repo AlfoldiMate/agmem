@@ -388,3 +388,117 @@ async fn a_probe_that_says_nothing_does_not_wedge_the_daemon() {
         "the daemon still serves after a probe came and went: {found}"
     );
 }
+
+#[tokio::test]
+async fn a_session_from_an_older_release_is_refused_and_the_daemon_stays() {
+    let shared = Shared::start().await;
+    let mut asked = Handshake::new(&config(shared.data.path(), "downgraded"));
+    asked.release = "0.0.1".to_owned();
+    let mut line = serde_json::to_vec(&asked).expect("serialize");
+    line.push(b'\n');
+
+    let (read, mut write) = shared.connect().await.into_split();
+    write.write_all(&line).await.expect("send the handshake");
+    let mut reply = String::new();
+    BufReader::new(read)
+        .read_line(&mut reply)
+        .await
+        .expect("read the ack");
+    let ack: Ack = serde_json::from_str(&reply).expect("the ack is JSON");
+    assert!(
+        !ack.ok && !ack.retiring,
+        "an older attacher is a second install on PATH, not an upgrade (issue #112); \
+         retiring for it would let two binaries retire each other in turn: {ack:?}"
+    );
+    assert!(
+        ack.error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("--no-daemon"),
+        "the refusal names a way out: {ack:?}"
+    );
+
+    // The daemon is still the newest binary on the socket, so it keeps serving.
+    let session = shared.attach("still-served").await;
+    let found = call(&session, "recall", json!({})).await;
+    assert!(
+        found["hits"].as_array().expect("hits").is_empty(),
+        "the daemon serves on after refusing an older release: {found}"
+    );
+}
+
+#[tokio::test]
+async fn a_retiring_daemon_turns_late_attachers_away_and_drains_before_exiting() {
+    let mut shared = Shared::start().await;
+    let already_here = shared.attach("already-here").await;
+    // Connected before the retirement, handshake not yet sent: the shape of
+    // a session that raced the upgrade.
+    let (late_read, mut late_write) = shared.connect().await.into_split();
+
+    let mut asked = Handshake::new(&config(shared.data.path(), "upgraded"));
+    asked.release = "999.0.0".to_owned();
+    let mut line = serde_json::to_vec(&asked).expect("serialize");
+    line.push(b'\n');
+    let (read, mut write) = shared.connect().await.into_split();
+    write.write_all(&line).await.expect("send the handshake");
+    let mut reply = String::new();
+    BufReader::new(read)
+        .read_line(&mut reply)
+        .await
+        .expect("read the ack");
+    let ack: Ack = serde_json::from_str(&reply).expect("the ack is JSON");
+    assert!(!ack.ok && ack.retiring, "{ack:?}");
+    let retired_at = std::time::Instant::now();
+
+    // The daemon unlinks its socket the moment it stops accepting; that is
+    // the observable edge of "retiring" for the late session below.
+    let socket = daemon::socket_path(shared.data.path()).expect("socket path");
+    for _ in 0..500 {
+        if !socket.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        !socket.exists(),
+        "a retiring daemon stops advertising itself at once"
+    );
+
+    late_write
+        .write_all(&shared.handshake("late"))
+        .await
+        .expect("the late handshake lands on a connection the daemon accepted");
+    let mut reply = String::new();
+    BufReader::new(late_read)
+        .read_line(&mut reply)
+        .await
+        .expect("read the late ack");
+    let ack: Ack = serde_json::from_str(&reply).expect("the late ack is JSON");
+    assert!(
+        !ack.ok && ack.retiring,
+        "a session accepted onto a retiring daemon would come up with memory tools and \
+         lose them a moment later; it hears the same 'wait' the upgrader did (issue \
+         #112): {ack:?}"
+    );
+
+    // The session that was already attached is served through the drain
+    // and cut loose at its end, not before.
+    let found = call(&already_here, "recall", json!({})).await;
+    assert!(
+        found["hits"].as_array().expect("hits").is_empty(),
+        "{found}"
+    );
+    tokio::time::timeout(Duration::from_secs(10), &mut shared.daemon)
+        .await
+        .expect("the daemon exits once the drain is over")
+        .expect("cleanly")
+        .expect("without error");
+    assert!(
+        retired_at.elapsed() >= daemon::serve::DRAIN,
+        "a session was still attached, so the daemon stayed for the drain window"
+    );
+    already_here
+        .waiting()
+        .await
+        .expect("the daemon's exit closes the session's transport");
+}

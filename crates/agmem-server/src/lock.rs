@@ -60,3 +60,72 @@ pub fn acquire(data_dir: &Path) -> anyhow::Result<DataDirLock> {
         }
     }
 }
+
+/// The pid recorded in the lock file, if a process ever took it.
+///
+/// Advisory: the number is whatever the last holder wrote, and it is only
+/// useful in a message that also says how to check it. The holder that is
+/// still alive is the interesting one, and [`probe`] answers that.
+pub fn owner(data_dir: &Path) -> Option<String> {
+    let owner = fs::read_to_string(data_dir.join(LOCK_FILE)).ok()?;
+    let owner = owner.trim();
+    (!owner.is_empty()).then(|| owner.to_owned())
+}
+
+/// Whether the data-dir lock is free right now, without keeping it.
+///
+/// A session that just watched a daemon retire uses this to know when that
+/// daemon's *process* is gone (issue #112): the socket vanishes when the
+/// daemon stops accepting, but the store lock goes only with the process,
+/// and a fresh daemon started before then fails on it.
+///
+/// # Errors
+/// When the lock file cannot be opened or locked for a reason other than
+/// another process holding it.
+pub fn probe(data_dir: &Path) -> anyhow::Result<bool> {
+    let path = data_dir.join(LOCK_FILE);
+    let file = File::options()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&path)
+        .with_context(|| format!("cannot open lock file {}", path.display()))?;
+    match file.try_lock() {
+        // Dropping `file` releases what this just took.
+        Ok(()) => Ok(true),
+        Err(TryLockError::WouldBlock) => Ok(false),
+        Err(TryLockError::Error(err)) => {
+            Err(err).with_context(|| format!("cannot lock {}", path.display()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_probe_sees_a_held_lock_and_a_released_one() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(
+            probe(dir.path()).expect("probe"),
+            "nobody holds a fresh dir"
+        );
+        assert_eq!(owner(dir.path()), None, "nobody has written a pid");
+
+        let held = acquire(dir.path()).expect("acquire");
+        assert!(!probe(dir.path()).expect("probe"), "held by this process");
+        assert_eq!(
+            owner(dir.path()).as_deref(),
+            Some(std::process::id().to_string().as_str()),
+            "the holder's pid is on record"
+        );
+
+        drop(held);
+        assert!(
+            probe(dir.path()).expect("probe"),
+            "the probe itself does not keep the lock, and neither does a dropped guard"
+        );
+    }
+}

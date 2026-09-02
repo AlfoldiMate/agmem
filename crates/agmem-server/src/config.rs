@@ -100,6 +100,13 @@ pub struct Cli {
     #[arg(long, hide = true)]
     pub daemon_serve: bool,
 
+    /// This daemon replaces one that retired for its release, so its ready
+    /// line can say that sessions still on the old one need a restart
+    /// (issue #112). Passed by the session that respawned it; meaningless
+    /// without --daemon-serve.
+    #[arg(long, hide = true, requires = "daemon_serve")]
+    pub took_over: bool,
+
     /// Seconds the shared daemon stays up with no sessions attached. 0 keeps
     /// it until the machine restarts.
     #[arg(
@@ -280,6 +287,7 @@ pub struct Config {
     pub reindex: bool,
     pub no_daemon: bool,
     pub daemon_serve: bool,
+    pub took_over: bool,
     pub idle_timeout: u64,
     /// The one-shot subcommand this run is, if it is one.
     pub command: Option<CliCommand>,
@@ -427,6 +435,7 @@ impl Cli {
             reindex: self.reindex,
             no_daemon: self.no_daemon,
             daemon_serve: self.daemon_serve,
+            took_over: self.took_over,
             idle_timeout: self.idle_timeout,
             command: self.command,
         })

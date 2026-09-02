@@ -72,6 +72,7 @@ dependencies = [
  "jiff",
  "rmcp",
  "schemars",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",

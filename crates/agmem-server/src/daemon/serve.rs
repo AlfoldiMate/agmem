@@ -5,6 +5,7 @@
 //! over a Unix socket. Sessions come and go; the store does not.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use agmem_embed::Embedder;
@@ -13,15 +14,25 @@ use anyhow::Context;
 use rmcp::ServiceExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::mpsc;
+use tokio::task::JoinSet;
+use tokio::time::Instant;
 
 use crate::config::Config;
-use crate::daemon::{Ack, Handshake, socket_path};
+use crate::daemon::{Ack, Handshake, Refusal, socket_path};
 use crate::service::AgmemService;
-use crate::{embedder, lock};
+use crate::{doctor, embedder, lock};
+
+/// How long a retiring daemon keeps serving the sessions already attached
+/// before it exits (issue #112). Long enough for a tool call in flight to
+/// answer; short enough that the upgrade someone just ran does not look like
+/// a hang. The session that retired it is waiting on the store lock this
+/// process holds, so every second here is a second before the new daemon
+/// can start.
+pub const DRAIN: Duration = Duration::from_secs(2);
 
 /// Own the store and serve every session that attaches, until nothing has
-/// been attached for `idle_timeout`.
+/// been attached for `idle_timeout` — or a newer release attaches, in which
+/// case this daemon retires so that release can serve.
 ///
 /// # Errors
 /// When the lock is already held, the store will not open or migrate, the
@@ -41,6 +52,20 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     // A daemon is where the sweep belongs: it is the process a machine starts
     // once, and the sessions attaching to it never start anything.
     let pruned = crate::startup::prune(&db).await;
+    // The checks `--doctor` cannot run while a daemon holds the store, run by
+    // the process that holds it (issue #112). They go to the log, not to the
+    // exit code: the schema and the embedder are up, so the store can serve,
+    // and a scratch write that failed is a line to read in daemon.log rather
+    // than a reason to leave every session without memory.
+    let checks = doctor::selfcheck(&db, embedder.as_ref()).await;
+    for check in &checks {
+        match &check.outcome {
+            Ok(detail) => tracing::info!(check = check.name, %detail, "selfcheck ok"),
+            Err(error) => {
+                tracing::warn!(check = check.name, %error, "selfcheck failed; serving anyway")
+            }
+        }
+    }
 
     // Bind last, and only once everything above has worked. A daemon that
     // advertises itself and then dies on migrate would invite every session
@@ -53,58 +78,125 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         embedder = embedder.model_id(),
         dim = embedder.dim(),
         pruned,
+        checks = checks.len(),
         socket = %path.display(),
         "shared store ready"
     );
+    if cfg.took_over {
+        // The sessions that were on the old daemon are pumping a closed
+        // socket: their memory tools are gone until they start again. This
+        // is the one place that fact is written down.
+        tracing::info!(
+            release = crate::daemon::RELEASE,
+            "took over from a retired daemon; sessions still attached to the old one need a restart"
+        );
+    }
 
     let idle = Duration::from_secs(cfg.idle_timeout);
     let daemon = Arc::new(cfg);
-    let (ended, mut endings) = mpsc::unbounded_channel::<SessionEnd>();
-    let mut attached: u32 = 0;
+    // Once set, every handshake still in flight is answered "retiring" rather
+    // than "ok": a session accepted onto a daemon that is about to exit would
+    // come up with memory tools and lose them a moment later.
+    let retiring = Arc::new(AtomicBool::new(false));
+    let mut sessions = JoinSet::<SessionEnd>::new();
+    let mut listener = Some(listener);
+    let mut drain_until: Option<Instant> = None;
 
     loop {
+        // Read once per turn: the branches below hold `sessions` borrowed
+        // while they wait, so none of them can ask it again.
+        let attached = sessions.len();
         tokio::select! {
-            accepted = listener.accept() => {
+            accepted = accept_on(listener.as_ref()), if listener.is_some() => {
                 let (stream, _) = accepted.context("accepting on the agmem socket")?;
-                attached += 1;
-                let (db, embedder, daemon, ended) =
-                    (db.clone(), Arc::clone(&embedder), Arc::clone(&daemon), ended.clone());
-                tokio::spawn(async move {
-                    let end = match session(stream, db, embedder, &daemon).await {
+                let (db, embedder, daemon, retiring) =
+                    (db.clone(), Arc::clone(&embedder), Arc::clone(&daemon), Arc::clone(&retiring));
+                sessions.spawn(async move {
+                    match session(stream, db, embedder, &daemon, &retiring).await {
                         Ok(end) => end,
                         Err(error) => {
                             tracing::warn!(error = %format!("{error:#}"), "session ended badly");
                             SessionEnd::Detached
                         }
-                    };
-                    // The receiver lives as long as the loop, so this only
-                    // fails once we are already shutting down.
-                    let _ = ended.send(end);
+                    }
                 });
             }
-            Some(end) = endings.recv() => {
-                attached = attached.saturating_sub(1);
-                if matches!(end, SessionEnd::Retiring) {
-                    // Sessions may still be attached, but they are attached
-                    // to code from a release that is no longer on disk;
-                    // cutting them loose is the fix, not the damage
-                    // (issue #60 — a stale daemon otherwise serves old
-                    // schema and scoring until its idle timeout).
-                    tracing::info!(attached, "another release attached; retiring so its binary can serve");
-                    break;
+            Some(ended) = sessions.join_next(), if attached > 0 => {
+                let end = ended.unwrap_or_else(|error| {
+                    tracing::warn!(%error, "a session task did not finish");
+                    SessionEnd::Detached
+                });
+                let attached = attached.saturating_sub(1);
+                match end {
+                    SessionEnd::Retiring if drain_until.is_none() => {
+                        // Sessions may still be attached, but they are attached
+                        // to code from a release that is no longer on disk;
+                        // cutting them loose is the fix, not the damage
+                        // (issue #60 — a stale daemon otherwise serves old
+                        // schema and scoring until its idle timeout). They get
+                        // `DRAIN` to answer whatever is in flight, no more.
+                        retiring.store(true, Ordering::SeqCst);
+                        listener = None;
+                        // Unlink now, not at exit: the refused session is
+                        // waiting for exactly this before it starts a daemon
+                        // from its binary, and every second of the drain
+                        // would otherwise be added to its wait.
+                        let _ = std::fs::remove_file(&path);
+                        drain_until = Some(Instant::now() + DRAIN);
+                        tracing::warn!(
+                            attached,
+                            drain = ?DRAIN,
+                            "a newer release attached; retiring so its binary can serve — \
+                             sessions still attached need a restart"
+                        );
+                        if attached == 0 {
+                            break;
+                        }
+                    }
+                    SessionEnd::Retiring | SessionEnd::Detached if drain_until.is_some() => {
+                        if attached == 0 {
+                            tracing::info!("every session detached; retiring now");
+                            break;
+                        }
+                    }
+                    SessionEnd::Retiring | SessionEnd::Detached => {
+                        tracing::debug!(attached, "session detached");
+                    }
                 }
-                tracing::debug!(attached, "session detached");
             }
-            () = idle_elapsed(idle, attached == 0) => {
+            () = tokio::time::sleep_until(drain_until.unwrap_or_else(Instant::now)), if drain_until.is_some() => {
+                tracing::warn!(attached, "drain window over; cutting the remaining sessions loose");
+                break;
+            }
+            () = idle_elapsed(idle, attached == 0), if drain_until.is_none() => {
                 tracing::info!(?idle, "nothing attached; shutting down");
                 break;
             }
         }
     }
 
+    // In the binary the process exit does this; in a test the daemon is a
+    // task, and its sessions must not outlive it.
+    sessions.abort_all();
     drop(listener);
-    let _ = std::fs::remove_file(&path);
+    if drain_until.is_none() {
+        // A retiring daemon unlinked its socket when it stopped accepting,
+        // and the path may already belong to the daemon that replaced it.
+        let _ = std::fs::remove_file(&path);
+    }
     Ok(())
+}
+
+/// The next connection on `listener`; parks when there is no listener. The
+/// `select!` guard keeps this from being polled in that state, but a branch
+/// still has to be a future.
+async fn accept_on(
+    listener: Option<&UnixListener>,
+) -> std::io::Result<(UnixStream, tokio::net::unix::SocketAddr)> {
+    match listener {
+        Some(listener) => listener.accept().await,
+        None => std::future::pending().await,
+    }
 }
 
 /// Completes once `idle` has passed with nothing attached.
@@ -123,8 +215,8 @@ async fn idle_elapsed(idle: Duration, nothing_attached: bool) {
 enum SessionEnd {
     /// The ordinary way: the client went away, the daemon keeps serving.
     Detached,
-    /// The session ran a different release; the daemon refused it and now
-    /// shuts down so that session can start a daemon from its own binary.
+    /// The session ran a newer release; the daemon refused it and now shuts
+    /// down so that session can start a daemon from its own binary.
     Retiring,
 }
 
@@ -135,6 +227,7 @@ async fn session(
     db: Db,
     embedder: Arc<dyn Embedder>,
     daemon: &Config,
+    retiring: &AtomicBool,
 ) -> anyhow::Result<SessionEnd> {
     let (read, mut write) = stream.into_split();
     let mut read = BufReader::new(read);
@@ -154,7 +247,14 @@ async fn session(
     // The ack goes over the socket either way (issue #60): a refusal that
     // only lands in daemon.log is one the session pumps through as EOF and
     // exits 0 on — no memory tools, no explanation.
-    let decision = Handshake::new(daemon).accept(&asked);
+    let decision = if retiring.load(Ordering::SeqCst) {
+        // Accepted after another session retired this daemon: the answer is
+        // the same "wait for the fresh one" that session got, not an `ok`
+        // on a socket about to close (issue #112).
+        Err(Refusal::already_retiring())
+    } else {
+        Handshake::new(daemon).accept(&asked)
+    };
     let ack = match &decision {
         Ok(()) => Ack::accepted(),
         Err(refusal) => Ack::refused(refusal),
@@ -167,7 +267,7 @@ async fn session(
         .context("writing the handshake ack")?;
     if let Err(refusal) = decision {
         if refusal.retire {
-            tracing::warn!(%refusal, "refused a session from another release");
+            tracing::warn!(%refusal, release = %asked.release, "refused a session; retiring");
             return Ok(SessionEnd::Retiring);
         }
         return Err(refusal.into());

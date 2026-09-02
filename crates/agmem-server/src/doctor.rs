@@ -8,6 +8,9 @@
 
 use std::path::Path;
 
+use agmem_embed::Embedder;
+use agmem_store::db::Db;
+
 use crate::config::Config;
 
 /// Run all checks; error (→ exit 1) when any failed.
@@ -44,7 +47,10 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
         if let Some(socket) = live_daemon(cfg).await {
             eprintln!("  ok    shared daemon        serving {socket}");
             eprintln!("  skip  single-writer lock    the daemon holds it");
-            eprintln!("  skip  database + schema     the daemon checked these when it started");
+            eprintln!(
+                "  skip  database + schema     the daemon checked these when it started; \
+                 its log has the result"
+            );
             failures += embedder_only(cfg);
             return finish(failures);
         }
@@ -143,24 +149,64 @@ async fn check_store(cfg: &Config) -> u32 {
 /// and not a log line. Rows written in BM25-only mode look identical and have
 /// the same remedy, so the message names it rather than guessing which
 /// happened.
-async fn check_vector_coverage(db: &agmem_store::db::Db) -> u32 {
-    match agmem_store::repo::reindex::pending_count(db).await {
-        Ok(0) => {
-            eprintln!("  ok    vector coverage      every row carries a vector");
+async fn check_vector_coverage(db: &Db) -> u32 {
+    match vector_coverage(db).await {
+        Ok(detail) => {
+            eprintln!("  ok    vector coverage      {detail}");
             0
-        }
-        Ok(pending) => {
-            eprintln!(
-                "  FAIL  vector coverage      {pending} row(s) carry no vector, so a vector \
-                 recall cannot reach them; run `agmem --reindex`"
-            );
-            1
         }
         Err(err) => {
             eprintln!("  FAIL  vector coverage      {err}");
             1
         }
     }
+}
+
+/// The coverage check's verdict, worded for whoever reports it.
+async fn vector_coverage(db: &Db) -> Result<String, String> {
+    match agmem_store::repo::reindex::pending_count(db).await {
+        Ok(0) => Ok("every row carries a vector".to_owned()),
+        Ok(pending) => Err(format!(
+            "{pending} row(s) carry no vector, so a vector recall cannot reach them; run \
+             `agmem --reindex`"
+        )),
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+/// One check over an open store, as the daemon logs it at start (issue #112)
+/// and `--doctor` prints it.
+#[derive(Debug)]
+pub struct Check {
+    /// What was checked, in the words the doctor report uses.
+    pub name: &'static str,
+    /// What was found: a detail worth a log line, or why it failed.
+    pub outcome: Result<String, String>,
+}
+
+/// The store checks that need the open handles: a scratch write and read,
+/// and — when there is a vector side — that every row carries one.
+///
+/// The daemon runs this over the `Db` it already holds, because a second
+/// connection to an embedded store from `--doctor` would be the second
+/// writer the daemon exists to prevent; until #112 those checks were simply
+/// skipped while a daemon was up. Nothing here decides what a failure means
+/// — the daemon logs and serves anyway, the doctor counts it.
+pub async fn selfcheck(db: &Db, embedder: &dyn Embedder) -> Vec<Check> {
+    let mut checks = vec![Check {
+        name: "write/read roundtrip",
+        outcome: roundtrip(db)
+            .await
+            .map(|()| "scratch record created and removed".to_owned())
+            .map_err(|err| err.to_string()),
+    }];
+    if embedder.dim() > 0 {
+        checks.push(Check {
+            name: "vector coverage",
+            outcome: vector_coverage(db).await,
+        });
+    }
+    checks
 }
 
 /// The embedder check on its own, for when the store belongs to the daemon.
@@ -217,13 +263,71 @@ fn check_data_dir(dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn roundtrip(db: &agmem_store::db::Db) -> Result<(), agmem_store::StoreError> {
+/// Write a scratch record, read it back, remove it.
+///
+/// `UPSERT`, not `CREATE`, because of the run before this one: a daemon
+/// killed between the write and the `DELETE` leaves the probe row behind,
+/// and a `CREATE` would then fail on "already exists" at every later start
+/// — a check that can only ever fail again is not a check. (A sweep ahead
+/// of the write would do the same, but `DELETE` on a table nothing has
+/// created yet is an error on a fresh store.)
+async fn roundtrip(db: &Db) -> Result<(), agmem_store::StoreError> {
     db.query(
-        "CREATE doctor_probe:check SET ok = true;
+        "UPSERT doctor_probe:check SET ok = true;
          SELECT VALUE ok FROM doctor_probe:check;
          DELETE doctor_probe;",
     )
     .await?
     .check()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_probe_row_left_behind_does_not_fail_the_next_roundtrip() {
+        let db = agmem_store::db::connect_with("mem://", None)
+            .await
+            .expect("an in-memory store");
+        agmem_store::migrate::ensure(&db).await.expect("migrate");
+        db.query("CREATE doctor_probe:check SET ok = false;")
+            .await
+            .expect("what an interrupted run leaves")
+            .check()
+            .expect("created");
+
+        roundtrip(&db)
+            .await
+            .expect("the roundtrip sweeps what an interrupted run left behind");
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = {
+            use clap::Parser as _;
+            crate::config::Cli::try_parse_from([
+                "agmem",
+                "--embedder",
+                "none",
+                "--db",
+                "mem://",
+                "--data",
+                &dir.path().display().to_string(),
+            ])
+            .expect("parse")
+            .resolve()
+            .expect("resolve")
+        };
+        let embedder = crate::embedder::build(&cfg).expect("the none embedder");
+        let checks = selfcheck(&db, embedder.as_ref()).await;
+        assert!(
+            checks.iter().all(|check| check.outcome.is_ok()),
+            "{checks:?}"
+        );
+        assert_eq!(
+            checks.len(),
+            1,
+            "with no vector side there is no coverage to check: {checks:?}"
+        );
+    }
 }

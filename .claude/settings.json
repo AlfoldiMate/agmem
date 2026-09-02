@@ -1,0 +1,48 @@
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/session-start-layout.nu\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          },
+          {
+            "type": "command",
+            "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/pre-worktree-guard.nu\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/post-bash-nudges.nu\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "outputStyle": "ctx-flow"
+}

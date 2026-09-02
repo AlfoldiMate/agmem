@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "agmem",
+  "owner": { "name": "Mate Alfoldi" },
+  "metadata": {
+    "description": "agmem — persistent memory for coding agents over MCP",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "agmem",
+      "source": "./plugin",
+      "description": "Persistent cross-session memory: the agmem MCP server, a briefing at every session start, checkpoint and tidy commands, and the hooks that make memory use measurable.",
+      "category": "productivity"
+    }
+  ]
+}

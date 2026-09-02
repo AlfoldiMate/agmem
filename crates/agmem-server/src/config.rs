@@ -132,6 +132,17 @@ pub enum CliCommand {
     /// can inject the briefing into a session instead of hoping the model
     /// asks for it.
     Context(ContextArgs),
+
+    /// Answer a Claude Code hook event: read the payload on stdin, print the
+    /// reply, exit 0. The shell side of the agmem plugin (`plugin/`).
+    Hook(HookArgs),
+}
+
+/// Which event `agmem hook` is answering.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct HookArgs {
+    #[command(subcommand)]
+    pub event: crate::hook::HookEvent,
 }
 
 /// What `agmem context` passes through to the `context` tool, one flag per

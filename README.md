@@ -95,7 +95,17 @@ points it elsewhere.
 agmem is a stdio MCP server: `command: "agmem"`, no arguments. One global
 registration covers every project.
 
-**Claude Code**
+**Claude Code** — the plugin does the whole wiring: it registers the server,
+injects the memory briefing at every session start, ships `/agmem:checkpoint`,
+`/agmem:memory` and `/agmem:doctor`, and logs which claims each session
+recalled and wrote (`plugin/README.md` has the details):
+
+```sh
+claude plugin marketplace add AlfoldiMate/agmem
+claude plugin install agmem@agmem
+```
+
+Or register the server alone and wire hooks yourself:
 
 ```sh
 claude mcp add agmem --scope user -- agmem
@@ -125,8 +135,12 @@ already say.
 
 ### Inject the briefing on session start
 
-`context` is also a shell command, so a session-start hook can put the memory
-block in front of the model before its first token instead of hoping it asks:
+The Claude Code plugin does this through `agmem hook session-start`, which
+reads the hook payload on stdin and prints the briefing as hook context — the
+same binary answers every plugin hook, so nothing else needs installing. For
+any other client, `context` is also a shell command, so a session-start hook
+can put the memory block in front of the model before its first token instead
+of hoping it asks:
 
 ```sh
 agmem context --query "release work" --budget-chars 4000

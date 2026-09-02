@@ -18,7 +18,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use agmem_server::daemon;
 use agmem_server::service::{self, AgmemService};
-use agmem_server::{config, doctor, embedder, lock, oneshot, reindex, startup, telemetry};
+use agmem_server::{config, doctor, embedder, hook, lock, oneshot, reindex, startup, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -46,8 +46,10 @@ async fn main() -> anyhow::Result<()> {
     // One-shot subcommands print their answer and exit. They route through
     // the daemon the way a session would (or open the store where a session
     // would), so they never contend with a running daemon for the store.
-    if let Some(config::CliCommand::Context(args)) = cfg.command.clone() {
-        return oneshot::context(cfg, args).await;
+    match cfg.command.clone() {
+        Some(config::CliCommand::Context(args)) => return oneshot::context(cfg, args).await,
+        Some(config::CliCommand::Hook(args)) => return hook::run(cfg, args.event).await,
+        None => {}
     }
 
     // A failure on the shared path exits non-zero rather than falling back to

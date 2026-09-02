@@ -46,7 +46,7 @@ def agmem-row []: nothing -> record {
     }
 
     # The plugin's hooks are `agmem hook <event>`, a subcommand that arrived in
-    # 0.1.9; an older binary serves MCP fine and answers every hook with a
+    # 0.1.10; an older binary serves MCP fine and answers every hook with a
     # usage error, so the briefing never arrives and nothing says why. Probe
     # the subcommand, not the version: a build from the branch carries it
     # under the previous version string.
@@ -54,7 +54,7 @@ def agmem-row []: nothing -> record {
     if $hook != 0 {
         let v = (try { ^agmem --version | complete | get stdout | str trim } | default "unknown version")
         return { dep: "agmem", status: "OLD", detail: $"($v), no `agmem hook`"
-            fix: "brew upgrade agmem — without `agmem hook` (0.1.9+) the plugin's hooks are silent" }
+            fix: "brew upgrade agmem — without `agmem hook` (0.1.10+) the plugin's hooks are silent" }
     }
 
     let r = try { ^agmem --doctor | complete }

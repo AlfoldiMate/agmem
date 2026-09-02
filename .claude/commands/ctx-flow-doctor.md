@@ -30,7 +30,7 @@ Then add the four checks a script cannot do well:
    `claude plugin install agmem@agmem`. Skill without tools means the
    plugin's server failed to start — `agmem --doctor` says why. An `OLD`
    binary row means the plugin's hooks are silent (they are `agmem hook …`,
-   which needs 0.1.9); a `STALE` row means no space derivation, so every
+   which needs 0.1.10); a `STALE` row means no space derivation, so every
    project reads and writes one shared `default` space, silently.
 3. **Hooks live?** Confirm `.claude/settings.json` registers the SessionStart
    (worktree layout check), PostToolUse (idiom nudge), and PreToolUse (rtk +

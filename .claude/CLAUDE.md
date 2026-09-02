@@ -14,7 +14,7 @@ anything missing.
   framework wants
 - **agmem** — persistent cross-session memory over MCP, wired in by its
   Claude Code plugin (`claude plugin marketplace add AlfoldiMate/agmem`,
-  then `claude plugin install agmem@agmem`); needs ≥ v0.1.9, since the
+  then `claude plugin install agmem@agmem`); needs ≥ v0.1.10, since the
   plugin's hooks are `agmem hook …` and an older binary answers them with
   silence. The plugin registers the server, injects the briefing at session
   start, logs what each session recalled, and nudges at seams; this

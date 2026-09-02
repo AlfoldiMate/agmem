@@ -67,7 +67,7 @@ exceptions, each holding state no CLI reaches: `nu --mcp` earns its slot by
 results without re-running, safe uncapped first runs), and `agmem` by *being*
 the memory — cross-session state that has to outlive every process.
 
-**On agmem:** it needs **v0.1.9 or newer**. The plugin's hooks are
+**On agmem:** it needs **v0.1.10 or newer**. The plugin's hooks are
 `agmem hook <event>` — a subcommand of the binary itself, so the plugin
 depends on nothing else — and an older binary answers them with a usage
 error the session never sees: memory simply fails to arrive. Below v0.1.1

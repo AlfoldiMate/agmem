@@ -10,7 +10,7 @@ the plugin needs nothing beyond agmem itself — no scripting runtime, no `jq`.
 
 ## Install
 
-Requires `agmem` 0.1.9 or newer on `PATH` (`cargo install agmem`, or the
+Requires `agmem` 0.1.10 or newer on `PATH` (`cargo install agmem`, or the
 Homebrew tap — see the repository README).
 
 ```

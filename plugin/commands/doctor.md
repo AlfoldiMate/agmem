@@ -19,7 +19,7 @@ MCP servers this session can see:
 
 Read both and report in at most six lines:
 
-1. Whether the binary is on PATH and its version (the plugin needs 0.1.9 or
+1. Whether the binary is on PATH and its version (the plugin needs 0.1.10 or
    newer for `agmem hook`; older binaries serve MCP fine but the hooks print
    nothing).
 2. Whether the self-check passed; for each failing line, its printed fix.

@@ -1,0 +1,15 @@
+# machine-local: libraryPath is an absolute path into ~/.cache/ctx-flow
+sgconfig.yml
+
+# a machine-local skill that is not part of the framework
+skills/rust-expert-developer/
+
+# session-local permissions — never ship
+settings.local.json
+
+# this repo's own scratch dropbox (subagent artifacts, legacy pre-agmem
+# notes) — machine-local, never ship
+notes/
+
+# macOS noise
+.DS_Store

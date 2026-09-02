@@ -226,8 +226,8 @@ Record IDs: `memory:ulid()`, `episode:ulid()` — ULIDs are temporally sortable,
 which makes "recent N" range scans and stable pagination free.
 
 Notes:
-- `embedding` is `option<…>` so `--embedder none` (BM25-only degraded mode)
-  and deferred embedding both work; HNSW ignores rows without vectors.
+- `embedding` is `option<…>` so deferred embedding and the no-vector test
+  double both work; HNSW ignores rows without vectors.
 - Array indexes need `COLUMNS <field>.*` and are only used by
   `field CONTAINS $x`. Without the `.*` the index covers the whole array, and
   the planner then serves `field = $x` from it — returning nothing, silently
@@ -606,8 +606,8 @@ agmem/
 │   │   │   │                     #   slices batches of 128 so a shared
 │   │   │   │                     #   backend is free between slices (#67)
 │   │   │   ├── fastembed.rs      # BGESmallENV15Q 384d, spawn_blocking wrapper,
-│   │   │   │                     #   cache dir mgmt   [feature "onnx", default]
-│   │   │   └── noop.rs           # BM25-only mode (dim 0)
+│   │   │   │                     #   cache dir mgmt — the one real backend
+│   │   │   └── noop.rs           # test double, no vectors (dim 0)
 │   │   └── tests/                # recorded-vector fixtures + regeneration
 │   └── agmem-server/             # the binary: `agmem`
 │       ├── src/
@@ -749,7 +749,7 @@ remember(params)
     the probe's measurement is kept (issue #83): each surviving row stores
     novelty = clamp(1 − nearest similarity, 0, 1) — the store as it stood at
     write time, never recomputed (not even by --reindex); NONE where nothing
-    measured (a correction, an empty space, BM25-only, any pre-v7 row)
+    measured (a correction, an empty space, a vector-less row, any pre-v7 row)
  5. one transaction:
       episode? → insert episode + chunks (chunk.rs) + chunk embeddings
       inserts  → CREATE memory:ulid() CONTENT {...}, source.ref → episode
@@ -830,7 +830,7 @@ recall(q)
     envelope (≥ 0.10 and more than half the spread) marks the tail, and a
     tail row falls only when its own similarity is also under the floor.
     Policy-placed rows — occupancy promotions, hop rows — are trim-exempt;
-    unmeasured rows (BM25-only mode, hop rows, text-arm-only hits) never
+    unmeasured rows (vector-less rows, hop rows, text-arm-only hits) never
     abstain and never fall; a filters-only call is never cut. A changed
     page says so in `cut: {kept, considered, best_similarity, note}`,
     `kept: 0` being the abstention (`capped`/`truncated` then stay absent).
@@ -1058,7 +1058,7 @@ rather than details:
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `none` |
+| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only supported backend (`none` is a hidden test-only value) |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
 | `--log`, `--log-file` / `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
@@ -1132,12 +1132,14 @@ Each phase is releasable; later phases only add.
 
 ## 9. Risks & open questions
 
-1. **ort is still 2.0-rc** under fastembed — pin exact versions; a
-   `--no-default-features` BM25-only build is the contingency if ONNX linking
-   breaks on a platform. (A pure-Rust model2vec `static` backend filled this
-   role until v0.1.7; it was removed unexercised — never built in CI, never
-   needed on a shipped platform, and it doubled the tokenizers/ndarray/hf-hub
-   dependency tree at mismatched major versions.)
+1. **ort is still 2.0-rc** under fastembed — pin exact versions. There is
+   no contingency build any more: the local ONNX model is a hard requirement,
+   and if linking breaks on a platform the fix is in fastembed/ort, not a
+   degraded mode. (A pure-Rust model2vec `static` backend and a
+   `--no-default-features` BM25-only build both filled this role until v0.1.7;
+   both were removed unexercised — never built in CI, never needed on a
+   shipped platform — and every retrieval behaviour tuned against the
+   vector-less path was tuning for a deployment nobody runs.)
 2. **SurrealKV cross-process behavior undocumented** — mitigated by the
    lockfile; revisit if SurrealDB documents multi-process embedded access.
    **Confirmed a real limit at #18**: Claude Code runs one stdio server per

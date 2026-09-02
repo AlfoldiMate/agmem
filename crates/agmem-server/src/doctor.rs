@@ -105,7 +105,7 @@ async fn check_store(cfg: &Config) -> u32 {
     // download happens, and a missing one should fail here, not at first use.
     match crate::embedder::build(cfg) {
         Ok(embedder) if embedder.dim() == 0 => {
-            eprintln!("  ok    embedder             none (BM25-only mode)");
+            eprintln!("  ok    embedder             none (test-only, no vectors)");
         }
         Ok(embedder) => {
             eprintln!(
@@ -171,7 +171,7 @@ async fn check_vector_coverage(db: &agmem_store::db::Db) -> u32 {
 fn embedder_only(cfg: &Config) -> u32 {
     match crate::embedder::build(cfg) {
         Ok(embedder) if embedder.dim() == 0 => {
-            eprintln!("  ok    embedder             none (BM25-only mode)");
+            eprintln!("  ok    embedder             none (test-only, no vectors)");
             0
         }
         Ok(embedder) => {

@@ -20,11 +20,10 @@ const STEPS = [
     "cargo fmt --check"
     "cargo clippy --workspace --all-targets -- -D warnings"
     "cargo test --workspace"
-    "cargo check --workspace --no-default-features --all-targets"
 ]
 
 # Short names for the report, in the same order.
-const LABELS = ["fmt" "clippy" "test" "no-onnx"]
+const LABELS = ["fmt" "clippy" "test"]
 
 # The workflow this stands in for.
 const WORKFLOW = ".github/workflows/ci.yml"

@@ -153,7 +153,10 @@ pub struct ContextArgs {
 pub enum EmbedderKind {
     /// fastembed/ONNX local model (default).
     Fastembed,
-    /// No embeddings; BM25-only degraded mode.
+    /// No embeddings at all. Not a supported deployment: agmem is BM25 plus a
+    /// local model, always. Hidden from `--help`; it exists so the subprocess
+    /// tests can start the real binary where CI forbids a model download.
+    #[value(hide = true)]
     None,
 }
 

@@ -19,7 +19,10 @@ fn doctor_passes_on_fresh_setup() {
     assert!(out.status.success(), "stderr: {stderr}");
     assert!(out.stdout.is_empty(), "doctor must not touch stdout");
     assert!(stderr.contains("all checks passed"), "got: {stderr}");
-    assert!(stderr.contains("BM25-only mode"), "got: {stderr}");
+    assert!(
+        stderr.contains("none (test-only, no vectors)"),
+        "got: {stderr}"
+    );
 }
 
 #[test]

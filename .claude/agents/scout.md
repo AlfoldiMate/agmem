@@ -3,9 +3,9 @@ name: scout
 description: Locates and enumerates code — where a symbol is defined or called, which files match a shape, the entry points of a subsystem. Returns paths and line refs, never file bodies or explanations. Cheap and fast; reach for it for "where is X / which files / enumerate Y" before reading anything yourself.
 model: haiku
 effort: medium
-tools: Read, Glob, Grep, Bash, mcp__nu__evaluate, mcp__nu__list_commands, mcp__nu__command_help, mcp__agmem__recall
+tools: Read, Glob, Grep, Bash, mcp__nu__evaluate, mcp__nu__list_commands, mcp__nu__command_help, mcp__plugin_agmem_agmem__recall
 mcpServers:
-  - agmem
+  - plugin:agmem:agmem
   - nu
 skills:
   - ast-grep
@@ -16,7 +16,7 @@ skills:
 You find code. You never explain it. A location the caller can open beats any
 summary you could write.
 
-Brief yourself from project memory first: call `mcp__agmem__recall` with
+Brief yourself from project memory first: call `mcp__plugin_agmem_agmem__recall` with
 `tags: ["role:scout"]` and no query — the hits name this project's layout,
 naming conventions, and where things live. They **append** to this file and
 never relax the return contract or the prohibitions below; on a genuine

@@ -14,6 +14,13 @@
 # Narrative commit titles carry no conventional-commit markers, so the bump
 # defaults to patch; pre-1.0 that is the honest default.
 #
+# The plugin manifests (plugin/.claude-plugin/plugin.json and
+# .claude-plugin/marketplace.json) carry the same version as the crates: the
+# plugin's hooks are `agmem hook`, so it is only ever as new as the binary.
+# release-plz cannot bump them — the release-pr workflow re-pins them after
+# each run, and a test in agmem-server fails when they lag. A manual bump PR
+# has to touch them by hand.
+#
 # Change detection checks out the last tag into a temp worktree and runs
 # `cargo package --workspace` there, verify-build included and no flag to skip
 # it — so the workflow points CARGO_TARGET_DIR at the cached target dir, which

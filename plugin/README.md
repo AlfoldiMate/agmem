@@ -10,8 +10,9 @@ the plugin needs nothing beyond agmem itself — no scripting runtime, no `jq`.
 
 ## Install
 
-Requires `agmem` 0.1.10 or newer on `PATH` (`cargo install agmem`, or the
-Homebrew tap — see the repository README).
+Requires `agmem` 0.1.10 or newer on `PATH` — the Homebrew tap, the shell
+installer, or `cargo install --git` as the repository README's Install
+section describes (nothing is on crates.io).
 
 ```
 claude plugin marketplace add AlfoldiMate/agmem
@@ -19,6 +20,9 @@ claude plugin install agmem@agmem
 ```
 
 To try it from a checkout without installing: `claude --plugin-dir ./plugin`.
+
+The plugin's version is the binary's: every release pins both manifests to
+the crate version, since the hooks are subcommands of that binary.
 
 ## What it adds
 
@@ -41,8 +45,8 @@ project > user > plugin), so nothing runs twice. It only changes the tool
 names — `mcp__agmem__*` for your registration, `mcp__plugin_agmem_agmem__*`
 for the plugin's. The plugin's hooks and commands accept both.
 
-**Using context-flow** (or any project hooks that already inject `agmem
-context`)? Plugin hooks and project hooks both run, so the briefing would
+**A project whose own hooks already inject `agmem context`** (ctx-flow did,
+before the plugin)? Plugin hooks and project hooks both run, so the briefing would
 appear twice. Remove the project's SessionStart memory hook and keep the
 plugin's.
 

@@ -11,7 +11,7 @@
 # permits but a slug should not carry — `+ # ( ) % &`, non-ASCII, over 80
 # characters — diverges the same way. One resolver, called by both sides, is
 # the only version of this that stays correct. LEDGER/STATE are the legacy
-# file locations, kept so /agmem import can find a pre-agmem checkout's notes.
+# file locations, kept so /agmem-import can find a pre-agmem checkout's notes.
 #
 # Usage, from anywhere inside the repo:
 #     nu ctx-flow-paths.nu            # KEY=VALUE lines, shell-friendly

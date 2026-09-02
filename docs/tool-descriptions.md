@@ -400,7 +400,7 @@ an agent can check itself against.
 ## Overriding a description
 
 `AGMEM_TOOL_DESC_<TOOL>` replaces one outright, per server, no rebuild —
-`REMEMBER`, `RECALL`, `CONTEXT`, `FORGET`, `INSPECT`. See the README for the
+`REMEMBER`, `RECALL`, `CONTEXT`, `REFLECT`, `FORGET`, `CONSOLIDATE`, `INSPECT`. See the README for the
 `.mcp.json` shape. Three things worth knowing:
 
 - It is the **whole** description, never an addition. What the agent reads is

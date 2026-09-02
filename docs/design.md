@@ -29,12 +29,12 @@ descriptions, and task breakdowns.
 ┌─────────────────────────┐ ┌─────────────────────────┐
 │ agmem process (per      │ │ agmem process           │
 │ client)                 │ │                         │
-│ ┌─────────────────────┐ │ │   Default mode: each    │
-│ │ rmcp server         │ │ │   process owns its OWN  │
-│ │  tools: remember,   │ │ │   embedded DB file      │
-│ │  recall, context,   │ │ │   (one process per      │
-│ │  forget, inspect    │ │ │   data dir, enforced    │
-│ │  prompts: rituals   │ │ │   by a lock file).      │
+│ ┌─────────────────────┐ │ │   Default mode: the     │
+│ │ rmcp server, rituals│ │ │   first agmem to start  │
+│ │  tools: remember,   │ │ │   becomes a daemon that │
+│ │  recall, context,   │ │ │   owns the DB file;     │
+│ │  reflect, forget,   │ │ │   later sessions talk   │
+│ │ consolidate, inspect│ │ │   to it (#37).          │
 │ └────────┬────────────┘ │ │                         │
 │ ┌────────▼────────────┐ │ │   Sharing mode: both    │
 │ │ core (domain)       │ │ │   processes point       │
@@ -57,9 +57,10 @@ descriptions, and task breakdowns.
 
 Key properties:
 
-- **One process, one binary, no daemon, no ports** in the default mode. The
-  MCP client spawns `agmem` over stdio; the DB is a file in the platform data
-  dir. Everything Spectron does with api/worker/scheduler/management processes,
+- **One binary, no ports.** The MCP client spawns `agmem` over stdio; on Unix
+  the first one to start becomes a shared daemon that owns the DB file in the
+  platform data dir, and later sessions hand off to it over a local socket
+  (#37). `--no-daemon` keeps the one-process mode. Everything Spectron does with api/worker/scheduler/management processes,
   a job queue, and an object store, agmem does in-process or lazily (§6.5).
 - **stdout is the MCP wire.** All logging goes to stderr (or a file). This is
   a hard invariant enforced in the telemetry module; `println!` is forbidden.
@@ -76,7 +77,7 @@ Key properties:
 
 | Spectron | agmem |
 |---|---|
-| 7 verbs: remember/recall/context/reflect/forget/upload/inspect | 5 tools v1: **remember, recall, context, forget, inspect** (+ reflect as a persisting tool in phase 3, #26; upload dropped) |
+| 7 verbs: remember/recall/context/reflect/forget/upload/inspect | 7 tools: **remember, recall, context, reflect, forget, consolidate, inspect** (upload dropped) |
 | Server-side 3-stage LLM extraction pipeline | **The calling agent extracts**; tool descriptions + input schemas are the contract |
 | Reconciler (create/update/supersede/flag, confidence floor) | Caller-driven supersession (`supersedes:` param) + server-side dedup gate (exact hash + cosine ≥ 0.95 → report duplicate instead of insert) |
 | Tri-temporal (system/known/valid time) | **Bi-temporal-lite**: `created_at` (known) + `valid_from`/`invalid_at` (valid); supersede-don't-delete chains |
@@ -1109,8 +1110,12 @@ rather than details:
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip, vector coverage; prints report, exits |
 | `--reindex` | — | Re-embed every row under the configured backend and record its model/dim pair — the one sanctioned way to change embedders; exits |
 | `context` subcommand | — | Print one session-start briefing to stdout and exit (`--query`, `--space`, `--budget-chars`) — the shell-hook surface, no MCP served |
+| `hook <event>` subcommand | — | The Claude Code plugin's hooks, reading the hook JSON on stdin: `session-start` (briefing plus branch tag, post-compaction recall list), `post-tool-use` (recall/write log, seam nudges), `stop` (recalled-but-wrote-nothing nudge); no MCP served |
 
-Client registration (the entire install story):
+Client registration: in Claude Code the plugin does it — `claude plugin
+marketplace add AlfoldiMate/agmem`, then `claude plugin install agmem@agmem`
+— and brings the `agmem hook` hooks and the checkpoint commands with it. Any
+other MCP client registers the binary by hand:
 
 ```sh
 claude mcp add agmem --scope user -- agmem

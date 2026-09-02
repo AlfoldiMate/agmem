@@ -11,17 +11,24 @@ Installation self-check, from the binary:
 !`agmem --doctor 2>&1 || echo "agmem --doctor exited $?"`
 ```
 
+Binary on PATH, and whether more than one copy is installed:
+
+```
+!`agmem --version 2>&1; which -a agmem`
+```
+
 MCP servers this session can see:
 
 ```
 !`claude mcp list 2>&1`
 ```
 
-Read both and report in at most six lines:
+Read all three and report in at most six lines:
 
 1. Whether the binary is on PATH and its version (the plugin needs 0.1.10 or
    newer for `agmem hook`; older binaries serve MCP fine but the hooks print
-   nothing).
+   nothing). Two paths from `which -a` means a stale copy may shadow the
+   upgraded one.
 2. Whether the self-check passed; for each failing line, its printed fix.
 3. Whether the `agmem` server is registered **twice** — once by this plugin
    and once at user or project scope. Claude Code connects only the

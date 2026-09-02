@@ -523,7 +523,7 @@ fn branch_of(cwd: &Path) -> Option<String> {
     (!branch.is_empty() && branch != "HEAD").then_some(branch)
 }
 
-/// A branch name as the tag carries it — the rule context-flow's hooks and
+/// A branch name as the tag carries it — the rule the ctx-flow hooks and
 /// `/checkpoint` share, so the two sides of the tag cannot drift.
 fn slug(branch: &str) -> String {
     let mut out = String::with_capacity(branch.len());

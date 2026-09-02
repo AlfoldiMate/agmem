@@ -56,7 +56,7 @@ how many you saw and how many you kept, and move on.
 ## 3. Legacy files
 
 If `.claude/notes/LEDGER.md` exists, this checkout predates agmem — run
-`/agmem import` once to move its contents into the store.
+`/agmem-import` once to move its contents into the store.
 
 ## Then
 

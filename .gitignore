@@ -1,5 +1,9 @@
 .DS_Store
 
+# ast-grep custom-language registry; libraryPath is an absolute path into
+# ~/.cache/ctx-flow, so it is machine-local (/ast-grep-it writes it)
+sgconfig.yml
+
 # .claude is this repo's own Claude Code framework (ctx-flow, tuned to the
 # agmem plugin) and is tracked; its machine-local parts are listed in
 # .claude/.gitignore

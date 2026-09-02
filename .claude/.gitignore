@@ -1,6 +1,3 @@
-# machine-local: libraryPath is an absolute path into ~/.cache/ctx-flow
-sgconfig.yml
-
 # a machine-local skill that is not part of the framework
 skills/rust-expert-developer/
 

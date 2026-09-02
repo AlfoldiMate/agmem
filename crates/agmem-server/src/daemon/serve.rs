@@ -30,14 +30,33 @@ use crate::{doctor, embedder, lock};
 /// can start.
 pub const DRAIN: Duration = Duration::from_secs(2);
 
+/// How long a daemon on its way out waits for the engine to close the store
+/// and release the store's own file lock, before it gives up its data-dir
+/// lock regardless (issue #124).
+const STORE_RELEASE_DEADLINE: Duration = Duration::from_secs(10);
+
 /// Own the store and serve every session that attaches, until nothing has
 /// been attached for `idle_timeout` — or a newer release attaches, in which
 /// case this daemon retires so that release can serve.
 ///
+/// On the way out it waits for the engine to let go of the store before it
+/// releases the data-dir lock (issue #124): the session that retired it is
+/// polling that lock, and starts a daemon the moment it is free.
+///
 /// # Errors
 /// When the lock is already held, the store will not open or migrate, the
-/// embedder will not load, or the socket cannot be bound.
+/// embedder will not load, or the socket cannot be bound. The `--daemon-serve`
+/// process writes the error to its log as well as returning it: its stderr
+/// is closed, and the log is the only place a detached process has.
 pub async fn run(cfg: Config) -> anyhow::Result<()> {
+    let outcome = serve(cfg).await;
+    if let Err(error) = &outcome {
+        tracing::error!(error = %format!("{error:#}"), "the shared store stopped with an error");
+    }
+    outcome
+}
+
+async fn serve(cfg: Config) -> anyhow::Result<()> {
     let path = socket_path(&cfg.data_dir)?;
     // The lock is what makes "one owner" true; the socket only advertises it.
     // Holding it here is also what makes the unlink below safe — no other
@@ -176,15 +195,75 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     }
 
     // In the binary the process exit does this; in a test the daemon is a
-    // task, and its sessions must not outlive it.
+    // task, and its sessions must not outlive it. Aborting is a request: the
+    // tasks, and the store handles they hold, go when the runtime gets to
+    // them, and the handle dropped below has to be the last one.
     sessions.abort_all();
+    while sessions.join_next().await.is_some() {}
     drop(listener);
     if drain_until.is_none() {
         // A retiring daemon unlinked its socket when it stopped accepting,
         // and the path may already belong to the daemon that replaced it.
         let _ = std::fs::remove_file(&path);
     }
+    // With the last handle gone the engine shuts the store down on a task of
+    // its own, and the store's file lock is released at the end of that —
+    // some milliseconds from now, while the data-dir lock `_lock` above is
+    // released the moment this returns. A session polling the data-dir lock
+    // would start a daemon in that gap, and that daemon would die on the
+    // store (issue #124). So: wait for the store to let go first.
+    drop(db);
+    wait_for_store_release(&daemon.db_url).await;
     Ok(())
+}
+
+/// Wait until the engine has released the store's own file lock, or
+/// [`STORE_RELEASE_DEADLINE`] has passed.
+///
+/// The probe is a second descriptor on the lock file: `flock` conflicts
+/// between descriptors of one process too, so it succeeds exactly when the
+/// engine's descriptor has gone. Engines that keep no lock file this process
+/// can see — `mem://`, a remote server — have nothing to wait for.
+async fn wait_for_store_release(db_url: &str) {
+    let Some(path) = store_lock_path(db_url) else {
+        return;
+    };
+    let started = Instant::now();
+    loop {
+        let probe = std::fs::File::options()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map(|file| file.try_lock().map(|()| drop(file)));
+        match probe {
+            // No lock file: the engine never took one, or the store is gone.
+            Err(_) | Ok(Ok(())) => {
+                tracing::info!(elapsed = ?started.elapsed(), "the store let go");
+                return;
+            }
+            Ok(Err(std::fs::TryLockError::WouldBlock)) => {}
+            Ok(Err(std::fs::TryLockError::Error(error))) => {
+                tracing::warn!(%error, path = %path.display(), "cannot probe the store's lock; exiting anyway");
+                return;
+            }
+        }
+        if started.elapsed() >= STORE_RELEASE_DEADLINE {
+            tracing::warn!(
+                deadline = ?STORE_RELEASE_DEADLINE,
+                "the store did not let go in time; exiting anyway"
+            );
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+/// The lock file an embedded surrealkv store keeps at its root, for the
+/// engines that keep one.
+fn store_lock_path(db_url: &str) -> Option<std::path::PathBuf> {
+    db_url
+        .strip_prefix("surrealkv://")
+        .map(|root| std::path::Path::new(root).join("LOCK"))
 }
 
 /// The next connection on `listener`; parks when there is no listener. The

@@ -684,7 +684,12 @@ main()
             that just retired holds it while it drains; a --no-daemon
             session holds it for good — after 15 s, a message naming the
             pid), spawn `argv[0] --daemon-serve` in its own process group,
-            wait for it to accept
+            wait for it to accept — watching the child as it waits, so a
+            daemon that exits at startup is reported at once with its log
+            path, not after the 120 s ready deadline (#124). After a
+            retirement the client starts it once more if it died: a daemon
+            from before #124 released agmem.lock a few ms before the store's
+            own file lock, and a daemon started in that gap dies on the store
          send one JSON handshake line
             { version, release, db_url, embedder, space, pool, max_k,
               tool_desc }
@@ -718,6 +723,15 @@ main()
  4. acquire exclusive lock file <data_dir>/agmem.lock (embedded engines only)
       └─ held by another pid → exit with MCP-friendly stderr message
          ("that pid is usually the daemon; drop --no-daemon, or use ws://")
+      On its way out the daemon drops its last store handle — the engine
+      then closes the store on a task of its own and releases the store's
+      file lock (agmem.db/LOCK) at the end of that — and waits for that lock
+      to be free (10 s at most) before it returns and agmem.lock goes with
+      it. So agmem.lock being free means the process has let go of the store
+      (#124); before this, the two were a few ms apart, and a session
+      polling agmem.lock started a daemon that died on the store's lock.
+      Every daemon failure is also written to daemon.log: its stderr is
+      closed, and the log is the only place a detached process has.
  5. any::connect(db_url); USE NS agmem DB main
  6. migrate::ensure()     — idempotent DEFINEs, meta.schema_version gate
  7. embedder init (async — model may download on very first run)

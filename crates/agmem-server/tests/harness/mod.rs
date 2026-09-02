@@ -84,8 +84,7 @@ impl Harness {
         migrate::ensure(&db).await.expect("migrate");
         // Startup records the embedder pair right after migrating (main.rs),
         // and a first backend whose width differs from the schema's baked
-        // 384 adopts the indexes there — the static-model roundtrip needs
-        // that, so the harness mirrors it.
+        // 384 adopts the indexes there, so the harness mirrors it.
         migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim())
             .await
             .expect("record the embedder");

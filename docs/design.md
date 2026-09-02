@@ -607,7 +607,6 @@ agmem/
 │   │   │   │                     #   backend is free between slices (#67)
 │   │   │   ├── fastembed.rs      # BGESmallENV15Q 384d, spawn_blocking wrapper,
 │   │   │   │                     #   cache dir mgmt   [feature "onnx", default]
-│   │   │   ├── static_m2v.rs     # model2vec potion-base-8M 256d [feature "static"]
 │   │   │   └── noop.rs           # BM25-only mode (dim 0)
 │   │   └── tests/                # recorded-vector fixtures + regeneration
 │   └── agmem-server/             # the binary: `agmem`
@@ -651,7 +650,6 @@ and dedup are unit-testable without a DB or model.
 | `rmcp` | 3.1.x | Official MCP SDK: `#[tool_router]`/`#[tool]` macros, stdio transport, prompts, annotations | 3 majors in 6 months — pin minor; supports spec 2026-07-28; params must derive `schemars::JsonSchema` **1.x** |
 | `surrealdb` | 3.2.x, `default-features=false, features=["kv-surrealkv","kv-mem"]` | Embedded multi-model store | No documented cross-process lock → our lockfile; 3.0 renamed `SEARCH`→`FULLTEXT` analyzer clause; stay off 3.3 betas |
 | `fastembed` | 6.x | Default embedder (BGESmallENV15Q, 384d, quantized, offline after first fetch) | Rides `ort` 2.0.0-**rc** — pin exact; sync API → `spawn_blocking`; BGE wants `passage:`/`query:` prefixes; cache via `FASTEMBED_CACHE_DIR` |
-| `model2vec-rs` | 0.2.x (feature `static`) | Pure-Rust fallback embedder (potion-base-8M, 256d, ~30MB, instant cold start, ~92% of MiniLM quality) | Different dim → per-store `meta` guard |
 | `tokio` | 1.53.x | Runtime (required by rmcp + surrealdb) | — |
 | `serde`/`serde_json` | 1.x | Wire + rows | — |
 | `schemars` | 1.2.x | Tool JSON schemas | Must be 1.x (rmcp `^1.0`); a stray 0.8 in the tree = baffling trait errors |
@@ -1060,7 +1058,7 @@ rather than details:
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `static` \| `none` |
+| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | `fastembed` \| `none` |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
 | `--log`, `--log-file` / `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
@@ -1128,14 +1126,18 @@ Each phase is releasable; later phases only add.
   `reflect` as persisting tool (`derived_from` provenance); entity table +
   `about`/`relates` edges + graph signal in recall *(only if multi-hop demand
   is demonstrated)*.
-- **Phase 4 — polish:** `--reindex` (embedder migration); `static` embedder;
+- **Phase 4 — polish:** `--reindex` (embedder migration);
   packaging (cargo-dist, Homebrew); `memory://` resources; eval harness;
   `ws://` sharing-mode hardening docs.
 
 ## 9. Risks & open questions
 
-1. **ort is still 2.0-rc** under fastembed — pin exact versions; the `static`
-   backend is the contingency if ONNX linking breaks on a platform.
+1. **ort is still 2.0-rc** under fastembed — pin exact versions; a
+   `--no-default-features` BM25-only build is the contingency if ONNX linking
+   breaks on a platform. (A pure-Rust model2vec `static` backend filled this
+   role until v0.1.7; it was removed unexercised — never built in CI, never
+   needed on a shipped platform, and it doubled the tokenizers/ndarray/hf-hub
+   dependency tree at mismatched major versions.)
 2. **SurrealKV cross-process behavior undocumented** — mitigated by the
    lockfile; revisit if SurrealDB documents multi-process embedded access.
    **Confirmed a real limit at #18**: Claude Code runs one stdio server per

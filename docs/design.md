@@ -680,17 +680,34 @@ main()
     a. unix + embedded + not --no-daemon → attach to the shared daemon (#37):
          connect <data_dir>/agmem.sock
          └─ nothing there → take <data_dir>/agmem.spawn.lock, clear a stale
-            socket, spawn `argv[0] --daemon-serve` in its own process group,
+            socket, wait for <data_dir>/agmem.lock to be free (a daemon
+            that just retired holds it while it drains; a --no-daemon
+            session holds it for good — after 15 s, a message naming the
+            pid), spawn `argv[0] --daemon-serve` in its own process group,
             wait for it to accept
          send one JSON handshake line
             { version, release, db_url, embedder, space, pool, max_k,
               tool_desc }
          read the one-line Ack { ok, error?, retiring } it answers with
-         (protocol v3, #60): a daemon from another release refuses with
-         retiring: true and shuts down — the client waits for the socket
-         to vanish and starts a fresh daemon from its own binary, exactly
-         once; other refusals (wrong store, wrong embedder) exit with the
-         daemon's message. The newest attacher's binary wins the socket.
+         (protocol v3, #60) — within 10 s: a daemon that accepted and says
+         nothing is wedged, and is reported rather than waited on (#112).
+         The daemon compares releases (#112). A *newer* attacher gets
+         retiring: true; the daemon stops accepting, unlinks the socket,
+         serves the sessions already attached for at most 2 s more, and
+         exits — the client waits for the socket to vanish and the lock to
+         free, then starts a fresh daemon from its own binary, passing
+         --took-over so its ready line says the old daemon's sessions need
+         a restart; exactly once. A session that attaches during the drain
+         hears retiring: true as well, never an ok on a socket about to
+         close. An *older* attacher is refused without retiring — two
+         installs on PATH must not retire each other's daemon in turn — and
+         so are the other refusals (wrong store, wrong embedder): a
+         non-zero exit carrying the daemon's message. A pre-v3 daemon
+         (≤ 0.1.3) closes without an Ack; the client reports it with the
+         pid from agmem.lock and the kill command, since nothing over the
+         wire can retire it. A dev build carries the same CARGO_PKG_VERSION
+         as the installed release and is served by the installed daemon;
+         work on the store itself runs with --no-daemon.
          then pump stdio ↔ socket, and decide nothing else
          └─ unreachable → stderr naming <data_dir>/daemon.log, exit 1. Never
             fall back to opening the store: that is the second writer.
@@ -709,6 +726,10 @@ main()
  8. repo::prune_expired() — lazy TTL close of decayed `fast` records, every
       space at once, and never fatal: the schema and the embedder are up, so a
       failed sweep is logged and the session is served anyway
+ 8a. the daemon only: the doctor's store checks over the handles it already
+      holds — a scratch write/read, and vector coverage when there is a
+      vector side — one log line each, never fatal (#112). `--doctor` skips
+      these while a daemon owns the store, so daemon.log is where they run.
  9. ensure space row; AgmemService.serve(transport); waiting()
 
  The daemon binds its socket only after 4–8 have succeeded, so one that dies

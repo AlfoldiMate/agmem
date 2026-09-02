@@ -249,3 +249,37 @@ mod tests {
         );
     }
 }
+
+/// The plugin's checkpoint command carries the same citation step as the
+/// server prompt — the step measured at 3/3 cited versus 0/3 from the
+/// `reflect` description alone (`docs/eval/ritual-reflect-note`). Two copies
+/// of one measured wording drift silently; this makes drift a failing test.
+#[cfg(test)]
+mod plugin_drift {
+    use super::*;
+
+    const PLUGIN_CHECKPOINT: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../plugin/commands/checkpoint.md"
+    ));
+
+    /// Whitespace-insensitive form, so hard-wrapped markdown compares equal
+    /// to the single-line prompt paragraph.
+    fn squash(text: &str) -> String {
+        text.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    #[test]
+    fn the_plugin_checkpoint_carries_the_prompts_citation_step_verbatim() {
+        let prompt = checkpoint(&Focus::default());
+        let step_4 = prompt
+            .split("\n\n")
+            .find(|paragraph| paragraph.trim_start().starts_with("4. "))
+            .expect("the checkpoint prompt has a step 4");
+        assert!(
+            squash(PLUGIN_CHECKPOINT).contains(&squash(step_4)),
+            "plugin/commands/checkpoint.md no longer carries step 4 of prompts::checkpoint \
+             word for word:\n{step_4}"
+        );
+    }
+}

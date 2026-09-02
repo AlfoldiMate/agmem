@@ -1,0 +1,28 @@
+{
+  "description": "agmem memory: inject the briefing at session start, log which claims were recalled and written, nudge at checkpoint seams. Every hook is `agmem hook <event>`, so nothing beyond the agmem binary is needed.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          { "type": "command", "command": "agmem hook session-start", "timeout": 15 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Bash|AskUserQuestion|mcp__(plugin_agmem_)?agmem__(recall|remember|reflect))$",
+        "hooks": [
+          { "type": "command", "command": "agmem hook post-tool-use", "timeout": 5 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "agmem hook stop", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}

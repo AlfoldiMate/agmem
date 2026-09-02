@@ -624,6 +624,9 @@ agmem/
 │       │   ├── doctor.rs         # --doctor self-check
 │       │   ├── reindex.rs        # --reindex re-embedding pass
 │       │   ├── oneshot.rs        # `agmem context`: one briefing, no server
+│       │   ├── hook.rs           # `agmem hook <event>`: the plugin's hooks —
+│       │   │                     #   briefing injection, per-session recall
+│       │   │                     #   log, seam nudges
 │       │   ├── embedder.rs       # backend selection from Config
 │       │   ├── service.rs        # AgmemService { repo, embedder, cfg,
 │       │   │                     #   tool_router, prompt_router }
@@ -635,6 +638,9 @@ agmem/
 │       │   ├── prompts.rs        # checkpoint / recall_first rituals
 │       │   └── telemetry.rs      # tracing → stderr (or AGMEM_LOG_FILE)
 │       └── tests/                # protocol, eval, harness, daemon, knn_probe
+├── plugin/                       # the Claude Code plugin: .mcp.json, hooks
+│                                 #   (all `agmem hook …`), commands, skill
+├── .claude-plugin/marketplace.json # lets `claude plugin marketplace add` find it
 ├── docs/                         # idea.md, design.md, eval batches
 └── scripts/                      # desc-eval.nu (LLM-driven description eval)
 ```

@@ -1,8 +1,8 @@
 ---
 name: architect
 description: Designs the approach for a non-trivial change — reads the existing code, weighs options, returns a concrete build sequence with files and risks. Read-only; never edits. Use before writing code for anything spanning more than two files.
-model: opus
-effort: high
+model: fable
+effort: xhigh
 tools: Read, Glob, Grep, Bash, mcp__plugin_agmem_agmem__recall, mcp__plugin_agmem_agmem__context
 mcpServers:
   - plugin:agmem:agmem

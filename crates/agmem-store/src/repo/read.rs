@@ -12,11 +12,11 @@
 //! one read that needs them, and it does not break that: the vector rides
 //! beside the record in an [`Embedded`], never inside it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use agmem_core::{
-    ChunkId, Derivation, Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord, SpaceName,
-    dedup, scoring,
+    ChunkId, Derivation, DocKind, Episode, EpisodeChunk, EpisodeId, Kind, MemoryId, MemoryRecord,
+    SpaceName, dedup, scoring,
 };
 use jiff::Timestamp;
 use surrealdb::engine::any::Any;
@@ -29,8 +29,8 @@ use crate::StoreError;
 use crate::db::Db;
 use crate::queries::read as queries;
 use crate::types::{
-    self, ChainRow, ChunkReadRow, EpisodeDetailRow, LiveVectorsRow, LocatedRow, MemoryReadRow,
-    NeighbourRow, SearchRow, StatsRow,
+    self, ChainRow, ChunkReadRow, DocumentHeaderRow, DocumentsRow, EpisodeDetailRow,
+    EpisodeReadRow, LiveVectorsRow, LocatedRow, MemoryReadRow, NeighbourRow, SearchRow, StatsRow,
 };
 
 /// The candidate pool one recall considers, before `k` truncates it
@@ -189,6 +189,27 @@ pub struct EpisodeDetail {
     pub chunks: Vec<EpisodeChunk>,
     /// The claims distilled from it, oldest first.
     pub derived: Vec<MemoryRecord>,
+}
+
+/// Which documents to list (#134, `inspect` on `docs:<space>`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DocumentFilter {
+    /// Keep only these kinds; empty keeps every kind.
+    pub kinds: Vec<DocKind>,
+    /// Keep only documents carrying one of these tags; empty keeps all.
+    pub tags: Vec<String>,
+    /// How many to return, newest first.
+    pub limit: usize,
+}
+
+/// One document on a listing page: the row, and how many live memories cite
+/// it through `source.ref` or `derived_from`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentSummary {
+    /// The document itself, content included.
+    pub episode: Episode,
+    /// Live memories citing it, each counted once.
+    pub cited: u64,
 }
 
 /// Per-space counts, for `inspect`.
@@ -687,6 +708,194 @@ pub async fn episode_of_chunk(
         .take::<Option<String>>(script.result_index)?
         .map(EpisodeId::new)
         .transpose()?)
+}
+
+/// Every episode filed under `title` in `space`, newest first (#134).
+///
+/// The first is the current version; the rest are what it replaced. A title
+/// nobody has used is an empty list, not an error — the caller decides what
+/// a miss means.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn documents_by_title(
+    db: &Db,
+    space: &SpaceName,
+    title: &str,
+) -> Result<Vec<Episode>, StoreError> {
+    let script = queries::documents_by_title();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("space", types::space_str(space)))
+            .bind(("title", title.to_owned()))
+            .await?,
+    )?;
+    resp.take::<Vec<EpisodeReadRow>>(script.result_index)?
+        .into_iter()
+        .map(EpisodeReadRow::into_episode)
+        .collect()
+}
+
+/// The documents in `space` that pass `filter`, newest first, each with how
+/// many live memories cite it (#134).
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn documents(
+    db: &Db,
+    space: &SpaceName,
+    filter: &DocumentFilter,
+) -> Result<Vec<DocumentSummary>, StoreError> {
+    let script = queries::documents(filter);
+    let mut query = db
+        .query(&script.text)
+        .bind(("space", types::space_str(space)));
+    if !filter.kinds.is_empty() {
+        let kinds: Vec<String> = filter
+            .kinds
+            .iter()
+            .copied()
+            .map(types::doc_kind_str)
+            .collect();
+        query = query.bind(("kinds", kinds));
+    }
+    if !filter.tags.is_empty() {
+        query = query.bind(("tags", filter.tags.clone()));
+    }
+    let mut resp = checked(query.await?)?;
+    let row: DocumentsRow = resp
+        .take::<Option<DocumentsRow>>(script.result_index)?
+        .ok_or(StoreError::UnexpectedResponse(
+            "the documents listing reported nothing",
+        ))?;
+
+    // A memory citing one document through both columns is one citer.
+    let mut citers: HashSet<(String, String)> = row
+        .by_source
+        .into_iter()
+        .map(|cite| (cite.memory, cite.document))
+        .collect();
+    for cite in row.by_derivation {
+        for document in cite.documents {
+            citers.insert((cite.memory.clone(), document));
+        }
+    }
+    let mut counts: HashMap<String, u64> = HashMap::new();
+    for (_, document) in citers {
+        *counts.entry(document).or_default() += 1;
+    }
+
+    row.docs
+        .into_iter()
+        .map(|doc| {
+            let cited = counts.get(&doc.id).copied().unwrap_or(0);
+            Ok(DocumentSummary {
+                episode: doc.into_episode()?,
+                cited,
+            })
+        })
+        .collect()
+}
+
+/// The live memories that cite one document, through `source.ref` or
+/// `derived_from`, oldest first (#134).
+///
+/// This is what a purge has to answer for: each of these would be left
+/// naming text the store no longer holds.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn document_citers(
+    db: &Db,
+    space: &SpaceName,
+    id: &EpisodeId,
+) -> Result<Vec<MemoryRecord>, StoreError> {
+    let script = queries::document_citers();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("target", types::episode_ref(id)))
+            .bind(("space", types::space_str(space)))
+            .await?,
+    )?;
+    resp.take::<Vec<MemoryReadRow>>(script.result_index)?
+        .into_iter()
+        .map(MemoryReadRow::into_record)
+        .collect()
+}
+
+/// The name and kind of a document, for a hit over one of its chunks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentHeader {
+    /// The document.
+    pub id: EpisodeId,
+    /// Its title.
+    pub title: String,
+    /// Its kind.
+    pub doc_kind: DocKind,
+}
+
+/// Which of `ids` in `space` are documents, and what they are called (#134).
+///
+/// Anonymous episodes and ids the space does not hold are simply absent.
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn document_headers(
+    db: &Db,
+    space: &SpaceName,
+    ids: &[EpisodeId],
+) -> Result<Vec<DocumentHeader>, StoreError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let script = queries::document_headers();
+    let refs: Vec<RecordId> = ids.iter().map(types::episode_ref).collect();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("space", types::space_str(space)))
+            .bind(("ids", refs))
+            .await?,
+    )?;
+    resp.take::<Vec<DocumentHeaderRow>>(script.result_index)?
+        .into_iter()
+        .map(|row| {
+            Ok(DocumentHeader {
+                id: EpisodeId::new(row.id)?,
+                // The query keeps only rows with `doc_kind`, and the write
+                // path requires a title beside it; a row without one is
+                // malformed rather than anonymous.
+                title: row
+                    .title
+                    .ok_or(StoreError::UnexpectedResponse("a document without a title"))?,
+                doc_kind: row
+                    .doc_kind
+                    .ok_or(StoreError::UnexpectedResponse("a document without a kind"))?
+                    .parse()?,
+            })
+        })
+        .collect()
+}
+
+/// The documents in `space` no live memory cites, newest first (#134).
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn orphan_documents(db: &Db, space: &SpaceName) -> Result<Vec<Episode>, StoreError> {
+    let script = queries::orphan_documents();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("space", types::space_str(space)))
+            .await?,
+    )?;
+    resp.take::<Vec<EpisodeReadRow>>(script.result_index)?
+        .into_iter()
+        .map(EpisodeReadRow::into_episode)
+        .collect()
 }
 
 /// What each of `ids` names in `spaces`, in the order they were asked about.

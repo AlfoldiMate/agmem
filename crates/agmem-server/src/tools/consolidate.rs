@@ -28,7 +28,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use agmem_core::{Kind, MemoryRecord, SpaceName, dedup, scoring};
+use agmem_core::{DocKind, Kind, MemoryRecord, SpaceName, dedup, scoring};
 use agmem_store::repo::{self, Embedded, Filters, Lookup};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -101,11 +101,40 @@ pub struct ConsolidateResult {
     /// lessons beats an unbounded pile of them.
     pub over_full_tags: Vec<OverFullTag>,
 
+    /// Documents no live claim cites, newest first (#134). Nothing removes
+    /// these on its own: one may be waiting to be read, or its claims were
+    /// closed. Distil what it still says and `remember` it citing the
+    /// document, or `forget` it with `purge: true` if it has served.
+    pub orphan_documents: Vec<OrphanDocument>,
+
     /// Present only when something limited the answer — no embedder, a
     /// space larger than one pass compares, or more findings than one
     /// answer carries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+}
+
+/// A document nothing live cites.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct OrphanDocument {
+    /// The space holding it.
+    pub space: String,
+
+    /// The document's id, as `episode:<id>` — what `inspect` and `forget`
+    /// take.
+    pub episode: String,
+
+    /// Its title.
+    pub title: String,
+
+    /// What kind of document it is.
+    pub doc_kind: DocKind,
+
+    /// How many characters it has.
+    pub chars: usize,
+
+    /// When it was stored, RFC3339.
+    pub created_at: String,
 }
 
 /// How much of one space this pass actually looked at.
@@ -225,6 +254,7 @@ pub async fn run(
     let mut contradictions = Vec::new();
     let mut stale = Vec::new();
     let mut over_full = Vec::new();
+    let mut orphans = Vec::new();
     let mut truncated_any = false;
 
     for space in &spaces {
@@ -261,6 +291,23 @@ pub async fn run(
             .await
             .map_err(|error| store_error(&error))?;
         over_full.extend(over_full_tags(space, lessons));
+
+        orphans.extend(
+            repo::orphan_documents(service.db(), space)
+                .await
+                .map_err(|error| store_error(&error))?
+                .into_iter()
+                .filter_map(|document| {
+                    Some(OrphanDocument {
+                        space: space.to_string(),
+                        episode: format!("episode:{}", document.id),
+                        title: document.title?,
+                        doc_kind: document.doc_kind?,
+                        chars: document.content.chars().count(),
+                        created_at: document.created_at.to_string(),
+                    })
+                }),
+        );
     }
 
     // Closest first in both, so the cap keeps what is most worth acting on
@@ -286,6 +333,7 @@ pub async fn run(
         contradictions,
         stale_contexts: stale,
         over_full_tags: over_full,
+        orphan_documents: orphans,
         note: note(service, truncated_any, capped, tags_capped),
     })
 }

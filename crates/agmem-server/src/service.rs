@@ -297,8 +297,9 @@ By default a forgotten memory is closed, not deleted: it stops surfacing in `rec
 `context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is \
 recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole \
 correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it \
-is the only way to remove something that must not stay on disk. Purging text does not purge the \
-claims distilled from it.\n\n\
+is the only way to remove something that must not stay on disk. Purging anonymous text does not \
+purge the claims distilled from it; purging a document (an episode with a title and kind) is \
+refused while live claims cite it, unless `cascade: true` purges those claims with it.\n\n\
 Forgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what \
 matched, then send the identical call with `dry_run: false` to act. Any other second call is \
 refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: \
@@ -324,8 +325,10 @@ Use it when a recalled claim matters enough to check, when two claims disagree, 
 to quote the original wording rather than the distilled version. `ref` takes one of: a memory id \
 (bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim \
 text it was distilled from; `episode:<id>` for that text with every claim drawn from it; \
-`entity:<name>` for everything ever said about a subject, corrected claims included; or `stats` \
-for per-space counts.\n\n\
+`entity:<name>` for everything ever said about a subject, corrected claims included; \
+`doc:<space>/<title>` for the newest document under a title, with its earlier versions listed; \
+`docs` or `docs:<space>` to list documents and how many claims cite each; or `stats` for per-space \
+counts. A document comes back one chunk at a time — `offset` and `limit` page through it.\n\n\
 Nothing is ever deleted here, so a claim that was corrected is still readable and still dated — \
 which is what lets you tell a belief that changed from a belief that was always wrong.",
         annotations(
@@ -352,7 +355,7 @@ Call it when memory has started to feel noisy: recall keeps returning the same c
 words, two stored claims look like they disagree, or you are picking up a project that has \
 accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use \
 `recall`.\n\n\
-Four lists come back, and every claim in each carries its full text rather than only its id, so \
+Five lists come back, and every claim in each carries its full text rather than only its id, so \
 you can judge it here instead of looking it up:\n\n\
 - `near_duplicates` — groups of live claims saying the same thing. Merge a group with one \
 `remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other \
@@ -369,7 +372,9 @@ slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n
 - `over_full_tags` — tags carrying more live lessons than a session's briefing will show for one \
 tag. Merge the way a duplicate group merges: one `remember` with the wording worth keeping and \
 the absorbed lessons' ids in `supersedes` — a few sharp lessons under a tag outwork a pile of \
-them.\n\n\
+them.\n\
+- `orphan_documents` — documents no live claim cites. Nothing removes them on its own: distil \
+what one still says and store it citing the document, or `forget` it with `purge: true`.\n\n\
 Every list can be empty, and usually some are — an empty answer means there is nothing worth your \
 attention, not that the call failed. `scanned` says what was actually compared.\n\n\
 This looks in the current space only, unlike every other read here: a tidy-up should not reach \

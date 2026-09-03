@@ -250,6 +250,75 @@ impl std::str::FromStr for Kind {
     }
 }
 
+/// What kind of artifact a document is (schema v9, #132).
+///
+/// A document is an episode with a name and one of these; the rest of the row
+/// is an ordinary episode, so retrieval and purge share one path with
+/// anonymous verbatim text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum DocKind {
+    /// A plan: what is to be built and in which order.
+    Plan,
+    /// A review of code, a design, or a change.
+    Review,
+    /// A report: what was found or measured.
+    Report,
+    /// A probe: the record of an experiment and its outcome.
+    Probe,
+    /// A verbatim session or conversation transcript.
+    Transcript,
+    /// Anything the other kinds do not name.
+    Other,
+}
+
+impl DocKind {
+    /// Every variant, in schema order.
+    pub const ALL: [Self; 6] = [
+        Self::Plan,
+        Self::Review,
+        Self::Report,
+        Self::Probe,
+        Self::Transcript,
+        Self::Other,
+    ];
+
+    /// The wire/row spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Review => "review",
+            Self::Report => "report",
+            Self::Probe => "probe",
+            Self::Transcript => "transcript",
+            Self::Other => "other",
+        }
+    }
+}
+
+impl std::fmt::Display for DocKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for DocKind {
+    type Err = CoreError;
+
+    /// # Errors
+    /// [`CoreError::UnknownVariant`] for anything but a row spelling.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.as_str() == s)
+            .ok_or_else(|| CoreError::UnknownVariant {
+                name: "doc_kind",
+                value: s.to_owned(),
+            })
+    }
+}
+
 /// How fast a memory's retention falls off between accesses.
 ///
 /// The rates themselves live with the scoring functions; this is the label
@@ -563,6 +632,22 @@ pub struct Episode {
     pub session: Option<String>,
     /// When the row was written.
     pub created_at: Timestamp,
+    /// The document's name (v9, #132); set together with `doc_kind`.
+    pub title: Option<String>,
+    /// What kind of artifact this is; `Some` makes the episode a document.
+    pub doc_kind: Option<DocKind>,
+    /// Free labels on a document; empty on anonymous episodes.
+    pub tags: Vec<String>,
+    /// The content's media type, e.g. `text/markdown`.
+    pub mime: Option<String>,
+}
+
+impl Episode {
+    /// Whether this episode is a document: named, typed, and guarded against
+    /// a purge while live memories cite it (design §2.3).
+    pub fn is_document(&self) -> bool {
+        self.doc_kind.is_some()
+    }
 }
 
 /// A retrieval-sized slice of an [`Episode`]: what search actually matches.

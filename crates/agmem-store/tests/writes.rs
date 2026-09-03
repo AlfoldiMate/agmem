@@ -117,6 +117,10 @@ async fn episode_chunks_and_memories_commit_together() {
                 content: "I like Rust. Python is fine too.".to_owned(),
                 occurred_at: None,
                 session: Some("s-1".to_owned()),
+                title: None,
+                doc_kind: None,
+                tags: Vec::new(),
+                mime: None,
                 chunks: vec![
                     NewChunk {
                         text: "I like Rust.".to_owned(),
@@ -262,6 +266,10 @@ async fn a_repeated_episode_is_reused_rather_than_re_chunked() {
         content: "I like Rust.".to_owned(),
         occurred_at: None,
         session: None,
+        title: None,
+        doc_kind: None,
+        tags: Vec::new(),
+        mime: None,
         chunks: vec![NewChunk {
             text: "I like Rust.".to_owned(),
             embedding: None,
@@ -699,6 +707,10 @@ async fn a_purge_takes_an_episodes_slices_and_leaves_the_claims_drawn_from_it() 
                 content: "I like Rust. Python is fine too.".to_owned(),
                 occurred_at: None,
                 session: None,
+                title: None,
+                doc_kind: None,
+                tags: Vec::new(),
+                mime: None,
                 chunks: vec![
                     NewChunk {
                         text: "I like Rust.".to_owned(),

@@ -156,12 +156,12 @@ for them at the right moments.
 
 | Tool | Does |
 |---|---|
-| `remember` | Store distilled claims, optionally with the verbatim episode they came from. Answers with a diff: created, duplicates, superseded, related. |
+| `remember` | Store distilled claims, optionally with the verbatim episode they came from. An episode given a `title` and `doc_kind` is a document: a plan, review, report, probe or transcript kept whole, versioned by title. Answers with a diff: created, duplicates, superseded, related. |
 | `recall` | Ask in words. BM25 and vector search fused, rescored by retention. Every hit carries its signals; a full page says what it cut. |
 | `context` | The session-start block: Instructions, Profile, Relevant, Lessons, within a character budget, every line ending in its id. |
-| `forget` | Close a memory, or purge it. By query it takes two identical calls, the first a dry run, so a deletion never reaches something that merely resembles the request. |
-| `inspect` | The paper trail: a claim's correction chain, the episode behind it, everything ever said about an entity, or per-space counts. |
-| `consolidate` | What needs tidying and nothing done about it: near-duplicate groups, contradiction candidates, stale working notes, over-full tags. Full text on every candidate. |
+| `forget` | Close a memory, or purge it. By query it takes two identical calls, the first a dry run, so a deletion never reaches something that merely resembles the request. A document is not purged while live claims cite it, unless `cascade` takes them with it. |
+| `inspect` | The paper trail: a claim's correction chain, the episode behind it, everything ever said about an entity, a document by title read one chunk at a time, the documents a space holds, or per-space counts. |
+| `consolidate` | What needs tidying and nothing done about it: near-duplicate groups, contradiction candidates, stale working notes, over-full tags, documents nothing cites. Full text on every candidate. |
 | `reflect` | Store a conclusion with the ids it was drawn from. A `summary` stands in for its cited claims when `context` runs short of budget. |
 
 | Prompt | Asks the agent to |

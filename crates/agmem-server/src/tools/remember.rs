@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use agmem_core::{DecayClass, Kind, Writer, chunk, dedup};
+use agmem_core::{DecayClass, DocKind, Kind, SpaceName, Writer, chunk, dedup};
 use agmem_store::repo::{self, Batch, NewChunk, NewEpisode, NewMemory, Written};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -102,6 +102,26 @@ pub struct EpisodeInput {
     /// A grouping key for one conversation or working session.
     #[serde(default)]
     pub session: Option<String>,
+
+    /// Names the episode as a document — a plan, review, report, probe or
+    /// transcript kept whole so claims can cite it. Set with `doc_kind`.
+    /// A later episode under the same title is the newer version; the older
+    /// one stays readable.
+    #[serde(default)]
+    pub title: Option<String>,
+
+    /// What kind of document this is. Requires `title`; `transcript` is
+    /// refused in the `user` space, which every project reads.
+    #[serde(default)]
+    pub doc_kind: Option<DocKind>,
+
+    /// Labels a document can be listed by.
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    /// The content's media type, such as `text/markdown`.
+    #[serde(default)]
+    pub mime: Option<String>,
 }
 
 /// What the call changed.
@@ -243,6 +263,18 @@ pub async fn run(
         .map(|(index, input)| input.validated(index))
         .collect::<Result<_, ErrorData>>()?;
     let mut new_episode = episode.as_ref().map(EpisodeInput::validated).transpose()?;
+    //    A transcript is one project's verbatim text, and `user` is read from
+    //    every project (design §2.2) — so the refusal needs the resolved space.
+    if space == SpaceName::user()
+        && new_episode
+            .as_ref()
+            .is_some_and(|episode| episode.doc_kind == Some(DocKind::Transcript))
+    {
+        return Err(invalid(
+            "a transcript is refused in the `user` space: it is one project's text, \
+             and `user` is read from every project. Store it in the project's space",
+        ));
+    }
 
     // 2. One embedding pass for the whole call — the claims and the episode's
     //    chunks together. agmem-embed slices the batch internally, so the
@@ -413,6 +445,12 @@ const MAX_MEMORY_CHARS: usize = 10_000;
 /// pointing at it.
 const MAX_EPISODE_CHARS: usize = 100_000;
 
+/// A document title is a name, not a summary.
+const MAX_TITLE_CHARS: usize = 200;
+
+/// Tags on a document: labels to list by, not a second body.
+const MAX_TAGS: usize = 16;
+
 impl MemoryInput {
     /// This input as a store row, or the reason it cannot be one.
     fn validated(&self, index: usize) -> Result<NewMemory, ErrorData> {
@@ -471,6 +509,45 @@ impl EpisodeInput {
                  path alongside the claims distilled from it"
             )));
         }
+        let title = self
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty());
+        if self.title.is_some() && title.is_none() {
+            return Err(invalid("episode.title is empty"));
+        }
+        if let Some(title) = title {
+            let length = title.chars().count();
+            if length > MAX_TITLE_CHARS {
+                return Err(invalid(format!(
+                    "episode.title is {length} characters; the limit is {MAX_TITLE_CHARS}"
+                )));
+            }
+        }
+        if self.doc_kind.is_some() && title.is_none() {
+            return Err(invalid(
+                "episode.doc_kind needs episode.title: a document is an episode with a name",
+            ));
+        }
+        if self.doc_kind.is_none() && (!self.tags.is_empty() || self.mime.is_some()) {
+            return Err(invalid(
+                "episode.tags and episode.mime describe a document: set episode.doc_kind \
+                 (plan | review | report | probe | transcript | other) and episode.title",
+            ));
+        }
+        let tags: Vec<String> = self
+            .tags
+            .iter()
+            .map(|tag| tag.trim().to_owned())
+            .filter(|tag| !tag.is_empty())
+            .collect();
+        if tags.len() > MAX_TAGS {
+            return Err(invalid(format!(
+                "episode.tags has {} entries; the limit is {MAX_TAGS}",
+                tags.len()
+            )));
+        }
         Ok(NewEpisode {
             content: self.content.clone(),
             occurred_at: self
@@ -486,6 +563,10 @@ impl EpisodeInput {
                     embedding: None,
                 })
                 .collect(),
+            title: title.map(str::to_owned),
+            doc_kind: self.doc_kind,
+            tags,
+            mime: self.mime.as_deref().map(str::trim).map(str::to_owned),
         })
     }
 }
@@ -605,6 +686,10 @@ mod tests {
             content: "e".repeat(MAX_EPISODE_CHARS + 1),
             occurred_at: None,
             session: None,
+            title: None,
+            doc_kind: None,
+            tags: Vec::new(),
+            mime: None,
         };
         let error = input.validated().expect_err("oversized episode is refused");
         assert!(error.message.contains("episode.content"), "{error:?}");
@@ -620,6 +705,10 @@ mod tests {
             content: "First para.\n\nSecond para.".to_owned(),
             occurred_at: Some("2026-08-28T09:00:00Z".to_owned()),
             session: None,
+            title: None,
+            doc_kind: None,
+            tags: Vec::new(),
+            mime: None,
         };
         let episode = input.validated().expect("valid episode");
         assert_eq!(episode.chunks.len(), 1, "both paragraphs fit one chunk");
@@ -632,6 +721,10 @@ mod tests {
             content: "text".to_owned(),
             occurred_at: Some("last tuesday".to_owned()),
             session: None,
+            title: None,
+            doc_kind: None,
+            tags: Vec::new(),
+            mime: None,
         };
         assert!(
             bad.validated()

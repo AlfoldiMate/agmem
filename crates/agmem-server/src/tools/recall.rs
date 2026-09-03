@@ -12,8 +12,10 @@
 //! it; an agent handed a bare list of sentences cannot. That is also what
 //! makes a bad memory diagnosable instead of mysterious.
 
+use std::collections::HashMap;
+
 use agmem_core::scoring::{self, Ranked, Signals};
-use agmem_core::{Kind, MemoryId};
+use agmem_core::{DocKind, EpisodeId, Kind, MemoryId, SpaceName};
 use agmem_store::repo::{self, Candidate, Filters, Hit as StoreHit, Liveness, Lookup, Search};
 use jiff::Timestamp;
 use rmcp::ErrorData;
@@ -341,6 +343,29 @@ pub struct RecallHit {
     /// Absent on every other kind of hit.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub covers: Option<Vec<String>>,
+
+    /// On an `episode` hit that is a slice of a document: which document,
+    /// and where in it. `inspect` the id to read on from `position`, or
+    /// `doc:<space>/<title>` for its newest version. Absent on slices of
+    /// anonymous text and on every other kind of hit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<DocRef>,
+}
+
+/// The document a verbatim hit is a slice of (#134).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct DocRef {
+    /// The document's id.
+    pub id: String,
+
+    /// Its title.
+    pub title: String,
+
+    /// What kind of document it is.
+    pub doc_kind: DocKind,
+
+    /// The hit's zero-based chunk position within it.
+    pub position: u32,
 }
 
 /// What a hit is.
@@ -628,17 +653,65 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
         Dated::new(since, until, changed_since, best_fit, liveness)
     });
 
+    // 5. A slice of a document says which document (#134): one header read
+    //    per space that contributed a chunk, no content — the hit already
+    //    carries the slice, and the name is what lets the caller fetch the
+    //    rest through `inspect`.
+    let headers = document_headers(service, &ranked).await?;
+
     Ok(RecallResult {
         spaces: spaces.iter().map(ToString::to_string).collect(),
         hits: ranked
             .into_iter()
-            .map(|(hit, ranked)| RecallHit::new(hit, &ranked))
+            .map(|(hit, ranked)| {
+                let doc = match &hit {
+                    StoreHit::Chunk(chunk) => headers
+                        .get(&(chunk.space.clone(), chunk.episode.clone()))
+                        .map(|header| DocRef {
+                            id: header.id.to_string(),
+                            title: header.title.clone(),
+                            doc_kind: header.doc_kind,
+                            position: chunk.position,
+                        }),
+                    StoreHit::Memory(_) => None,
+                };
+                let mut hit = RecallHit::new(hit, &ranked);
+                hit.doc = doc;
+                hit
+            })
             .collect(),
         capped,
         truncated,
         cut,
         dated,
     })
+}
+
+/// The document headers behind the page's chunk hits, keyed by the space and
+/// episode each chunk belongs to. Anonymous episodes have no entry.
+async fn document_headers(
+    service: &AgmemService,
+    ranked: &[(StoreHit, Ranked)],
+) -> Result<HashMap<(SpaceName, EpisodeId), repo::DocumentHeader>, ErrorData> {
+    let mut wanted: HashMap<SpaceName, Vec<EpisodeId>> = HashMap::new();
+    for (hit, _) in ranked {
+        if let StoreHit::Chunk(chunk) = hit {
+            let ids = wanted.entry(chunk.space.clone()).or_default();
+            if !ids.contains(&chunk.episode) {
+                ids.push(chunk.episode.clone());
+            }
+        }
+    }
+    let mut headers = HashMap::new();
+    for (space, ids) in wanted {
+        for header in repo::document_headers(service.db(), &space, &ids)
+            .await
+            .map_err(|error| store_error(&error))?
+        {
+            headers.insert((space.clone(), header.id.clone()), header);
+        }
+    }
+    Ok(headers)
 }
 
 impl Dated {
@@ -717,6 +790,7 @@ impl RecallHit {
                         .map(|reason| reason.as_str().to_owned()),
                     superseded_by: memory.superseded_by.map(Into::into),
                     covers,
+                    doc: None,
                 }
             }
             StoreHit::Chunk(chunk) => Self {
@@ -734,6 +808,7 @@ impl RecallHit {
                 invalid_reason: None,
                 superseded_by: None,
                 covers: None,
+                doc: None,
             },
         }
     }

@@ -5,7 +5,7 @@ expression: "&tools.tools"
 [
   {
     "name": "consolidate",
-    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nFour lists come back, and every claim in each carries its full text rather than only its id, so you can judge it here instead of looking it up:\n\n- `near_duplicates` — groups of live claims saying the same thing. Merge a group with one `remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other member. `supersedes` takes a list, so a group of any size closes in that single call — reaching for `forget` instead deletes the history the merge exists to keep. Read `min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means the group chained together through a middle claim and may not be one claim at all.\n- `contradictions` — pairs about the same subject that are close without being the same. Nothing here has judged that they disagree; read both and decide. When one of them is wrong, send the right one with the wrong one's id in `supersedes`.\n- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point their class would have expired them. If one turned out to be durable, store it again with a slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n- `over_full_tags` — tags carrying more live lessons than a session's briefing will show for one tag. Merge the way a duplicate group merges: one `remember` with the wording worth keeping and the absorbed lessons' ids in `supersedes` — a few sharp lessons under a tag outwork a pile of them.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
+    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nFive lists come back, and every claim in each carries its full text rather than only its id, so you can judge it here instead of looking it up:\n\n- `near_duplicates` — groups of live claims saying the same thing. Merge a group with one `remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other member. `supersedes` takes a list, so a group of any size closes in that single call — reaching for `forget` instead deletes the history the merge exists to keep. Read `min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means the group chained together through a middle claim and may not be one claim at all.\n- `contradictions` — pairs about the same subject that are close without being the same. Nothing here has judged that they disagree; read both and decide. When one of them is wrong, send the right one with the wrong one's id in `supersedes`.\n- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point their class would have expired them. If one turned out to be durable, store it again with a slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n- `over_full_tags` — tags carrying more live lessons than a session's briefing will show for one tag. Merge the way a duplicate group merges: one `remember` with the wording worth keeping and the absorbed lessons' ids in `supersedes` — a few sharp lessons under a tag outwork a pile of them.\n- `orphan_documents` — documents no live claim cites. Nothing removes them on its own: distil what one still says and store it citing the document, or `forget` it with `purge: true`.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -113,6 +113,41 @@ expression: "&tools.tools"
             {
               "const": "fast",
               "description": "Working context: fades over days, then gets pruned at startup.",
+              "type": "string"
+            }
+          ]
+        },
+        "DocKind": {
+          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
+          "oneOf": [
+            {
+              "const": "plan",
+              "description": "A plan: what is to be built and in which order.",
+              "type": "string"
+            },
+            {
+              "const": "review",
+              "description": "A review of code, a design, or a change.",
+              "type": "string"
+            },
+            {
+              "const": "report",
+              "description": "A report: what was found or measured.",
+              "type": "string"
+            },
+            {
+              "const": "probe",
+              "description": "A probe: the record of an experiment and its outcome.",
+              "type": "string"
+            },
+            {
+              "const": "transcript",
+              "description": "A verbatim session or conversation transcript.",
+              "type": "string"
+            },
+            {
+              "const": "other",
+              "description": "Anything the other kinds do not name.",
               "type": "string"
             }
           ]
@@ -276,6 +311,46 @@ expression: "&tools.tools"
           ],
           "type": "object"
         },
+        "OrphanDocument": {
+          "description": "A document nothing live cites.",
+          "properties": {
+            "chars": {
+              "description": "How many characters it has.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "created_at": {
+              "description": "When it was stored, RFC3339.",
+              "type": "string"
+            },
+            "doc_kind": {
+              "$ref": "#/$defs/DocKind",
+              "description": "What kind of document it is."
+            },
+            "episode": {
+              "description": "The document's id, as `episode:<id>` — what `inspect` and `forget`\ntake.",
+              "type": "string"
+            },
+            "space": {
+              "description": "The space holding it.",
+              "type": "string"
+            },
+            "title": {
+              "description": "Its title.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "space",
+            "episode",
+            "title",
+            "doc_kind",
+            "chars",
+            "created_at"
+          ],
+          "type": "object"
+        },
         "OverFullTag": {
           "description": "A tag whose live lessons outgrew the bound (issue #82).",
           "properties": {
@@ -420,6 +495,13 @@ expression: "&tools.tools"
             "null"
           ]
         },
+        "orphan_documents": {
+          "description": "Documents no live claim cites, newest first (#134). Nothing removes\nthese on its own: one may be waiting to be read, or its claims were\nclosed. Distil what it still says and `remember` it citing the\ndocument, or `forget` it with `purge: true` if it has served.",
+          "items": {
+            "$ref": "#/$defs/OrphanDocument"
+          },
+          "type": "array"
+        },
         "over_full_tags": {
           "description": "Tags holding more live lessons than the bound `context`'s Lessons\nsection keeps per tag (issue #82). Merge one the way a duplicate\ncluster merges: one `remember` with the wording worth keeping and\n`supersedes` naming the lessons it absorbs — a bounded window of\nlessons beats an unbounded pile of them.",
           "items": {
@@ -455,7 +537,8 @@ expression: "&tools.tools"
         "near_duplicates",
         "contradictions",
         "stale_contexts",
-        "over_full_tags"
+        "over_full_tags",
+        "orphan_documents"
       ],
       "type": "object"
     },
@@ -508,10 +591,15 @@ expression: "&tools.tools"
   },
   {
     "name": "forget",
-    "description": "Remove memories the store should no longer act on — by id when you know which, or by query when you do not.\n\nReach for `remember` with `supersedes` first: a claim that turned out to be wrong is a correction, and a correction stays readable and dated. Forget is for what should not have been stored at all — something private, something that only made sense inside one session, notes on a project that no longer exists.\n\nBy default a forgotten memory is closed, not deleted: it stops surfacing in `recall` and `context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it is the only way to remove something that must not stay on disk. Purging text does not purge the claims distilled from it.\n\nForgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what matched, then send the identical call with `dry_run: false` to act. Any other second call is refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: true` previews them too.\n\nA query here matches on the words you write, not on their meaning: it selects the memories that contain those terms, so write the words you want gone. That is the opposite of `recall`, and deliberately — a deletion should never reach something that merely resembles what you asked for.",
+    "description": "Remove memories the store should no longer act on — by id when you know which, or by query when you do not.\n\nReach for `remember` with `supersedes` first: a claim that turned out to be wrong is a correction, and a correction stays readable and dated. Forget is for what should not have been stored at all — something private, something that only made sense inside one session, notes on a project that no longer exists.\n\nBy default a forgotten memory is closed, not deleted: it stops surfacing in `recall` and `context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it is the only way to remove something that must not stay on disk. Purging anonymous text does not purge the claims distilled from it; purging a document (an episode with a title and kind) is refused while live claims cite it, unless `cascade: true` purges those claims with it.\n\nForgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what matched, then send the identical call with `dry_run: false` to act. Any other second call is refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: true` previews them too.\n\nA query here matches on the words you write, not on their meaning: it selects the memories that contain those terms, so write the words you want gone. That is the opposite of `recall`, and deliberately — a deletion should never reach something that merely resembles what you asked for.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "cascade": {
+          "default": false,
+          "description": "When purging a document that live claims still cite: purge those\nclaims with it, correction history and all. Without this the purge is\nrefused and names them, so nothing is left citing text that is gone.\nOff by default.",
+          "type": "boolean"
+        },
         "dry_run": {
           "default": false,
           "description": "Report what would be forgotten and change nothing. Required as the\nfirst of two calls when forgetting by `query`.",
@@ -554,12 +642,19 @@ expression: "&tools.tools"
         "ForgetMatch": {
           "description": "One row a forget selected.",
           "properties": {
+            "cascaded_from": {
+              "description": "For a memory pulled in by `cascade`: the document it cites, whose\npurge takes it along.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "content": {
               "description": "The claim, or the opening of the verbatim text, cut at 300 characters.",
               "type": "string"
             },
             "derived": {
-              "description": "For an episode: how many distilled claims cite it and will outlive it.\nPurging text does not purge what was learned from it.",
+              "description": "For an episode: how many claims cite it. On anonymous text they\noutlive a purge; on a document they block it unless `cascade`, and\nthen go with it.",
               "format": "uint",
               "minimum": 0,
               "type": [
@@ -673,12 +768,77 @@ expression: "&tools.tools"
   },
   {
     "name": "inspect",
-    "description": "Look behind a stored memory: where it came from, what it used to say, and what the store actually holds.\n\nUse it when a recalled claim matters enough to check, when two claims disagree, or when you need to quote the original wording rather than the distilled version. `ref` takes one of: a memory id (bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim text it was distilled from; `episode:<id>` for that text with every claim drawn from it; `entity:<name>` for everything ever said about a subject, corrected claims included; or `stats` for per-space counts.\n\nNothing is ever deleted here, so a claim that was corrected is still readable and still dated — which is what lets you tell a belief that changed from a belief that was always wrong.",
+    "description": "Look behind a stored memory: where it came from, what it used to say, and what the store actually holds.\n\nUse it when a recalled claim matters enough to check, when two claims disagree, or when you need to quote the original wording rather than the distilled version. `ref` takes one of: a memory id (bare, or `memory:<id>`) for the claim, its full correction history oldest-first, and the verbatim text it was distilled from; `episode:<id>` for that text with every claim drawn from it; `entity:<name>` for everything ever said about a subject, corrected claims included; `doc:<space>/<title>` for the newest document under a title, with its earlier versions listed; `docs` or `docs:<space>` to list documents and how many claims cite each; or `stats` for per-space counts. A document comes back one chunk at a time — `offset` and `limit` page through it.\n\nNothing is ever deleted here, so a claim that was corrected is still readable and still dated — which is what lets you tell a belief that changed from a belief that was always wrong.",
     "inputSchema": {
+      "$defs": {
+        "DocKind": {
+          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
+          "oneOf": [
+            {
+              "const": "plan",
+              "description": "A plan: what is to be built and in which order.",
+              "type": "string"
+            },
+            {
+              "const": "review",
+              "description": "A review of code, a design, or a change.",
+              "type": "string"
+            },
+            {
+              "const": "report",
+              "description": "A report: what was found or measured.",
+              "type": "string"
+            },
+            {
+              "const": "probe",
+              "description": "A probe: the record of an experiment and its outcome.",
+              "type": "string"
+            },
+            {
+              "const": "transcript",
+              "description": "A verbatim session or conversation transcript.",
+              "type": "string"
+            },
+            {
+              "const": "other",
+              "description": "Anything the other kinds do not name.",
+              "type": "string"
+            }
+          ]
+        }
+      },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "doc_kinds": {
+          "default": [],
+          "description": "For `docs`: keep only these kinds.",
+          "items": {
+            "$ref": "#/$defs/DocKind"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "default": null,
+          "description": "For an episode: how many characters of content to return. A document\ndefaults to one chunk's worth and says in `window` where to continue;\nanonymous text comes back whole unless this is set.",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "offset": {
+          "default": null,
+          "description": "For an episode: where in its content to start reading, in characters.\nDefaults to the beginning.",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "ref": {
-          "description": "What to look at: `memory:<id>` for a claim's history and the text\nbehind it, `episode:<id>` for stored verbatim text, `entity:<name>`\nfor everything said about a subject, or `stats` for what each space\nholds. Any bare id another call handed you also works, whichever of\nthose it turns out to name.",
+          "description": "What to look at: `memory:<id>` for a claim's history and the text\nbehind it, `episode:<id>` for stored verbatim text, `entity:<name>`\nfor everything said about a subject, `doc:<space>/<title>` for the\nnewest document under a title, `docs` or `docs:<space>` to list\ndocuments, or `stats` for what each space holds. Any bare id another\ncall handed you also works, whichever of those it turns out to name.",
           "type": "string"
         },
         "space": {
@@ -688,6 +848,14 @@ expression: "&tools.tools"
             "string",
             "null"
           ]
+        },
+        "tags": {
+          "default": [],
+          "description": "For `docs`: keep only documents carrying one of these tags.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -700,6 +868,12 @@ expression: "&tools.tools"
         "ChunkView": {
           "description": "One retrieval slice of an episode.",
           "properties": {
+            "chars": {
+              "description": "How many characters the slice has.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
             "id": {
               "description": "The record id.",
               "type": "string"
@@ -711,14 +885,17 @@ expression: "&tools.tools"
               "type": "integer"
             },
             "text": {
-              "description": "The slice.",
-              "type": "string"
+              "description": "The slice. Absent on a document's chunks — its content is read\nthrough the window.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
             "id",
             "position",
-            "text"
+            "chars"
           ],
           "type": "object"
         },
@@ -747,20 +924,141 @@ expression: "&tools.tools"
             }
           ]
         },
+        "DocKind": {
+          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
+          "oneOf": [
+            {
+              "const": "plan",
+              "description": "A plan: what is to be built and in which order.",
+              "type": "string"
+            },
+            {
+              "const": "review",
+              "description": "A review of code, a design, or a change.",
+              "type": "string"
+            },
+            {
+              "const": "report",
+              "description": "A report: what was found or measured.",
+              "type": "string"
+            },
+            {
+              "const": "probe",
+              "description": "A probe: the record of an experiment and its outcome.",
+              "type": "string"
+            },
+            {
+              "const": "transcript",
+              "description": "A verbatim session or conversation transcript.",
+              "type": "string"
+            },
+            {
+              "const": "other",
+              "description": "Anything the other kinds do not name.",
+              "type": "string"
+            }
+          ]
+        },
+        "DocumentView": {
+          "description": "One document on a listing.",
+          "properties": {
+            "chars": {
+              "description": "How many characters it has.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "cited": {
+              "description": "How many live claims cite it, through `source` or `derived_from`.\nZero means nothing was learned from it, or everything learned from\nit has since been closed.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "created_at": {
+              "description": "When it was stored, RFC3339.",
+              "type": "string"
+            },
+            "doc_kind": {
+              "$ref": "#/$defs/DocKind",
+              "description": "What kind of document it is."
+            },
+            "id": {
+              "description": "The record id.",
+              "type": "string"
+            },
+            "mime": {
+              "description": "The content's media type, when one was recorded.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "space": {
+              "description": "The space holding it.",
+              "type": "string"
+            },
+            "tags": {
+              "description": "Its labels.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "description": "Its name. Several documents can share one: the newest is current.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "space",
+            "title",
+            "doc_kind",
+            "tags",
+            "chars",
+            "cited",
+            "created_at"
+          ],
+          "type": "object"
+        },
         "EpisodeView": {
           "description": "Verbatim text as stored — never rewritten, never superseded.",
           "properties": {
+            "chars": {
+              "description": "How many characters the whole text has.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
             "content": {
-              "description": "The text, exactly as it was given.",
+              "description": "The text, exactly as it was given — or the requested window of it,\nwhen `window` is present.",
               "type": "string"
             },
             "created_at": {
               "description": "When the row was written, RFC3339.",
               "type": "string"
             },
+            "doc_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DocKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What kind of document this is; absent on anonymous text."
+            },
             "id": {
               "description": "The record id.",
               "type": "string"
+            },
+            "mime": {
+              "description": "The content's media type, when one was recorded.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "occurred_at": {
               "description": "When the events described happened, RFC3339.",
@@ -776,12 +1074,30 @@ expression: "&tools.tools"
             "space": {
               "description": "The space holding it.",
               "type": "string"
+            },
+            "tags": {
+              "description": "A document's labels; absent when it has none.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "title": {
+              "description": "The document's name. Present with `doc_kind`; absent on anonymous\ntext.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
             "id",
             "space",
             "content",
+            "chars",
             "occurred_at",
             "created_at"
           ],
@@ -841,14 +1157,14 @@ expression: "&tools.tools"
               "description": "Stored verbatim text and everything that came out of it.",
               "properties": {
                 "chunks": {
-                  "description": "The slices retrieval matches against, in reading order.",
+                  "description": "The slices retrieval matches against, in reading order. On a\ndocument they carry their size and not their text: read the\ncontent through the window instead.",
                   "items": {
                     "$ref": "#/$defs/ChunkView"
                   },
                   "type": "array"
                 },
                 "derived": {
-                  "description": "The claims distilled from it, oldest first.",
+                  "description": "The claims distilled from it or drawn from it, oldest first.",
                   "items": {
                     "$ref": "#/$defs/MemoryView"
                   },
@@ -856,11 +1172,32 @@ expression: "&tools.tools"
                 },
                 "episode": {
                   "$ref": "#/$defs/EpisodeView",
-                  "description": "The text, unedited."
+                  "description": "The text, unedited — or the window of it that was asked for."
                 },
                 "kind": {
                   "const": "episode",
                   "type": "string"
+                },
+                "versions": {
+                  "description": "On a document: every version stored under its title, newest\nfirst, this one included. The first is the current one.",
+                  "items": {
+                    "$ref": "#/$defs/VersionView"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "window": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Window"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Which part of the content `episode.content` holds, when it is not\nthe whole of it."
                 }
               },
               "required": [
@@ -868,6 +1205,27 @@ expression: "&tools.tools"
                 "episode",
                 "chunks",
                 "derived"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "The documents a space holds.",
+              "properties": {
+                "documents": {
+                  "description": "Newest first. Each carries how many live claims cite it, so an\norphan — a document nothing was learned from — is visible as such.",
+                  "items": {
+                    "$ref": "#/$defs/DocumentView"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "const": "documents",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "documents"
               ],
               "type": "object"
             },
@@ -1152,6 +1510,69 @@ expression: "&tools.tools"
             "episodes",
             "chunks",
             "live_by_kind"
+          ],
+          "type": "object"
+        },
+        "VersionView": {
+          "description": "One version of a document, in its title's chain.",
+          "properties": {
+            "chars": {
+              "description": "How many characters it has.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "created_at": {
+              "description": "When it was stored, RFC3339.",
+              "type": "string"
+            },
+            "id": {
+              "description": "The record id; `inspect` it to read that version.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "chars"
+          ],
+          "type": "object"
+        },
+        "Window": {
+          "description": "Which part of an episode's content the answer holds.",
+          "properties": {
+            "next_offset": {
+              "description": "The `offset` to send to read on from here; absent at the end.",
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "offset": {
+              "description": "The character offset the returned content starts at.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "returned": {
+              "description": "How many characters were returned.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "total": {
+              "description": "How many characters the whole content has.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "offset",
+            "returned",
+            "total"
           ],
           "type": "object"
         },
@@ -1453,6 +1874,71 @@ expression: "&tools.tools"
           ],
           "type": "object"
         },
+        "DocKind": {
+          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
+          "oneOf": [
+            {
+              "const": "plan",
+              "description": "A plan: what is to be built and in which order.",
+              "type": "string"
+            },
+            {
+              "const": "review",
+              "description": "A review of code, a design, or a change.",
+              "type": "string"
+            },
+            {
+              "const": "report",
+              "description": "A report: what was found or measured.",
+              "type": "string"
+            },
+            {
+              "const": "probe",
+              "description": "A probe: the record of an experiment and its outcome.",
+              "type": "string"
+            },
+            {
+              "const": "transcript",
+              "description": "A verbatim session or conversation transcript.",
+              "type": "string"
+            },
+            {
+              "const": "other",
+              "description": "Anything the other kinds do not name.",
+              "type": "string"
+            }
+          ]
+        },
+        "DocRef": {
+          "description": "The document a verbatim hit is a slice of (#134).",
+          "properties": {
+            "doc_kind": {
+              "$ref": "#/$defs/DocKind",
+              "description": "What kind of document it is."
+            },
+            "id": {
+              "description": "The document's id.",
+              "type": "string"
+            },
+            "position": {
+              "description": "The hit's zero-based chunk position within it.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "title": {
+              "description": "Its title.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "doc_kind",
+            "position"
+          ],
+          "type": "object"
+        },
         "HitKind": {
           "description": "What a hit is.",
           "oneOf": [
@@ -1555,6 +2041,17 @@ expression: "&tools.tools"
                 "array",
                 "null"
               ]
+            },
+            "doc": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DocRef"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "On an `episode` hit that is a slice of a document: which document,\nand where in it. `inspect` the id to read on from `position`, or\n`doc:<space>/<title>` for its newest version. Absent on slices of\nanonymous text and on every other kind of hit."
             },
             "entities": {
               "description": "The subjects this claim is about.",
@@ -1990,12 +2487,67 @@ expression: "&tools.tools"
             }
           ]
         },
+        "DocKind": {
+          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
+          "oneOf": [
+            {
+              "const": "plan",
+              "description": "A plan: what is to be built and in which order.",
+              "type": "string"
+            },
+            {
+              "const": "review",
+              "description": "A review of code, a design, or a change.",
+              "type": "string"
+            },
+            {
+              "const": "report",
+              "description": "A report: what was found or measured.",
+              "type": "string"
+            },
+            {
+              "const": "probe",
+              "description": "A probe: the record of an experiment and its outcome.",
+              "type": "string"
+            },
+            {
+              "const": "transcript",
+              "description": "A verbatim session or conversation transcript.",
+              "type": "string"
+            },
+            {
+              "const": "other",
+              "description": "Anything the other kinds do not name.",
+              "type": "string"
+            }
+          ]
+        },
         "EpisodeInput": {
           "description": "Verbatim ground truth to store alongside what was distilled from it.",
           "properties": {
             "content": {
               "description": "The text, unedited. It is chunked for retrieval but never rewritten.",
               "type": "string"
+            },
+            "doc_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DocKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "What kind of document this is. Requires `title`; `transcript` is\nrefused in the `user` space, which every project reads."
+            },
+            "mime": {
+              "default": null,
+              "description": "The content's media type, such as `text/markdown`.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "occurred_at": {
               "default": null,
@@ -2008,6 +2560,22 @@ expression: "&tools.tools"
             "session": {
               "default": null,
               "description": "A grouping key for one conversation or working session.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tags": {
+              "default": [],
+              "description": "Labels a document can be listed by.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "default": null,
+              "description": "Names the episode as a document — a plan, review, report, probe or\ntranscript kept whole so claims can cite it. Set with `doc_kind`.\nA later episode under the same title is the newer version; the older\none stays readable.",
               "type": [
                 "string",
                 "null"

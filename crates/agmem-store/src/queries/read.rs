@@ -24,7 +24,7 @@
 //!   (issue #40; see [`OVER_FETCH`]).
 
 use super::{Builder, Script};
-use crate::repo::{Filters, Liveness, Lookup, Search};
+use crate::repo::{DocumentFilter, Filters, Liveness, Lookup, Search};
 
 /// How many neighbours HNSW visits per query; the `EF` of `<|K,EF|>`.
 const EF_SEARCH: usize = 80;
@@ -121,8 +121,8 @@ const CHUNK_FIELDS: &str = "record::id(id) AS id, record::id(episode) AS episode
      space, text, position, occurred_at";
 
 /// Every `episode` column a read projects.
-const EPISODE_FIELDS: &str =
-    "record::id(id) AS id, space, content, content_hash, occurred_at, session, created_at";
+const EPISODE_FIELDS: &str = "record::id(id) AS id, space, content, content_hash, occurred_at,
+     session, created_at, title, doc_kind, tags, mime";
 
 /// The words a fulltext arm searches for, in the order they were written.
 ///
@@ -337,7 +337,8 @@ pub(crate) fn episode() -> Script {
                 chunks: (SELECT {CHUNK_FIELDS} FROM episode_chunk
                     WHERE episode = $target ORDER BY position),
                 derived: (SELECT {MEMORY_FIELDS} FROM memory
-                    WHERE space = $space AND source.ref = $target
+                    WHERE space = $space
+                        AND (source.ref = $target OR derived_from CONTAINS $target)
                     ORDER BY created_at) }}
          }}"
     ))
@@ -539,6 +540,108 @@ fn chunk_where(liveness: Liveness) -> String {
         Liveness::AsOf(_) => "space IN $spaces AND occurred_at <= $as_of".to_owned(),
         Liveness::Live | Liveness::Any => "space IN $spaces".to_owned(),
     }
+}
+
+/// Every episode filed under one title, newest first (#134).
+///
+/// A document's versions are a convention over the `ep_title` index rather
+/// than a link column: `episode` has no UPDATE path, so the newest row under a
+/// title is the current one and the older ones stay readable behind it.
+pub(crate) fn documents_by_title() -> Script {
+    Builder::plain().finish(format!(
+        "SELECT {EPISODE_FIELDS} FROM episode
+         WHERE space = $space AND title = $title
+         ORDER BY created_at DESC"
+    ))
+}
+
+/// The documents in a space, newest first, with who cites each (#134).
+///
+/// The filters are spliced into the text rather than bound because an empty
+/// `CONTAINSANY []` matches nothing, and an absent filter has to match
+/// everything. The citation halves come back as `(memory, document)` pairs so
+/// a memory citing the same document through both `source.ref` and
+/// `derived_from` counts once — the caller folds them.
+pub(crate) fn documents(filter: &DocumentFilter) -> Script {
+    let limit = filter.limit.clamp(1, MAX_POOL);
+    let mut clauses = vec![
+        "space = $space".to_owned(),
+        "doc_kind IS NOT NONE".to_owned(),
+    ];
+    if !filter.kinds.is_empty() {
+        clauses.push("doc_kind IN $kinds".to_owned());
+    }
+    if !filter.tags.is_empty() {
+        clauses.push("tags CONTAINSANY $tags".to_owned());
+    }
+    let clauses = clauses.join(" AND ");
+    let mut builder = Builder::plain();
+    builder.push(format!(
+        "LET $docs = (SELECT {EPISODE_FIELDS} FROM episode WHERE {clauses}
+             ORDER BY created_at DESC LIMIT {limit})"
+    ));
+    builder.push("LET $ids = $docs.map(|$doc| type::record('episode', $doc.id))");
+    builder.finish(
+        "RETURN { docs: $docs,
+             by_source: (SELECT record::id(id) AS memory, record::id(source.ref) AS document
+                 FROM memory WHERE space = $space AND invalid_at IS NONE
+                     AND source.kind = 'episode' AND source.ref IN $ids),
+             by_derivation: (SELECT record::id(id) AS memory,
+                     array::map(derived_from, |$link| record::id($link)) AS documents
+                 FROM memory WHERE space = $space AND invalid_at IS NONE
+                     AND derived_from CONTAINSANY $ids) }"
+            .to_owned(),
+    )
+}
+
+/// The live memories that cite one document, through either column (#134).
+///
+/// This is the purge guard's question: `source.ref` is what `remember` links
+/// and `derived_from` is what `reflect` links, and a memory reached through
+/// either would be orphaned by the document's removal.
+pub(crate) fn document_citers() -> Script {
+    Builder::plain().finish(format!(
+        "SELECT {MEMORY_FIELDS} FROM memory
+         WHERE space = $space AND invalid_at IS NONE
+             AND (source.ref = $target OR derived_from CONTAINS $target)
+         ORDER BY created_at"
+    ))
+}
+
+/// Which of `$ids` are documents, and what they are called (#134, `recall`).
+///
+/// A verbatim hit is one chunk; the name of the document it belongs to is
+/// what lets the caller fetch the rest. One projection per space, no
+/// content — the hit already carries the slice.
+pub(crate) fn document_headers() -> Script {
+    Builder::plain().finish(
+        "SELECT record::id(id) AS id, title, doc_kind FROM episode
+         WHERE space = $space AND doc_kind IS NOT NONE AND id IN $ids"
+            .to_owned(),
+    )
+}
+
+/// The documents no live memory cites, newest first (#134, `consolidate`).
+///
+/// One pass over the space rather than one guard query per document: the set
+/// of everything cited is small and built once, and the documents outside it
+/// are the answer.
+pub(crate) fn orphan_documents() -> Script {
+    let mut builder = Builder::plain();
+    builder.push(
+        "LET $cited = (SELECT VALUE source.ref FROM memory
+             WHERE space = $space AND invalid_at IS NONE AND source.kind = 'episode')",
+    );
+    builder.push(
+        "LET $derived = array::flatten((SELECT VALUE derived_from FROM memory
+             WHERE space = $space AND invalid_at IS NONE))",
+    );
+    builder.finish(format!(
+        "SELECT {EPISODE_FIELDS} FROM episode
+         WHERE space = $space AND doc_kind IS NOT NONE
+             AND id NOT IN array::union($cited, $derived)
+         ORDER BY created_at DESC"
+    ))
 }
 
 #[cfg(test)]

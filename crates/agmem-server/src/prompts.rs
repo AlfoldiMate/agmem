@@ -282,4 +282,32 @@ mod plugin_drift {
              word for word:\n{step_4}"
         );
     }
+
+    const PLUGIN_MANIFEST: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../plugin/.claude-plugin/plugin.json"
+    ));
+    const MARKETPLACE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../.claude-plugin/marketplace.json"
+    ));
+
+    /// The plugin's hooks are `agmem hook …`, so the plugin is only ever as
+    /// new as the binary: both manifests carry the crate version. release-plz
+    /// bumps Cargo.toml alone and the release-pr workflow re-pins these two
+    /// after it; this is what notices a bump that skipped them.
+    #[test]
+    fn the_plugin_manifests_carry_the_crate_version() {
+        let want = format!("\"version\": \"{}\"", env!("CARGO_PKG_VERSION"));
+        for (path, text) in [
+            ("plugin/.claude-plugin/plugin.json", PLUGIN_MANIFEST),
+            (".claude-plugin/marketplace.json", MARKETPLACE),
+        ] {
+            assert!(
+                text.contains(&want),
+                "{path} does not carry the crate version {}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+    }
 }

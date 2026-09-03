@@ -342,11 +342,12 @@ BGE vectors (`tests/fixtures/`), and tests that need the live model are
 `#[ignore]`d.
 
 The repo's own `.claude/` is the ctx-flow framework — routing discipline,
-agents, hooks, commands — tuned to run on the plugin under `plugin/`: every
-session here gets its memory the way an installed user does, so a plugin
-change is dogfooded on the next session. `claude --plugin-dir ./plugin` loads
-the working-tree plugin without installing it; `claude plugin marketplace add
-/path/to/agmem` installs it from a checkout.
+agents, hooks, commands — tuned to run on the plugin under `plugin/`. Nothing
+in the repo enables the plugin; sessions here use it the way any user does,
+installed from the marketplace at user scope, so a plugin change is dogfooded
+once it is released. `claude --plugin-dir ./plugin` loads the working-tree
+plugin without installing it; `claude plugin marketplace add /path/to/agmem`
+installs it from a checkout.
 
 Retrieval quality is measured, not asserted. An offline, deterministic eval
 rides `cargo test` against a recorded baseline in

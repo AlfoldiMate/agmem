@@ -83,7 +83,7 @@ The lifetime split the two files used to carry maps onto kinds and decay:
 The slug in `branch:<slug>` is computed inside the agmem binary — its
 SessionStart hook announces it and its checkpoint writes it, one rule for
 both sides. `hooks/scripts/ctx-flow-paths.nu` (`TAG=`) carries the same rule
-for `/agmem import`, and is the one place here that must keep matching it.
+for `/agmem-import`, and is the one place here that must keep matching it.
 
 Writing well is `/checkpoint`'s job, and its order matters: distil → `recall`
 the topic → `remember`, with `supersedes` carrying the id of anything now

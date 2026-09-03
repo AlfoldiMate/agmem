@@ -75,9 +75,12 @@ there is also no space derivation, so every project silently reads and
 writes one shared `default` space. `agmem --doctor` prints the space it
 derives for the current directory, and `/ctx-flow-doctor` flags an old,
 stale or duplicated binary and a missing plugin. If you had registered
-agmem by hand before (`claude mcp add --scope user agmem`), leave it or
-remove it: Claude Code connects only one, yours winning, and the only
-difference is the tool names (`mcp__agmem__*` vs `mcp__plugin_agmem_agmem__*`). The store is one directory
+agmem by hand before (`claude mcp add --scope user agmem`), remove it
+(`claude mcp remove agmem -s user`): Claude Code connects only one, yours
+winning, and that changes the tool names to `mcp__agmem__*` — this
+framework's agents name the plugin's (`mcp__plugin_agmem_agmem__*`), so under
+a by-hand registration they start without memory. `/agmem:doctor` flags the
+duplicate. The store is one directory
 (`~/Library/Application Support/dev.agmem.agmem` on macOS,
 `~/.local/share/agmem` on Linux) — back it up or delete it as a unit. There is
 no server-side LLM: the session distils, the store never rewrites what it
@@ -106,7 +109,7 @@ type), the routing table, payload discipline, the memory loop, and the answer
 shape — output led by the next action, numbered steps, restated state, no
 preamble, questions asked through `AskUserQuestion` rather than prose.
 
-### Five agents
+### Six agents
 
 | Agent | Model / effort | Absorbs |
 |---|---|---|
@@ -115,6 +118,7 @@ preamble, questions asked through `AskUserQuestion` rather than prose.
 | `architect` | opus / high | design of a non-trivial change — read-only, never edits |
 | `browser` | sonnet / medium | `playwright-cli` sessions — snapshots stop here |
 | `tracker` | haiku / low | Jira/GitHub via `gh`/`acli` — never raw records |
+| `scout` | haiku / low | where a symbol lives, which files match a shape — paths and line refs, never bodies |
 
 Every one ends with a **mandatory return contract**: fixed keys, hard caps, and
 an explicit forbidden list. An unschematized subagent writes an essay; a
@@ -122,18 +126,19 @@ schematized one writes 200 tokens. Tiers are picked by *consequence of being
 wrong*, not output size — `runner` misses cost one re-dispatch; a bad
 `architect` plan is discovered late, after the code exists.
 
-Codebase search is **not** here: Claude Code ships `Explore`, which already
-does it. Route search there.
+Broad codebase exploration stays with Claude Code's built-in `Explore`;
+`scout` is the cheaper cousin for a question with an enumerable answer —
+where is X, which files do Y — that should come back as refs, not prose.
 
-### Four commands
+### Five commands
 
 - **`/checkpoint`** — runs the agmem plugin's checkpoint ritual (recall
   first, so corrections land as `supersedes`; `reflect` with `derived_from`
   for conclusions) so you can `/clear` instead of letting auto-compaction
   fire, then applies the gate that accepts or drops agents' proposed
   learnings — the one step that is this framework's own.
-- **`/agmem import`** — moves a pre-agmem `LEDGER.md`, branch state, and
-  playbooks into the store, once. Showing and tidying the store are the
+- **`/agmem-import`** — moves a pre-agmem `LEDGER.md` and branch state files
+  into the store, once. Showing and tidying the store are the
   plugin's `/agmem:memory show` and `/agmem:memory tidy`.
 - **`/ctx-flow-doctor`** — checks every dependency above, the hooks, both MCP
   registrations, and whether ast-grep actually parses this project's
@@ -147,6 +152,10 @@ does it. Route search there.
   `~/.cache/ctx-flow/grammars` (shared by every project on the machine),
   registers it in the project's `sgconfig.yml`, and verifies it against real
   files. `sgconfig.yml` is machine-local — gitignore it.
+- **`/bare-worktree`** — `init`, `add`, `remove`, `apply`, `discard`, `which`
+  for the bare-repo + sibling-worktrees layout; the only sanctioned way to
+  make a worktree here, since raw `git worktree add` skips the profile files
+  and the root-`.claude` symlink (a hook denies it).
 
 ### The hooks
 
@@ -346,16 +355,19 @@ compacts; the token saving is a side effect of the quality win.
 ## Layout
 
 ```
-context-flow/               mounted as your project's .claude
+.claude/                    this folder, copied into your project
 ├── CLAUDE.md               the routing discipline — loads every session
 ├── settings.json           hook registration
-├── agents/                 runner, verifier, architect, browser, tracker
-├── commands/               checkpoint (wraps the plugin's), agmem import, ctx-flow-doctor, ast-grep-it, bare-worktree
+├── .gitignore              the machine-local parts: notes/, settings.local.json, one local skill (sgconfig.yml lives at the repo root)
+├── agents/                 runner, verifier, architect, browser, tracker, scout
+├── commands/               checkpoint (wraps the plugin's), agmem-import, ctx-flow-doctor, ast-grep-it, bare-worktree
 ├── docs/reference.md       contracts, memory mapping, rationale — loaded on demand
 ├── hooks/scripts/          the three hooks + shared _common.nu + paths resolver
 ├── output-styles/          ctx-flow.md — the hard rules, appended to the system prompt
-├── scripts/                doctor.nu + build-grammar.nu + grammars.nu registry
+├── scripts/                doctor.nu + build-grammar.nu + grammars.nu registry + bare-worktree.nu
 ├── skills/nushell/         deep Nushell reference, loaded when writing nu
+├── skills/ast-grep/        rule-writing workflow, loaded when a query needs more than a pattern
+│                           (a machine-local skill dropped in here stays untracked — list it in .gitignore)
 └── notes/                  subagent artifact dropbox   (created by use)
 ```
 

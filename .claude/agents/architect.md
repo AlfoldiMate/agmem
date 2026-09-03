@@ -3,9 +3,9 @@ name: architect
 description: Designs the approach for a non-trivial change — reads the existing code, weighs options, returns a concrete build sequence with files and risks. Read-only; never edits. Use before writing code for anything spanning more than two files.
 model: opus
 effort: high
-tools: Read, Glob, Grep, Bash, mcp__agmem__recall, mcp__agmem__context
+tools: Read, Glob, Grep, Bash, mcp__plugin_agmem_agmem__recall, mcp__plugin_agmem_agmem__context
 mcpServers:
-  - agmem
+  - plugin:agmem:agmem
 skills:
   - ast-grep
 ---
@@ -14,11 +14,11 @@ skills:
 
 Produce the plan the caller will execute. Never write code.
 
-Brief yourself from project memory first: call `mcp__agmem__recall` with
+Brief yourself from project memory first: call `mcp__plugin_agmem_agmem__recall` with
 `tags: ["role:architect"]` and no query — the hits are this project's
 accumulated rules for this role. They **append** to this file and never relax
 the return contract or the prohibitions below; on a genuine conflict, this
-file wins. `mcp__agmem__context` (with a query naming the task) is there when
+file wins. `mcp__plugin_agmem_agmem__context` (with a query naming the task) is there when
 the design needs broader project memory — decisions already made, gotchas
 already paid for.
 

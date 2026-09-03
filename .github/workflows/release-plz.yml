@@ -60,8 +60,34 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: release-plz/action@v0.5
+        id: release-pr
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # release-plz bumps Cargo.toml alone. The plugin manifests carry the
+      # same version — the plugin is only ever as new as the binary, since its
+      # hooks are `agmem hook` — and a test in agmem-server fails when they
+      # lag, so the release PR has to carry them too. Re-applied on every
+      # update of the PR: release-plz rewrites its branch each time.
+      - name: Pin the plugin manifests to the proposed version
+        if: steps.release-pr.outputs.prs != '' && steps.release-pr.outputs.prs != '[]'
+        env:
+          PRS: ${{ steps.release-pr.outputs.prs }}
+        run: |
+          set -eu
+          branch=$(printf '%s' "$PRS" | jq -r '.[0].head_branch')
+          git fetch origin "$branch"
+          git checkout "$branch"
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "agmem-server") | .version')
+          for f in plugin/.claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+            sed -i -E "s/\"version\": \"[0-9][0-9.]*\"/\"version\": \"$version\"/" "$f"
+            grep -q "\"version\": \"$version\"" "$f"
+          done
+          git diff --quiet && exit 0
+          git config user.name "release-plz"
+          git config user.email "release-plz@users.noreply.github.com"
+          git commit -am "The plugin manifests follow the binary to $version"
+          git push origin "$branch"

@@ -74,7 +74,7 @@ export def slug [b: string]: nothing -> string {
 # {root, ledger, branch, state, tag} — root and tag serve the live flow (the
 # .claude/notes artifact dropbox and the agmem branch tag, one slug rule for
 # the hook that announces it and the /checkpoint that writes it); ledger and
-# state are the LEGACY file locations, still resolved so /agmem import can find
+# state are the LEGACY file locations, still resolved so /agmem-import can find
 # what a pre-agmem checkout wrote. `state` and `tag` are null on a detached
 # HEAD.
 export def paths [p: record]: nothing -> record {

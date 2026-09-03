@@ -69,7 +69,7 @@ $ agmem --doctor
   ok    shared daemon        not running; the next session starts one
   ok    single-writer lock   held by this process
   ok    database open        surrealkv://…/agmem.db
-  ok    schema               v8
+  ok    schema               v9
   ok    write/read roundtrip scratch record created and removed
   ok    embedder             bge-small-en-v1.5-q (384d)
   ok    embedder vs store    same model and width

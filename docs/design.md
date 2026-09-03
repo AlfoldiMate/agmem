@@ -104,13 +104,15 @@ memory together) trivial.
    │ 1:n (by name)
    ▼
  episode ──1:n──▶ episode_chunk        [FT + HNSW indexes]
-   ▲   (verbatim ground truth, append-only)
+   ▲   (verbatim ground truth, append-only;
+   │    a *document* when `doc_kind` is set — v9, #132)
    │ source.ref (provenance link)
    │
  memory  (distilled: fact | lesson | instruction | summary)
    │  [FT + HNSW indexes; supersession chain within table]
    ├── supersedes / superseded_by ──▶ memory      (version chain)
    ├── derived_from: [record]      ──▶ memory | episode   (reflect citations)
+   ├── spans: [{ref,start,end}]    ──▶ episode   (citation spans, v9; sidecar to derived_from)
    ├── source: {kind, ref}          ▶ episode | external string
    ├── entities: [string]           (denormalized subject index, v1)
    └── tags: [string]
@@ -166,7 +168,16 @@ DEFINE FIELD session      ON episode TYPE option<string>;
 DEFINE FIELD created_at   ON episode TYPE datetime DEFAULT time::now();
 -- v6: which client wrote it (issue #75); sub-fields as on memory.writer
 DEFINE FIELD writer       ON episode TYPE option<object>;
+-- v9 (#132): a document is an episode with a name and a kind; the rest of
+-- the row is unchanged, so one retrieval path and one purge path serve both
+DEFINE FIELD title        ON episode TYPE option<string>;
+DEFINE FIELD doc_kind     ON episode TYPE option<string>
+    ASSERT $value IN ["plan", "review", "report", "probe", "transcript", "other"];
+DEFINE FIELD tags         ON episode TYPE option<array<string>>;
+DEFINE FIELD mime         ON episode TYPE option<string>;
 DEFINE INDEX episode_hash ON episode COLUMNS space, content_hash UNIQUE;
+DEFINE INDEX ep_title     ON episode COLUMNS space, title;   -- v9; not unique: #134 supersedes by title
+DEFINE INDEX ep_tags      ON episode COLUMNS tags.*;         -- v9
 
 DEFINE TABLE episode_chunk SCHEMAFULL;
 DEFINE FIELD episode   ON episode_chunk TYPE record<episode>;
@@ -212,6 +223,10 @@ DEFINE INDEX mem_writer_session ON memory COLUMNS writer.session;
 DEFINE FIELD novelty       ON memory TYPE option<float>;
 -- schema v2: what a `reflect` insight was drawn from; empty for every other write
 DEFINE FIELD derived_from  ON memory TYPE array<record<memory | episode>> DEFAULT [];
+-- v9 (#132): where in a document a claim came from — [{ref: record<episode>,
+-- start, end}] in char offsets of the verbatim content, end exclusive. A
+-- sidecar because `derived_from` carries no payload; NONE where unrecorded
+DEFINE FIELD spans         ON memory TYPE option<array<object>>;
 DEFINE FIELD created_at    ON memory TYPE datetime DEFAULT time::now();
 -- v5: 'live' while invalid_at is NONE, the close time once set — recomputed
 -- on every write, so a close moves the row out of the 'live' slot itself
@@ -250,12 +265,32 @@ Notes:
   MCP `initialize` handshake (never trusted from tool arguments), reads as
   absent on rows older than the field, and is the axis the per-source
   occupancy defense (issue #76) will slice on.
+- A **document** (v9, #132) is an episode with `doc_kind` set; `title` is
+  required alongside it by the write path, not the schema. Identity stays
+  `(space, content_hash)`, and the hash is taken over *normalized* content
+  (lowercased, whitespace-collapsed), so two documents that differ only in
+  case or spacing are one row carrying the first one's verbatim text and
+  title — a re-put reports the existing id and rewrites nothing, because no
+  UPDATE path on `episode` exists. The same content in a second space is a
+  second row with its own chunks: `space` is denormalised onto every chunk
+  and every retrieval arm filters on it, so a cross-space link would still
+  need per-space chunk rows and buys nothing. A `transcript` is refused in
+  the `user` space, since recall reads `user` from every project and a
+  transcript is one project's verbatim text.
+- `spans` (v9) is a sidecar rather than a payload on `derived_from` because
+  that field is a bare record array read through `array::map`. Offsets are
+  Unicode scalar (char) offsets into the verbatim `content` — the unit the
+  100k cap counts — with `end` exclusive, never positions in the normalized
+  text the hash is over. Nothing writes it in v9; it lands with the schema
+  because provenance is the one thing that cannot be backfilled (the v6
+  lesson).
 
 ### 2.3 Kinds, decay classes, and lifecycle
 
 | `kind` | Meaning | Default `decay_class` | Lifecycle |
 |---|---|---|---|
-| (episode table) | Verbatim record of what happened | — (no decay) | Append-only; never superseded; prunable only by `forget --purge` |
+| (episode table) | Verbatim record of what happened | — (no decay) | Append-only; never superseded; prunable only by `forget --purge`, and the claims drawn from it survive the purge |
+| (episode with `doc_kind`) | A named, typed document — plan, review, report, probe, transcript (#132) | — (no decay) | Append-only; a purge is refused while live memories cite it (`source.ref` or `derived_from`) unless `cascade`, which takes those memories too (#134); orphans — no live citer — are reported by `consolidate`, never removed on their own; a new version of a title supersedes the old by convention, not schema (#134) |
 | `fact` | Distilled statement about the world/user/project | `normal` | Supersedable; decays unless recalled |
 | `lesson` | Procedural insight ("X fails when Y; do Z") | `slow` | Supersedable; agent keeps these few and sharp (Reflexion evidence: bounded lessons beat accumulation) |
 | `instruction` | Standing behavioral rule | `pinned` | Active until superseded/forgotten; always in `context` output |
@@ -332,7 +367,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
     "valid_from": "RFC3339"                          // optional (when it became true)
   }],
   "episode": {                                       // optional verbatim ground truth
-    "content": "…", "occurred_at": "RFC3339", "session": "…"
+    "content": "…", "occurred_at": "RFC3339", "session": "…",
+    "title": "…", "doc_kind": "plan|review|report|probe|transcript|other",  // #135: a document;
+    "tags": ["…"], "mime": "text/markdown"           //   title required with doc_kind, transcript refused in `user`
   }
 }
 // → { created: [ids],                // in request order, minus the duplicates
@@ -375,7 +412,8 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // forget
 { "ids": ["memory:01J…", "01J…", "episode:01M…"],   // exact; no dry run needed
   "query": "alternative to ids",                     // dry_run: true required first
-  "space": "…", "purge": false, "dry_run": false }
+  "space": "…", "purge": false, "dry_run": false,
+  "cascade": false }        // #134: purge a cited document together with its citers
 // → { spaces: [searched], dry_run, purge,
 //     matched: [{ id, kind: "memory|episode", content, space,
 //                 invalid_reason?, derived? }],   // derived: claims an episode leaves behind
@@ -392,8 +430,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
   "space": "current|user|all|<name>" }   // default: current + user; all for stats
 // → { ref: canonical form, spaces: [searched],
 //     found: one of
-//       { kind: "memory",  memory, chain: [oldest→newest], episode? }
+//       { kind: "memory",  memory, chain: [oldest→newest], episode? }   // memory.spans? (v9)
 //       { kind: "episode", episode, chunks: [reading order], derived: [claims] }
+//                          // title/doc_kind/tags/mime when a document; #134 adds a window
 //       { kind: "entity",  entity, memories: [live and closed] }
 //       { kind: "stats",   counts: [{ space, memories, live, invalidated,
 //                                     episodes, chunks, live_by_kind }] } }
@@ -414,6 +453,7 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //     stale_contexts:  [{ claim: MemoryView, idle_days, expires_in_days }],
 //     over_full_tags:  [{ space, tag, live, keep,        // fullest first (#82)
 //                         members: [MemoryView] }],      // strongest first
+//     orphan_documents: [{ space, episode }],   // documents no live memory cites (#132 lifecycle)
 //     note? }                          // present only when something limited it
 // Every candidate is a whole `MemoryView`, content included: the #38 finding
 // is that an id and a number are not something an agent can decide on.
@@ -766,7 +806,8 @@ main()
 ```
 remember(params)
  1. validate: space slug, kinds, non-empty contents ≤ 10k chars each, an
-    episode ≤ 100k (#67 — a paste is refused whole, never truncated silently),
+    episode ≤ 100k (#67 — a paste is refused whole, never truncated silently;
+    a document is an episode with `doc_kind` under the same cap, #132),
     supersedes ids exist
  2. per memory: normalize content → blake3
     exact dup? (space, hash) unique index         → report as duplicate (NOOP)
@@ -982,6 +1023,8 @@ ids given   → resolve in each searched space → soft-invalidate (invalid_reas
 query given → BM25 only, memories only → dry_run required first (returns the matches)
               an identical second call with dry_run=false executes, and spends the confirmation
 purge on an episode also purges chunks; purge on a memory keeps its episode
+purge on a document (doc_kind set) is refused while live memories cite it,
+              unless cascade — then the citing memories go with it (#134)
 ```
 
 
@@ -1011,6 +1054,13 @@ asked it to":
   anyone forgets — and the claims distilled from it survive it, still naming
   the source. `inspect` therefore treats a `source` naming no episode as
   history rather than as a broken store.
+
+  That is the rule for *anonymous* episodes. A document (v9, #132) inverts
+  it: a purge is refused while any live memory cites it — through
+  `source.ref` **or** `derived_from`, both columns, where today's `derived`
+  projection reads only the first — unless `cascade` is set, in which case
+  the citing memories are purged with it (#134). A cascade that merely
+  orphaned them would be the anonymous rule under a new name.
 
 ### 5.5 Maintenance without a scheduler
 
@@ -1175,6 +1225,11 @@ Each phase is releasable; later phases only add.
 - **Phase 4 — polish:** `--reindex` (embedder migration);
   packaging (cargo-dist, Homebrew); `memory://` resources; eval harness;
   `ws://` sharing-mode hardening docs.
+- **Phase 9 — Documents (#132, #134–#137):** a named, typed artifact tier
+  over the episode table (v9 schema, span sidecar); windowed `inspect`, title
+  supersession and cascade purge; `agmem doc` CLI + `agmem://<space>/doc/{id}`
+  resource; the ctx-flow framework moves off `.claude/notes/`; recall-precision
+  eval with documents present.
 
 ## 9. Risks & open questions
 

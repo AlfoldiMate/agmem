@@ -26,6 +26,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/v6_writer.surql"),
     include_str!("migrations/v7_novelty.surql"),
     include_str!("migrations/v8_summary_kind.surql"),
+    include_str!("migrations/v9_documents.surql"),
 ];
 
 /// The schema version this binary produces.

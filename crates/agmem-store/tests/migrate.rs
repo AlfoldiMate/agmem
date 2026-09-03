@@ -1,7 +1,7 @@
 //! Migration gate against the real (in-memory) engine.
 
-use agmem_core::{SpaceName, Writer};
-use agmem_store::repo::{self, Lookup};
+use agmem_core::{EpisodeId, SpaceName, Writer};
+use agmem_store::repo::{self, Forget, Lookup};
 use agmem_store::{StoreError, db, migrate};
 
 #[tokio::test]
@@ -400,4 +400,217 @@ async fn a_fresh_store_adopts_the_first_embedders_width() {
         .await
         .expect_err("the baked width is now the wrong one");
     assert!(err.to_string().contains("potion-base-8M"), "{err}");
+}
+
+/// An episode written before v9 carries none of the document columns and
+/// never gains them: it reads as anonymous, which is true (issue #132). The
+/// purge path must still reach it, and the memory distilled from it — which
+/// has no `spans` sidecar either — must still read.
+#[tokio::test]
+async fn an_episode_written_before_v9_reads_as_anonymous_and_still_purges() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    conn.query(include_str!("../src/migrations/v1_schema.surql"))
+        .await
+        .expect("v1")
+        .check()
+        .expect("v1 statements");
+    conn.query(
+        "CREATE episode:01M145SMNET1XRYA713EWAQTD5 SET space = 'test',
+             content_hash = 'v1-ep', content = 'recorded before documents existed';
+         CREATE episode_chunk:ulid() SET episode = episode:01M145SMNET1XRYA713EWAQTD5,
+             space = 'test', position = 0, text = 'recorded before documents existed';
+         CREATE memory:01M145SMNET1XRYA713EWAQTD6 SET space = 'test', kind = 'fact',
+             content_hash = 'v1-m', content = 'documents did not exist yet',
+             source = { kind: 'episode', ref: episode:01M145SMNET1XRYA713EWAQTD5 }",
+    )
+    .await
+    .expect("seed")
+    .check()
+    .expect("seed statements");
+
+    assert_eq!(
+        migrate::ensure(&conn).await.expect("upgrade"),
+        migrate::SCHEMA_VERSION
+    );
+
+    let space: SpaceName = "test".parse().expect("valid slug");
+    let episode: EpisodeId = "01M145SMNET1XRYA713EWAQTD5".parse().expect("a ULID");
+    let detail = repo::episode(&conn, &space, &episode)
+        .await
+        .expect("a pre-v9 episode still reads");
+    assert_eq!(detail.chunks.len(), 1);
+    assert_eq!(
+        detail.derived.len(),
+        1,
+        "the claim drawn from it still reads with no spans sidecar"
+    );
+
+    let forgotten = repo::forget(
+        &conn,
+        &Forget {
+            spaces: vec![space.clone()],
+            memories: vec![],
+            episodes: vec![episode.clone()],
+            purge: true,
+        },
+    )
+    .await
+    .expect("purge a pre-v9 episode");
+    assert_eq!(forgotten.episodes, vec![episode]);
+    assert_eq!(forgotten.chunks, 1);
+    let stats = repo::stats(&conn, &space).await.expect("stats");
+    assert_eq!((stats.episodes, stats.chunks, stats.memories), (0, 0, 1));
+}
+
+/// The engine's complaint about `statement`, or `None` if it was accepted.
+async fn rejection(db: &db::Db, statement: &str) -> Option<String> {
+    match db.query(statement).await.expect("query").check() {
+        Ok(_) => None,
+        Err(err) => Some(err.to_string()),
+    }
+}
+
+/// The planner's chosen plan as text — proof a query rides an index.
+async fn plan_for(db: &db::Db, query: &str) -> String {
+    let mut resp = db
+        .query(query)
+        .await
+        .expect("explain query")
+        .check()
+        .expect("explain statements");
+    let plan: Vec<serde_json::Value> = resp.take(0).expect("plan rows");
+    serde_json::Value::from(plan).to_string()
+}
+
+/// A document is an episode with a name and a kind (issue #132): the kind is
+/// an enum the schema enforces, and lookups by title or tag ride their own
+/// indexes rather than scanning the table.
+#[tokio::test]
+async fn a_document_carries_its_name_and_kind_and_the_title_index_serves_it() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    migrate::ensure(&conn).await.expect("migrate");
+
+    assert_eq!(
+        rejection(
+            &conn,
+            "CREATE episode:ulid() SET space = 'test', content_hash = 'doc-1',
+                 content = 'the plan for the widget', title = 'widget plan',
+                 doc_kind = 'plan', tags = ['role:architect'], mime = 'text/markdown'",
+        )
+        .await,
+        None,
+        "a fully described document is accepted"
+    );
+    let err = rejection(
+        &conn,
+        "CREATE episode:ulid() SET space = 'test', content_hash = 'doc-2',
+             content = 'dear diary', title = 'diary', doc_kind = 'diary'",
+    )
+    .await
+    .expect("an unknown doc_kind must be rejected");
+    assert!(err.contains("doc_kind"), "{err}");
+
+    let mut resp = conn
+        .query(
+            "SELECT VALUE title FROM episode WHERE space = 'test' AND title = 'widget plan';
+             SELECT VALUE title FROM episode WHERE tags CONTAINS 'role:architect';",
+        )
+        .await
+        .expect("lookups")
+        .check()
+        .expect("lookup statements");
+    let by_title: Vec<String> = resp.take(0).expect("title hits");
+    let by_tag: Vec<String> = resp.take(1).expect("tag hits");
+    assert_eq!(by_title, ["widget plan"]);
+    assert_eq!(by_tag, by_title);
+
+    let plan = plan_for(
+        &conn,
+        "SELECT id FROM episode WHERE space = 'test' AND title = 'widget plan' EXPLAIN",
+    )
+    .await;
+    assert!(
+        plan.contains("ep_title"),
+        "a title lookup must ride ep_title: {plan}"
+    );
+    let plan = plan_for(
+        &conn,
+        "SELECT id FROM episode WHERE tags CONTAINS 'role:architect' EXPLAIN",
+    )
+    .await;
+    assert!(
+        plan.contains("ep_tags"),
+        "a tag lookup must ride ep_tags: {plan}"
+    );
+}
+
+/// The citation span is a typed sidecar on the memory (issue #132): each
+/// element names an episode and two char offsets, and a memory with no
+/// sidecar at all is still a memory the write path can reinforce.
+#[tokio::test]
+async fn a_span_sidecar_is_typed() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    migrate::ensure(&conn).await.expect("migrate");
+    conn.query(
+        "CREATE episode:01M145SMNET1XRYA713EWAQTD5 SET space = 'test',
+             content_hash = 'doc-1', content = 'the user prefers Rust over Python',
+             title = 'preferences', doc_kind = 'report'",
+    )
+    .await
+    .expect("seed")
+    .check()
+    .expect("seed statement");
+
+    assert_eq!(
+        rejection(
+            &conn,
+            "CREATE memory:ulid() SET space = 'test', kind = 'fact', content_hash = 'm-1',
+                 content = 'the user prefers Rust', source = { kind: 'agent' },
+                 spans = [{ ref: episode:01M145SMNET1XRYA713EWAQTD5, start: 0, end: 21 }]",
+        )
+        .await,
+        None,
+        "a span naming an episode with two char offsets is accepted"
+    );
+    for (field, statement) in [
+        (
+            "ref",
+            "CREATE memory:ulid() SET space = 'test', kind = 'fact', content_hash = 'm-2',
+                 content = 'x', source = { kind: 'agent' },
+                 spans = [{ ref: memory:01M145SMNET1XRYA713EWAQTD5, start: 0, end: 1 }]",
+        ),
+        (
+            "start",
+            "CREATE memory:ulid() SET space = 'test', kind = 'fact', content_hash = 'm-3',
+                 content = 'x', source = { kind: 'agent' },
+                 spans = [{ ref: episode:01M145SMNET1XRYA713EWAQTD5, start: 'x', end: 1 }]",
+        ),
+    ] {
+        let err = rejection(&conn, statement)
+            .await
+            .unwrap_or_else(|| panic!("spans.*.{field} must be typed"));
+        assert!(err.contains(field), "{field}: {err}");
+    }
+
+    // A memory written with no sidecar is the common case; reinforcing it is
+    // the UPDATE that re-coerces every field, and it has to land.
+    let space: SpaceName = "test".parse().expect("valid slug");
+    let outcome = repo::insert_batch(
+        &conn,
+        repo::Batch {
+            space: space.clone(),
+            episode: None,
+            memories: vec![repo::NewMemory::new(
+                agmem_core::Kind::Fact,
+                "no sidecar here",
+            )],
+            writer: Writer::default(),
+        },
+    )
+    .await
+    .expect("write");
+    let id = outcome.memories[0].id().clone();
+    repo::reinforce(&conn, &[id])
+        .await
+        .expect("reinforcing a spanless row lands");
 }

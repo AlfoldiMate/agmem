@@ -6,7 +6,8 @@
 //! what a duplicate means.
 
 use agmem_core::{
-    DecayClass, Derivation, EpisodeId, Kind, MemoryId, Source, SpaceName, Writer, dedup, scoring,
+    DecayClass, Derivation, DocKind, EpisodeId, Kind, MemoryId, Source, SpaceName, Writer, dedup,
+    scoring,
 };
 use jiff::Timestamp;
 use surrealdb::types::RecordId;
@@ -103,6 +104,15 @@ pub struct NewEpisode {
     pub session: Option<String>,
     /// Retrieval slices of `content`, in order.
     pub chunks: Vec<NewChunk>,
+    /// The document name (v9, #132); the caller has already required it
+    /// alongside `doc_kind`.
+    pub title: Option<String>,
+    /// What kind of document this is; `Some` makes the episode a document.
+    pub doc_kind: Option<DocKind>,
+    /// Free labels on a document.
+    pub tags: Vec<String>,
+    /// The content media type.
+    pub mime: Option<String>,
 }
 
 impl NewEpisode {
@@ -113,6 +123,10 @@ impl NewEpisode {
             occurred_at: None,
             session: None,
             chunks: Vec::new(),
+            title: None,
+            doc_kind: None,
+            tags: Vec::new(),
+            mime: None,
         }
     }
 }
@@ -317,6 +331,10 @@ async fn insert_batch_once(db: &Db, batch: Batch) -> Result<BatchOutcome, StoreE
                     occurred_at: types::to_datetime(episode.occurred_at.unwrap_or_else(now)),
                     session: episode.session.clone(),
                     writer: WriterRow::new(&writer),
+                    title: episode.title.clone(),
+                    doc_kind: episode.doc_kind.map(types::doc_kind_str),
+                    tags: episode.doc_kind.is_some().then(|| episode.tags.clone()),
+                    mime: episode.mime.clone(),
                 },
             ))
             .bind(("ep_chunks", chunks));

@@ -16,15 +16,22 @@
 //! | a bare id | whichever of those rows it names — a verbatim hit hands out a *chunk* id, which answers with its episode |
 //! | `episode:<id>` | the verbatim text, its retrieval slices, and every claim distilled from it |
 //! | `entity:<name>` | every claim naming that subject, closed ones included |
+//! | `doc:<space>/<title>` | the newest document under that title, its earlier versions listed behind it (#134) |
+//! | `docs` or `docs:<space>` | the documents a space holds, newest first, with how many claims cite each |
 //! | `stats` | per-space counts |
+//!
+//! A document's content comes back **windowed** — `offset`/`limit` in chars,
+//! one chunk's worth by default — because a plan can be 100k characters and a
+//! tool result that size is a context the agent cannot use.
 
 use std::fmt;
 
 use agmem_core::{
-    ChunkId, DecayClass, Derivation, EpisodeId, Kind, MemoryId, MemoryRecord, Source, SpaceName,
+    ChunkId, DecayClass, Derivation, DocKind, EpisodeId, Kind, MemoryId, MemoryRecord, Source,
+    SpaceName,
 };
 use agmem_store::StoreError;
-use agmem_store::repo::{self, Filters, Liveness, Lookup};
+use agmem_store::repo::{self, DocumentFilter, Filters, Liveness, Lookup};
 use rmcp::ErrorData;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -37,9 +44,10 @@ use crate::tools::{internal, invalid, provenance, store_error};
 pub struct InspectParams {
     /// What to look at: `memory:<id>` for a claim's history and the text
     /// behind it, `episode:<id>` for stored verbatim text, `entity:<name>`
-    /// for everything said about a subject, or `stats` for what each space
-    /// holds. Any bare id another call handed you also works, whichever of
-    /// those it turns out to name.
+    /// for everything said about a subject, `doc:<space>/<title>` for the
+    /// newest document under a title, `docs` or `docs:<space>` to list
+    /// documents, or `stats` for what each space holds. Any bare id another
+    /// call handed you also works, whichever of those it turns out to name.
     #[serde(rename = "ref")]
     pub reference: String,
 
@@ -48,6 +56,25 @@ pub struct InspectParams {
     /// question about the whole store.
     #[serde(default)]
     pub space: Option<String>,
+
+    /// For an episode: where in its content to start reading, in characters.
+    /// Defaults to the beginning.
+    #[serde(default)]
+    pub offset: Option<usize>,
+
+    /// For an episode: how many characters of content to return. A document
+    /// defaults to one chunk's worth and says in `window` where to continue;
+    /// anonymous text comes back whole unless this is set.
+    #[serde(default)]
+    pub limit: Option<usize>,
+
+    /// For `docs`: keep only these kinds.
+    #[serde(default)]
+    pub doc_kinds: Vec<DocKind>,
+
+    /// For `docs`: keep only documents carrying one of these tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// What was found, and where it was looked for.
@@ -98,14 +125,33 @@ pub enum Inspected {
 
     /// Stored verbatim text and everything that came out of it.
     Episode {
-        /// The text, unedited.
+        /// The text, unedited — or the window of it that was asked for.
         episode: EpisodeView,
 
-        /// The slices retrieval matches against, in reading order.
+        /// The slices retrieval matches against, in reading order. On a
+        /// document they carry their size and not their text: read the
+        /// content through the window instead.
         chunks: Vec<ChunkView>,
 
-        /// The claims distilled from it, oldest first.
+        /// The claims distilled from it or drawn from it, oldest first.
         derived: Vec<MemoryView>,
+
+        /// Which part of the content `episode.content` holds, when it is not
+        /// the whole of it.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        window: Option<Window>,
+
+        /// On a document: every version stored under its title, newest
+        /// first, this one included. The first is the current one.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        versions: Option<Vec<VersionView>>,
+    },
+
+    /// The documents a space holds.
+    Documents {
+        /// Newest first. Each carries how many live claims cite it, so an
+        /// orphan — a document nothing was learned from — is visible as such.
+        documents: Vec<DocumentView>,
     },
 
     /// Everything said about one subject.
@@ -237,8 +283,12 @@ pub struct EpisodeView {
     /// The space holding it.
     pub space: String,
 
-    /// The text, exactly as it was given.
+    /// The text, exactly as it was given — or the requested window of it,
+    /// when `window` is present.
     pub content: String,
+
+    /// How many characters the whole text has.
+    pub chars: usize,
 
     /// When the events described happened, RFC3339.
     pub occurred_at: String,
@@ -249,6 +299,23 @@ pub struct EpisodeView {
 
     /// When the row was written, RFC3339.
     pub created_at: String,
+
+    /// The document's name. Present with `doc_kind`; absent on anonymous
+    /// text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+
+    /// What kind of document this is; absent on anonymous text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_kind: Option<DocKind>,
+
+    /// A document's labels; absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+
+    /// The content's media type, when one was recorded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime: Option<String>,
 }
 
 /// One retrieval slice of an episode.
@@ -260,8 +327,77 @@ pub struct ChunkView {
     /// Zero-based position within the episode.
     pub position: u32,
 
-    /// The slice.
-    pub text: String,
+    /// How many characters the slice has.
+    pub chars: usize,
+
+    /// The slice. Absent on a document's chunks — its content is read
+    /// through the window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// Which part of an episode's content the answer holds.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Window {
+    /// The character offset the returned content starts at.
+    pub offset: usize,
+
+    /// How many characters were returned.
+    pub returned: usize,
+
+    /// How many characters the whole content has.
+    pub total: usize,
+
+    /// The `offset` to send to read on from here; absent at the end.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
+}
+
+/// One version of a document, in its title's chain.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct VersionView {
+    /// The record id; `inspect` it to read that version.
+    pub id: String,
+
+    /// When it was stored, RFC3339.
+    pub created_at: String,
+
+    /// How many characters it has.
+    pub chars: usize,
+}
+
+/// One document on a listing.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentView {
+    /// The record id.
+    pub id: String,
+
+    /// The space holding it.
+    pub space: String,
+
+    /// Its name. Several documents can share one: the newest is current.
+    pub title: String,
+
+    /// What kind of document it is.
+    pub doc_kind: DocKind,
+
+    /// Its labels.
+    pub tags: Vec<String>,
+
+    /// The content's media type, when one was recorded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime: Option<String>,
+
+    /// How many characters it has.
+    pub chars: usize,
+
+    /// How many live claims cite it, through `source` or `derived_from`.
+    /// Zero means nothing was learned from it, or everything learned from
+    /// it has since been closed.
+    pub cited: u64,
+
+    /// When it was stored, RFC3339.
+    pub created_at: String,
 }
 
 /// What one space holds.
@@ -307,6 +443,14 @@ enum Reference {
     Episode(EpisodeId),
     Entity(String),
     Stats,
+    /// The newest document under a title in one space — the space token is
+    /// resolved like `space` is (`current`, `user`, a name), never `all`.
+    Doc {
+        space: String,
+        title: String,
+    },
+    /// The documents in one space, or in the searched spaces when unnamed.
+    Docs(Option<String>),
     /// A bare ULID, before the store has said which table answers to it. It
     /// never survives a call: `run` replaces it with what it resolved to, so
     /// the echoed `ref` is always canonical.
@@ -325,12 +469,19 @@ pub async fn run(
 ) -> Result<InspectResult, ErrorData> {
     let reference = parse(&params.reference)?;
     // `stats` is a question about the store rather than about a row, so with
-    // no space given it covers every space rather than the usual two.
-    let requested = params
-        .space
-        .as_deref()
-        .or_else(|| (reference == Reference::Stats).then_some("all"));
+    // no space given it covers every space rather than the usual two. A
+    // `doc:`/`docs:` ref names its own space, which wins over `space`.
+    let requested = match &reference {
+        Reference::Doc { space, .. } => Some(space.as_str()),
+        Reference::Docs(Some(space)) => Some(space.as_str()),
+        Reference::Stats => params.space.as_deref().or(Some("all")),
+        _ => params.space.as_deref(),
+    };
     let spaces = crate::tools::spaces(service, requested).await?;
+    let window = WindowSpec {
+        offset: params.offset,
+        limit: params.limit,
+    };
 
     // Every arm hands back the reference it *resolved* to, not the one it was
     // given: a bare id only becomes `memory:` or `episode:` once the store has
@@ -342,6 +493,32 @@ pub async fn run(
                 counts: counts(service, &spaces).await?,
             },
         ),
+        Reference::Docs(named) => {
+            let filter = DocumentFilter {
+                kinds: params.doc_kinds.clone(),
+                tags: params.tags.clone(),
+                limit: DOCS_PER_LISTING,
+            };
+            (
+                Reference::Docs(named),
+                Inspected::Documents {
+                    documents: documents(service, &spaces, &filter).await?,
+                },
+            )
+        }
+        Reference::Doc { space, title } => {
+            let found = document(service, &spaces, &title, window)
+                .await?
+                .ok_or_else(|| {
+                    missing(
+                        "document titled",
+                        &format!("{title:?}"),
+                        &spaces,
+                        "list what is there with `docs`, or check the space",
+                    )
+                })?;
+            (Reference::Doc { space, title }, found)
+        }
         Reference::Entity(name) => {
             let memories = about(service, &spaces, &name).await?;
             (
@@ -365,12 +542,12 @@ pub async fn run(
             (Reference::Memory(id), found)
         }
         Reference::Episode(id) => {
-            let found = episode(service, &spaces, &id)
+            let found = episode(service, &spaces, &id, window)
                 .await?
                 .ok_or_else(|| missing("episode", id.as_str(), &spaces, FIRST_OR_WIDER))?;
             (Reference::Episode(id), found)
         }
-        Reference::Unqualified(id) => unqualified(service, &spaces, &id).await?,
+        Reference::Unqualified(id) => unqualified(service, &spaces, &id, window).await?,
     };
 
     Ok(InspectResult {
@@ -478,29 +655,172 @@ async fn episode(
     service: &AgmemService,
     spaces: &[SpaceName],
     id: &EpisodeId,
+    window: WindowSpec,
 ) -> Result<Option<Inspected>, ErrorData> {
     for space in spaces {
         match repo::episode(service.db(), space, id).await {
-            Ok(detail) => {
-                return Ok(Some(Inspected::Episode {
-                    episode: detail.episode.into(),
-                    chunks: detail
-                        .chunks
-                        .into_iter()
-                        .map(|chunk| ChunkView {
-                            id: chunk.id.into(),
-                            position: chunk.position,
-                            text: chunk.text,
-                        })
-                        .collect(),
-                    derived: detail.derived.into_iter().map(MemoryView::from).collect(),
-                }));
-            }
+            Ok(detail) => return Ok(Some(detailed(service, space, detail, window).await?)),
             Err(StoreError::UnknownEpisode { .. }) => continue,
             Err(error) => return Err(store_error(&error)),
         }
     }
     Ok(None)
+}
+
+/// The newest document under `title`, from the first searched space that has
+/// one.
+async fn document(
+    service: &AgmemService,
+    spaces: &[SpaceName],
+    title: &str,
+    window: WindowSpec,
+) -> Result<Option<Inspected>, ErrorData> {
+    for space in spaces {
+        let versions = repo::documents_by_title(service.db(), space, title)
+            .await
+            .map_err(|error| store_error(&error))?;
+        let Some(newest) = versions.first() else {
+            continue;
+        };
+        let detail = repo::episode(service.db(), space, &newest.id)
+            .await
+            .map_err(|error| store_error(&error))?;
+        return Ok(Some(detailed(service, space, detail, window).await?));
+    }
+    Ok(None)
+}
+
+/// The documents in each searched space, newest first within a space.
+async fn documents(
+    service: &AgmemService,
+    spaces: &[SpaceName],
+    filter: &DocumentFilter,
+) -> Result<Vec<DocumentView>, ErrorData> {
+    let mut listed = Vec::new();
+    for space in spaces {
+        let page = repo::documents(service.db(), space, filter)
+            .await
+            .map_err(|error| store_error(&error))?;
+        listed.extend(page.into_iter().filter_map(|summary| {
+            let episode = summary.episode;
+            Some(DocumentView {
+                id: episode.id.to_string(),
+                space: episode.space.to_string(),
+                title: episode.title?,
+                doc_kind: episode.doc_kind?,
+                tags: episode.tags,
+                mime: episode.mime,
+                chars: episode.content.chars().count(),
+                cited: summary.cited,
+                created_at: episode.created_at.to_string(),
+            })
+        }));
+    }
+    Ok(listed)
+}
+
+/// An episode's answer: the window of its content, its slices, what came out
+/// of it, and — on a document — the versions under its title.
+async fn detailed(
+    service: &AgmemService,
+    space: &SpaceName,
+    detail: repo::EpisodeDetail,
+    window: WindowSpec,
+) -> Result<Inspected, ErrorData> {
+    let is_document = detail.episode.is_document();
+    let versions = match (&detail.episode.title, is_document) {
+        (Some(title), true) => {
+            let chain = repo::documents_by_title(service.db(), space, title)
+                .await
+                .map_err(|error| store_error(&error))?;
+            Some(
+                chain
+                    .into_iter()
+                    .map(|version| VersionView {
+                        id: version.id.to_string(),
+                        created_at: version.created_at.to_string(),
+                        chars: version.content.chars().count(),
+                    })
+                    .collect(),
+            )
+        }
+        _ => None,
+    };
+
+    // The default window on a document is one chunk's worth — the unit
+    // retrieval already hands out — so a 60-chunk plan is read on the
+    // agent's terms rather than dumped. Anonymous text keeps its old shape:
+    // whole, unless a window was asked for.
+    let default_limit = if is_document {
+        detail
+            .chunks
+            .first()
+            .map(|chunk| chunk.text.chars().count())
+            .filter(|&chars| chars > 0)
+    } else {
+        None
+    };
+    let (content, window) = window.apply(&detail.episode.content, default_limit);
+
+    let chunks = detail
+        .chunks
+        .into_iter()
+        .map(|chunk| ChunkView {
+            id: chunk.id.into(),
+            position: chunk.position,
+            chars: chunk.text.chars().count(),
+            text: (!is_document).then_some(chunk.text),
+        })
+        .collect();
+    let mut episode = EpisodeView::from(detail.episode);
+    episode.content = content;
+
+    Ok(Inspected::Episode {
+        episode,
+        chunks,
+        derived: detail.derived.into_iter().map(MemoryView::from).collect(),
+        window,
+        versions,
+    })
+}
+
+/// How many documents one listing shows per space.
+const DOCS_PER_LISTING: usize = 50;
+
+/// The window a caller asked for, before it meets the content.
+#[derive(Debug, Clone, Copy, Default)]
+struct WindowSpec {
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+impl WindowSpec {
+    /// The requested slice of `content`, in chars, and where it sits.
+    ///
+    /// `None` for the window when the whole content came back unasked — the
+    /// answer's shape for anonymous text is then exactly what it was before
+    /// windows existed.
+    fn apply(self, content: &str, default_limit: Option<usize>) -> (String, Option<Window>) {
+        let total = content.chars().count();
+        let limit = self.limit.or(default_limit);
+        if self.offset.is_none() && limit.is_none() {
+            return (content.to_owned(), None);
+        }
+        let offset = self.offset.unwrap_or(0).min(total);
+        let limit = limit.unwrap_or(total.saturating_sub(offset));
+        let slice: String = content.chars().skip(offset).take(limit).collect();
+        let returned = slice.chars().count();
+        let end = offset + returned;
+        (
+            slice,
+            Some(Window {
+                offset,
+                returned,
+                total,
+                next_offset: (end < total).then_some(end),
+            }),
+        )
+    }
 }
 
 /// A bare id, resolved against every table that could answer to it.
@@ -516,6 +836,7 @@ async fn unqualified(
     service: &AgmemService,
     spaces: &[SpaceName],
     id: &str,
+    window: WindowSpec,
 ) -> Result<(Reference, Inspected), ErrorData> {
     // `parse` accepted this as a ULID and all three newtypes validate the same
     // thing, so none of these can fail — but nothing here panics on a store
@@ -531,7 +852,7 @@ async fn unqualified(
             .await
             .map_err(|error| store_error(&error))?;
         if let Some(parent) = parent {
-            let found = episode(service, spaces, &parent)
+            let found = episode(service, spaces, &parent, window)
                 .await?
                 .ok_or_else(unreachable_chunk)?;
             return Ok((Reference::Episode(parent), found));
@@ -539,7 +860,7 @@ async fn unqualified(
     }
 
     let episode_id = EpisodeId::new(id).map_err(|_| grammar(id))?;
-    if let Some(found) = episode(service, spaces, &episode_id).await? {
+    if let Some(found) = episode(service, spaces, &episode_id, window).await? {
         return Ok((Reference::Episode(episode_id), found));
     }
 
@@ -615,6 +936,9 @@ fn parse(raw: &str) -> Result<Reference, ErrorData> {
     if raw == "stats" {
         return Ok(Reference::Stats);
     }
+    if raw == "docs" {
+        return Ok(Reference::Docs(None));
+    }
     match raw.split_once(':') {
         Some(("memory", id)) => MemoryId::new(id)
             .map(Reference::Memory)
@@ -625,16 +949,36 @@ fn parse(raw: &str) -> Result<Reference, ErrorData> {
         Some(("entity", name)) if !name.trim().is_empty() => {
             Ok(Reference::Entity(name.trim().to_owned()))
         }
+        Some(("docs", space)) if space_token(space) => {
+            Ok(Reference::Docs(Some(space.trim().to_owned())))
+        }
+        // The title may itself contain `/`; the space cannot.
+        Some(("doc", rest)) => match rest.split_once('/') {
+            Some((space, title)) if space_token(space) && !title.trim().is_empty() => {
+                Ok(Reference::Doc {
+                    space: space.trim().to_owned(),
+                    title: title.trim().to_owned(),
+                })
+            }
+            _ => Err(grammar(raw)),
+        },
         _ if MemoryId::new(raw).is_ok() => Ok(Reference::Unqualified(raw.to_owned())),
         _ => Err(grammar(raw)),
     }
 }
 
+/// Whether a ref's space part is something `space` would accept: an alias
+/// or a slug. `all` is not a place a title can be looked up in.
+fn space_token(raw: &str) -> bool {
+    let raw = raw.trim();
+    raw != "all" && (matches!(raw, "current" | "user") || SpaceName::new(raw).is_ok())
+}
+
 /// The grammar, as something to act on rather than guess at.
 fn grammar(raw: &str) -> ErrorData {
     invalid(format!(
-        "ref must be `memory:<id>`, `episode:<id>`, `entity:<name>`, `stats`, \
-         or a bare id; got {raw:?}"
+        "ref must be `memory:<id>`, `episode:<id>`, `entity:<name>`, `doc:<space>/<title>`, \
+         `docs` or `docs:<space>`, `stats`, or a bare id; got {raw:?}"
     ))
 }
 
@@ -696,10 +1040,15 @@ impl From<agmem_core::Episode> for EpisodeView {
         Self {
             id: episode.id.into(),
             space: episode.space.into(),
+            chars: episode.content.chars().count(),
             content: episode.content,
             occurred_at: episode.occurred_at.to_string(),
             session: episode.session,
             created_at: episode.created_at.to_string(),
+            title: episode.title,
+            doc_kind: episode.doc_kind,
+            tags: (!episode.tags.is_empty()).then_some(episode.tags),
+            mime: episode.mime,
         }
     }
 }
@@ -710,6 +1059,9 @@ impl fmt::Display for Reference {
             Self::Memory(id) => write!(f, "memory:{id}"),
             Self::Episode(id) => write!(f, "episode:{id}"),
             Self::Entity(name) => write!(f, "entity:{name}"),
+            Self::Doc { space, title } => write!(f, "doc:{space}/{title}"),
+            Self::Docs(Some(space)) => write!(f, "docs:{space}"),
+            Self::Docs(None) => f.write_str("docs"),
             Self::Stats => f.write_str("stats"),
             Self::Unqualified(id) => f.write_str(id),
         }
@@ -753,6 +1105,25 @@ mod tests {
             Reference::Entity("project-x".to_owned())
         );
         assert_eq!(parse("stats").expect("stats"), Reference::Stats);
+        assert_eq!(
+            parse("doc:current/plans/phase-9").expect("doc"),
+            Reference::Doc {
+                space: "current".to_owned(),
+                title: "plans/phase-9".to_owned()
+            },
+            "the first slash ends the space; a title may carry its own"
+        );
+        assert_eq!(parse("docs").expect("docs"), Reference::Docs(None));
+        assert_eq!(
+            parse("docs:proj-x").expect("docs in a space"),
+            Reference::Docs(Some("proj-x".to_owned()))
+        );
+        assert!(
+            parse("doc:all/plan").is_err(),
+            "a title is looked up in one space"
+        );
+        assert!(parse("doc:current/").is_err(), "and needs a title");
+        assert!(parse("docs:not a slug").is_err());
     }
 
     #[test]

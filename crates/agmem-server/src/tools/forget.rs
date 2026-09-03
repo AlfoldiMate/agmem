@@ -64,6 +64,13 @@ pub struct ForgetParams {
     /// first of two calls when forgetting by `query`.
     #[serde(default)]
     pub dry_run: bool,
+
+    /// When purging a document that live claims still cite: purge those
+    /// claims with it, correction history and all. Without this the purge is
+    /// refused and names them, so nothing is left citing text that is gone.
+    /// Off by default.
+    #[serde(default)]
+    pub cascade: bool,
 }
 
 /// What was selected, and what happened to it.
@@ -115,10 +122,16 @@ pub struct ForgetMatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub invalid_reason: Option<String>,
 
-    /// For an episode: how many distilled claims cite it and will outlive it.
-    /// Purging text does not purge what was learned from it.
+    /// For an episode: how many claims cite it. On anonymous text they
+    /// outlive a purge; on a document they block it unless `cascade`, and
+    /// then go with it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub derived: Option<usize>,
+
+    /// For a memory pulled in by `cascade`: the document it cites, whose
+    /// purge takes it along.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cascaded_from: Option<String>,
 }
 
 /// What a match is.
@@ -197,7 +210,14 @@ pub async fn run(service: &AgmemService, params: ForgetParams) -> Result<ForgetR
         space,
         purge,
         dry_run,
+        cascade,
     } = params;
+    if cascade && !purge {
+        return Err(invalid(
+            "`cascade` only means something with `purge: true`: a soft forget closes \
+             claims and never touches a document",
+        ));
+    }
     let query = query
         .map(|text| text.trim().to_owned())
         .filter(|text| !text.is_empty());
@@ -240,7 +260,12 @@ pub async fn run(service: &AgmemService, params: ForgetParams) -> Result<ForgetR
     // 2. A purge takes the whole correction chain: leaving the earlier
     //    versions of a claim behind would make "delete this" mean "delete the
     //    latest wording of this", which is not what anyone asks for.
+    //    A document inverts the anonymous rule (design §5.4): the claims that
+    //    cite it do not outlive it. Either the purge is refused while any
+    //    are live, or — with `cascade` — they are pulled in as targets, and
+    //    the chain expansion below then takes their history too.
     let targets = if purge {
+        let targets = cascade_documents(service, targets, cascade).await?;
         expand_chains(service, targets).await?
     } else {
         targets
@@ -331,6 +356,8 @@ enum Target {
     Memory {
         space: SpaceName,
         record: Box<MemoryRecord>,
+        /// The document whose cascade pulled this claim in, when one did.
+        cascaded_from: Option<EpisodeId>,
     },
     /// Verbatim text, with what hangs off it.
     Episode {
@@ -433,10 +460,66 @@ async fn by_query(
             StoreHit::Memory(record) => Some(Target::Memory {
                 space: record.space.clone(),
                 record,
+                cascaded_from: None,
             }),
             StoreHit::Chunk(_) => None,
         })
         .collect())
+}
+
+/// Refuse to purge a cited document, or pull its citers in (#134).
+///
+/// The guard reads both columns a memory can cite from — `source.ref`, which
+/// `remember` links, and `derived_from`, which `reflect` links — and only
+/// live ones: a closed claim is already history and does not hold the text.
+/// A citer that is itself already a target is not added twice.
+async fn cascade_documents(
+    service: &AgmemService,
+    targets: Vec<Target>,
+    cascade: bool,
+) -> Result<Vec<Target>, ErrorData> {
+    let mut pulled: Vec<Target> = Vec::new();
+    for target in &targets {
+        let Target::Episode { space, detail } = target else {
+            continue;
+        };
+        if !detail.episode.is_document() {
+            continue;
+        }
+        let citers = repo::document_citers(service.db(), space, &detail.episode.id)
+            .await
+            .map_err(|error| store_error(&error))?;
+        let citers: Vec<MemoryRecord> = citers
+            .into_iter()
+            .filter(|citer| {
+                !targets.iter().any(|seen| seen.id() == citer.id.as_str())
+                    && !pulled.iter().any(|seen| seen.id() == citer.id.as_str())
+            })
+            .collect();
+        if citers.is_empty() {
+            continue;
+        }
+        if !cascade {
+            let ids: Vec<&str> = citers.iter().map(|citer| citer.id.as_str()).collect();
+            return Err(invalid(format!(
+                "episode:{} is a document ({}) that {} live claim(s) still cite: {}. \
+                 Nothing was purged. Forget those claims first, or send `cascade: true` \
+                 to purge them with it",
+                detail.episode.id,
+                detail.episode.title.as_deref().unwrap_or("untitled"),
+                ids.len(),
+                ids.join(", ")
+            )));
+        }
+        pulled.extend(citers.into_iter().map(|record| Target::Memory {
+            space: space.clone(),
+            record: Box::new(record),
+            cascaded_from: Some(detail.episode.id.clone()),
+        }));
+    }
+    let mut targets = targets;
+    targets.extend(pulled);
+    Ok(targets)
 }
 
 /// Replace every memory target with its whole supersession chain, in order,
@@ -449,7 +532,11 @@ async fn expand_chains(
     for target in targets {
         match target {
             Target::Episode { .. } => expanded.push(target),
-            Target::Memory { space, record } => {
+            Target::Memory {
+                space,
+                record,
+                cascaded_from,
+            } => {
                 let chain = repo::history_chain(service.db(), &space, &record.id)
                     .await
                     .map_err(|error| store_error(&error))?;
@@ -458,6 +545,7 @@ async fn expand_chains(
                         expanded.push(Target::Memory {
                             space: space.clone(),
                             record: Box::new(link),
+                            cascaded_from: cascaded_from.clone(),
                         });
                     }
                 }
@@ -483,6 +571,7 @@ async fn memory(
                 return Ok(Some(Target::Memory {
                     space: space.clone(),
                     record: Box::new(record),
+                    cascaded_from: None,
                 }));
             }
             Err(StoreError::UnknownMemory { .. }) => continue,
@@ -625,7 +714,11 @@ impl ForgetMatch {
     /// One resolved target as the agent sees it before deciding.
     fn new(target: &Target) -> Self {
         match target {
-            Target::Memory { space, record } => Self {
+            Target::Memory {
+                space,
+                record,
+                cascaded_from,
+            } => Self {
                 id: record.id.as_str().to_owned(),
                 kind: MatchKind::Memory,
                 content: preview(&record.content),
@@ -634,6 +727,7 @@ impl ForgetMatch {
                     .invalid_reason
                     .map(|reason| reason.as_str().to_owned()),
                 derived: None,
+                cascaded_from: cascaded_from.as_ref().map(|id| format!("episode:{id}")),
             },
             Target::Episode { space, detail } => Self {
                 id: detail.episode.id.as_str().to_owned(),
@@ -642,6 +736,7 @@ impl ForgetMatch {
                 space: space.as_str().to_owned(),
                 invalid_reason: None,
                 derived: Some(detail.derived.len()),
+                cascaded_from: None,
             },
         }
     }

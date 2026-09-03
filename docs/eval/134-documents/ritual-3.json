@@ -1,0 +1,69 @@
+{
+  "scenario": "ritual",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": true,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": [
+    {
+      "tool": "remember",
+      "field": "created",
+      "expect": "nonempty",
+      "pass": true
+    }
+  ],
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.5rnSz75og0",
+  "answer": "Only one live claim matches, and it's the one I already stored this session — no duplicate, no correction needed. Nothing else in this conversation was durable (no other decisions, conventions, or lessons came up).\n\n**Checkpoint result:**\n- **Saved:** the thiserror-for-libraries / anyhow-for-binaries convention (already written in the prior turn; confirmed via recall as the sole live claim, no correction needed).\n- **Corrected:** nothing.\n- **Left out:** nothing else — the rest of the session was just the tool-loading mechanics for storing that one instruction, which isn't itself durable content.",
+  "cost_usd": 0.0895878,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow; never the reverse (using anyhow in a library or thiserror in a binary).",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1M8GM1EPZRZCGMM73WG2V0Y\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "error handling convention thiserror anyhow library binary",
+        "tags": [
+          "rust",
+          "error-handling",
+          "convention"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow; never the reverse (using anyhow in a library or thiserror in a binary).\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1M8GM1EPZRZCGMM73WG2V0Y\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8108872932653365},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:29:19.022525Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

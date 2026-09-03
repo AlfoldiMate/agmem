@@ -197,6 +197,10 @@ async fn record(service: &AgmemService, space: &str, id: &str) -> Result<String,
         InspectParams {
             reference: id.to_owned(),
             space: Some(space.to_owned()),
+            offset: None,
+            limit: None,
+            doc_kinds: Vec::new(),
+            tags: Vec::new(),
         },
     )
     .await

@@ -1,0 +1,53 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.oFd9C2qaIt",
+  "answer": "Pulled everything tagged `atlas` from memory (48 hits). Here's what stands out — nothing has been changed.\n\n## Contradiction (needs resolution before handover)\n- **\"Merging to main deploys atlas to staging automatically.\"** vs. **\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"**\n  These directly conflict. Whoever inherits this needs the real answer — pick one and correct the other via `supersedes`, not just delete.\n\n## Duplicates (same fact, restated)\n- **Deploy command**, stated three near-identical ways:\n  - \"Project atlas is deployed by running `bin/ship.sh` from the repository root.\"\n  - \"To ship atlas you run the `bin/ship.sh` script at the top of the repo.\"\n  - \"Deploying atlas means executing `bin/ship.sh`; the old `make deploy` target is gone.\" *(this one adds real info — the `make deploy` deprecation — so it's not pure noise, just redundant with the other two on the ship.sh part)*\n- **Test runner**, stated twice verbatim in meaning:\n  - \"Tests in atlas are run through `cargo nextest run`; plain `cargo test` is not used.\"\n  - \"The atlas test suite is run with `cargo nextest run`, not `cargo test`.\"\n\n## Possibly out of date / inconsistent\n- **Postgres version**: \"atlas stores its data in Postgres 16...\" says only 16, while another claim says \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" Not a hard contradiction, but the first one reads as if 16 is the only supported version — worth confirming which is current before handing off.\n\n## Likely stale / session-noise (low importance/retention scores, time-bound phrasing)\n- \"The flaky test being chased this week is `pagination_ordering` in atlas-api.\" — \"this week\" language, will mislead a new owner if it's no longer true.\n- \"The branch under review is `spike/consolidate`.\" — reads like leftover context from one session, not a durable project fact.\n\n## Everything else\nThe remaining ~35 claims (CI pipeline steps, crate layout, API auth/rate-limiting, release process, branch/PR policy, docs tooling, logging format, lock-file behavior, etc.) look internally consistent and non-duplicated.\n\nWant me to fix the contradiction (once you tell me which deploy behavior is actually true), collapse the duplicates, and prune/update the two stale session-notes?",
+  "cost_usd": 0.1649284,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1M8NVW5V13E6RYD6746JYA3\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:32:10.680398Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1M8NVVZT1SYWQC7NVHYG4SQ\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1M8NVNT8ZR3GCV9XWJ7X116\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999925519821,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999702079286,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8276705968295893},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:32:10.680153Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1M8NVP8W5KVPPH15XAYM4WA\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8987671999718159,\\\"s"
+    }
+  ]
+}

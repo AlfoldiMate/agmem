@@ -14,8 +14,8 @@
 //! them.
 
 use agmem_core::{
-    ChunkId, DecayClass, Derivation, Episode, EpisodeChunk, EpisodeId, InvalidReason, Kind,
-    MemoryId, MemoryRecord, Source, SpaceName, Writer,
+    ChunkId, DecayClass, Derivation, DocKind, Episode, EpisodeChunk, EpisodeId, InvalidReason,
+    Kind, MemoryId, MemoryRecord, Source, SpaceName, Writer,
 };
 use jiff::Timestamp;
 use surrealdb::types::{Datetime, RecordId, SurrealValue, Value};
@@ -171,6 +171,12 @@ pub(crate) struct EpisodeRow {
     pub(crate) occurred_at: Datetime,
     pub(crate) session: Option<String>,
     pub(crate) writer: WriterRow,
+    // v9 (#132): a document is an episode with a name and a kind. NONE on an
+    // anonymous episode rather than absent, so the row shape is one shape.
+    pub(crate) title: Option<String>,
+    pub(crate) doc_kind: Option<String>,
+    pub(crate) tags: Option<Vec<String>>,
+    pub(crate) mime: Option<String>,
 }
 
 /// The `episode_chunk` columns a write supplies, minus the ones the query
@@ -407,6 +413,10 @@ pub(crate) struct EpisodeReadRow {
     pub(crate) occurred_at: Datetime,
     pub(crate) session: Option<String>,
     pub(crate) created_at: Datetime,
+    pub(crate) title: Option<String>,
+    pub(crate) doc_kind: Option<String>,
+    pub(crate) tags: Option<Vec<String>>,
+    pub(crate) mime: Option<String>,
 }
 
 impl EpisodeReadRow {
@@ -423,6 +433,10 @@ impl EpisodeReadRow {
             occurred_at: to_timestamp(&self.occurred_at),
             session: self.session,
             created_at: to_timestamp(&self.created_at),
+            title: self.title,
+            doc_kind: self.doc_kind.as_deref().map(str::parse).transpose()?,
+            tags: self.tags.unwrap_or_default(),
+            mime: self.mime,
         })
     }
 }
@@ -512,6 +526,11 @@ pub(crate) fn kind_str(kind: Kind) -> String {
     kind.as_str().to_owned()
 }
 
+/// The row spelling of a document kind.
+pub(crate) fn doc_kind_str(kind: DocKind) -> String {
+    kind.as_str().to_owned()
+}
+
 /// The row spelling of a decay class.
 pub(crate) fn decay_class_str(class: DecayClass) -> String {
     class.as_str().to_owned()
@@ -531,4 +550,38 @@ pub(crate) struct PurgedRow {
     pub(crate) chunks: i64,
     pub(crate) episodes: Vec<String>,
     pub(crate) memories: Vec<String>,
+}
+
+/// What [`crate::queries::read::documents`] returns: the page of documents
+/// and, as `(memory, document)` pairs, which live memories cite them through
+/// which column. Folded into counts by the repo.
+#[derive(SurrealValue)]
+pub(crate) struct DocumentsRow {
+    pub(crate) docs: Vec<EpisodeReadRow>,
+    pub(crate) by_source: Vec<SourceCiteRow>,
+    pub(crate) by_derivation: Vec<DerivationCiteRow>,
+}
+
+/// One memory whose `source.ref` names a document on the page.
+#[derive(SurrealValue)]
+pub(crate) struct SourceCiteRow {
+    pub(crate) memory: String,
+    pub(crate) document: String,
+}
+
+/// One memory whose `derived_from` names a document on the page — every link
+/// it carries, since the page's ids are filtered against in Rust.
+#[derive(SurrealValue)]
+pub(crate) struct DerivationCiteRow {
+    pub(crate) memory: String,
+    pub(crate) documents: Vec<String>,
+}
+
+/// A document's name and kind, for a hit that needs to say what it is a
+/// slice of.
+#[derive(SurrealValue)]
+pub(crate) struct DocumentHeaderRow {
+    pub(crate) id: String,
+    pub(crate) title: Option<String>,
+    pub(crate) doc_kind: Option<String>,
 }

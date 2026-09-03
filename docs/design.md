@@ -368,8 +368,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
   }],
   "episode": {                                       // optional verbatim ground truth
     "content": "…", "occurred_at": "RFC3339", "session": "…",
-    "title": "…", "doc_kind": "plan|review|report|probe|transcript|other",  // #135: a document;
-    "tags": ["…"], "mime": "text/markdown"           //   title required with doc_kind, transcript refused in `user`
+    "title": "…", "doc_kind": "plan|review|report|probe|transcript|other",  // #134: a document;
+    "tags": ["…"], "mime": "text/markdown"           //   title required with doc_kind, transcript refused in `user`;
+                                                     //   a new hash under an existing title is its newest version
   }
 }
 // → { created: [ids],                // in request order, minus the duplicates
@@ -401,7 +402,8 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //              source: "agent|episode:<id>|external:<origin>",
 //              entities, tags,
 //              valid_from, invalid_at, invalid_reason, superseded_by,
-//              covers }] }   // summary hits only: the refs it stands in for
+//              covers,       // summary hits only: the refs it stands in for
+//              doc: { id, title, doc_kind, position } }] }  // episode hits that slice a document (#134)
 // Episode chunks compete in the same order as memories (`kind: "episode"`);
 // they carry no validity window and rank on retrieval alone.
 
@@ -419,6 +421,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //                 invalid_reason?, derived? }],   // derived: claims an episode leaves behind
 //     invalidated: [ids],       // soft: the rows this call closed
 //     purged: [ids], chunks_purged: n }
+// A purge of a document is refused while live memories cite it — the error
+// names them — unless `cascade`, which adds them to `matched` (each with
+// `cascaded_from: episode:<id>`) and purges them with it (#134).
 // `matched` is the list, not a count: a dry run whose answer is a number is
 // not a scope anyone can check. It holds what a purge pulls in as well — the
 // whole correction chain — so the blast radius is what the agent reads.
@@ -426,13 +431,22 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 // absent from `invalidated`: a forget never rewrites another close.
 
 // inspect
-{ "ref": "memory:01J… | 01J… | episode:01J… | entity:<name> | stats",
-  "space": "current|user|all|<name>" }   // default: current + user; all for stats
+{ "ref": "memory:01J… | 01J… | episode:01J… | entity:<name> | stats
+          | doc:<space>/<title> | docs | docs:<space>",   // #134
+  "space": "current|user|all|<name>",    // default: current + user; all for stats
+  "offset": 0, "limit": n,               // #134: a window over episode content, in chars
+  "doc_kinds": ["plan"], "tags": ["…"] } // #134: filters for `docs`
 // → { ref: canonical form, spaces: [searched],
 //     found: one of
 //       { kind: "memory",  memory, chain: [oldest→newest], episode? }   // memory.spans? (v9)
-//       { kind: "episode", episode, chunks: [reading order], derived: [claims] }
-//                          // title/doc_kind/tags/mime when a document; #134 adds a window
+//       { kind: "episode", episode, chunks: [reading order], derived: [claims],
+//         window?: { offset, returned, total, next_offset? },   // #134
+//         versions?: [{ id, created_at, chars }] }              // #134: newest first, documents only
+//                          // episode carries chars, title/doc_kind/tags/mime when a document;
+//                          // a document defaults to one chunk of content and its chunks
+//                          // carry `chars` but no text — the window is the way to read it
+//       { kind: "documents", documents: [{ id, space, title, doc_kind, tags, mime?,
+//                                          chars, cited, created_at }] }   // #134: newest first
 //       { kind: "entity",  entity, memories: [live and closed] }
 //       { kind: "stats",   counts: [{ space, memories, live, invalidated,
 //                                     episodes, chunks, live_by_kind }] } }
@@ -453,7 +467,8 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //     stale_contexts:  [{ claim: MemoryView, idle_days, expires_in_days }],
 //     over_full_tags:  [{ space, tag, live, keep,        // fullest first (#82)
 //                         members: [MemoryView] }],      // strongest first
-//     orphan_documents: [{ space, episode }],   // documents no live memory cites (#132 lifecycle)
+//     orphan_documents: [{ space, episode: "episode:<id>", title, doc_kind,
+//                          chars, created_at }],  // documents no live memory cites (#134)
 //     note? }                          // present only when something limited it
 // Every candidate is a whole `MemoryView`, content included: the #38 finding
 // is that an id and a number are not something an agent can decide on.

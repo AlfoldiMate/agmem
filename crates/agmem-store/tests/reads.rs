@@ -79,6 +79,10 @@ async fn seeded() -> Db {
                 content: "a long conversation".to_owned(),
                 occurred_at: None,
                 session: None,
+                title: None,
+                doc_kind: None,
+                tags: Vec::new(),
+                mime: None,
                 chunks: vec![
                     NewChunk {
                         text: "the borrow checker took an hour to explain".to_owned(),
@@ -239,6 +243,10 @@ async fn an_as_of_recall_excludes_chunks_that_had_not_yet_happened() {
                 content: "an older conversation".to_owned(),
                 occurred_at: Some(stamp("2025-05-01T00:00:00Z")),
                 session: None,
+                title: None,
+                doc_kind: None,
+                tags: Vec::new(),
+                mime: None,
                 chunks: vec![NewChunk {
                     text: "coffee fuelled the all-nighter".to_owned(),
                     embedding: Some(axis(2)),

@@ -1,0 +1,69 @@
+{
+  "scenario": "ritual",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember",
+    "recall"
+  ],
+  "calls": 2,
+  "superseded": false,
+  "verified": true,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": [
+    {
+      "tool": "remember",
+      "field": "created",
+      "expect": "nonempty",
+      "pass": true
+    }
+  ],
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.ZN8kzRm8Ah",
+  "answer": "Confirmed already stored — nothing new to write.\n\n- **Saved (already stored earlier this session):** library crates use `thiserror`, binaries use `anyhow`, never reversed — this bit the project twice.\n- **Corrected:** nothing.\n- **Left out:** the rest of the session was just tool-schema lookups and the storage step itself — no other durable facts, decisions, or lessons to capture.",
+  "cost_usd": 0.08996219999999999,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this codebase, library crates should use thiserror for their error types, and binaries should use anyhow for theirs — never the reverse (library using anyhow or binary using thiserror).",
+            "kind": "instruction",
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1M8G0RGCJ8Y8QSZWQSE51V7\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 1,
+      "tool": "recall",
+      "input": {
+        "query": "library crates use thiserror, binaries use anyhow for error handling",
+        "tags": [
+          "rust",
+          "error-handling",
+          "convention"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"In this codebase, library crates should use thiserror for their error types, and binaries should use anyhow for theirs — never the reverse (library using anyhow or binary using thiserror).\\\",\\\"entities\\\":[],\\\"id\\\":\\\"01M1M8G0RGCJ8Y8QSZWQSE51V7\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":1,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8685328616138899},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"rust\\\",\\\"error-handling\\\",\\\"convention\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:28:59.280261Z\\\"}],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

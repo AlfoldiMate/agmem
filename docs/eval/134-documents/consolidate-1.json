@@ -1,0 +1,79 @@
+{
+  "scenario": "consolidate",
+  "run": 1,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 4,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 4,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.gbX63zMXAb",
+  "answer": "Here's what's stored about atlas — 47 memories total, all recorded at the same instant (2026-09-03T18:31:11Z), which itself is worth noting: nothing has an update history, so duplicates below were never reconciled.\n\n## Direct contradiction (needs a decision)\n- **\"Merging to main deploys atlas to staging automatically.\"**\n- **\"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"**\n\nThese can't both be true. One is stale. Worth checking `.github/workflows/` to see which reflects reality before I correct either.\n\n## Duplicated / redundant claims (same fact, restated separately)\n**Deploy via `bin/ship.sh`** — said four separate ways:\n- \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n- \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n- \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\"\n- (plus the staging-specific one already flagged above as contradictory)\n\nThese should collapse into one memory (the \"old make deploy target is gone\" one is the most informative — keep that, drop the other two).\n\n**Test runner (`cargo nextest`)** — said twice, almost verbatim:\n- \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n- \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n\nPure duplicate, no new information in either — keep one.\n\n## Possibly inconsistent (not a hard contradiction, but worth clarifying)\n- \"atlas stores its data in Postgres 16...\" vs. \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" Not contradictory, but it's unclear whether staging/prod actually run 15 anywhere or if 16 is universal now — worth tightening into one claim.\n\n## Stale, session-specific facts (likely dead weight for a handover)\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — \"this week\" is now meaningless without a date anchor; almost certainly resolved or superseded by now.\n- \"The branch under review is spike/consolidate.\" — tied to a one-off review session, not durable project knowledge.\n\n## Everything else\nThe remaining ~35 memories (CI pipeline steps, crate layout, API auth/rate-limiting, release process, branch/PR conventions, docs tooling, build pinning, logging format, etc.) look like distinct, non-overlapping facts — no duplication found there.\n\nI haven't changed or deleted anything. Want me to: (1) resolve the staging-deploy contradiction by checking the actual CI config, (2) merge the duplicate clusters, and (3) drop the two stale session-specific facts?",
+  "cost_usd": 0.2398322,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1M8M29TV56TYVKDSH9EKYWC\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:31:11.729215Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1M8M29N9VZV5Q6Y0PWZW5GC\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1M8M23JYKC1CRDCJWTZNF47\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249999934801215,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999739204865,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8276705968295893},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:31:11.728971Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1M8M241256EKD46S1NJ2TDT\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8987672008997527,\\\"s"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "include_invalidated": true,
+        "k": 60
+      },
+      "answer": "\"k must be between 1 and 50\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "include_invalidated": true,
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Never commit directly to atlas main; open a pull request even for a one-line change.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1M8M29TV56TYVKDSH9EKYWC\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:31:11.729215Z\\\"},{\\\"content\\\":\\\"Always run cargo fmt --all before pushing to atlas, because CI checks formatting first.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1M8M29N9VZV5Q6Y0PWZW5GC\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"s"
+    }
+  ]
+}

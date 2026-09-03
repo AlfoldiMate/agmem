@@ -4,7 +4,7 @@
   "owner": { "name": "Mate Alfoldi" },
   "metadata": {
     "description": "agmem — persistent memory for coding agents over MCP",
-    "version": "0.1.10"
+    "version": "0.1.11"
   },
   "plugins": [
     {

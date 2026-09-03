@@ -1,0 +1,62 @@
+{
+  "scenario": "consolidate_large",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "consolidate"
+  ],
+  "calls": 3,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 2,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.4PkglPT4t6",
+  "answer": "Pulled everything tagged `atlas` (120 live claims) and ran it through `consolidate` (read-only — nothing was changed). Here's what's actually worth acting on, after filtering out embedding-similarity noise:\n\n**Real duplicates (same fact, restated):**\n- \"Tests run through cargo nextest run, not cargo test\" — stored twice, nearly word-for-word.\n- \"atlas is deployed via bin/ship.sh from the repo root\" — stored **three** times, with one version adding \"the old make deploy target is gone\" (that's the one worth keeping, others are redundant).\n\n**A real contradiction — this one matters for handover:**\n- \"Merging to main deploys atlas to staging automatically.\"\n- \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\"\n\nThese directly conflict on how staging deploys work. Whoever inherits this project needs the correct answer before they touch staging — worth resolving first.\n\n**Likely terminology collision, not necessarily a contradiction:**\n- \"Feature flags in atlas are an environment variable map and nothing more.\"\n- \"Feature flags in atlas are additive only, so `cargo check --all-features` has to pass.\"\nThese appear to describe two different things (runtime env-var toggles vs. Rust/Cargo compile-time features) both called \"feature flags.\" Worth clarifying the wording so a new owner doesn't conflate them.\n\n**Stale scratch notes (idle ~40 days, about to expire on their own):**\n- \"The branch under review is spike/consolidate.\"\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\"\nBoth were filed as short-lived and are long past relevant — read as leftover session state, not durable facts about the project.\n\n**Noise I'm setting aside:** the consolidate pass also flagged several pairs as \"contradictions\" or \"near-duplicates\" purely on word overlap (e.g. two docs/ facts, two Postgres facts, two repository facts) that aren't actually in tension — just topically adjacent. Not worth your time.\n\nNothing has been changed. Want me to: merge the duplicates, resolve the staging-deploy contradiction (I'd need you to tell me which one is currently true), tighten the feature-flags wording, and drop the two stale scratch notes?",
+  "cost_usd": 0.2490384,
+  "agent_turns": 6,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "Atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1M8XC8QFWCSQ67NH5YEVM7Y\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:36:16.361596Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1M8XC87S3EVMBFG5XJ9XVCE\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1M8XBKSHY3785X7HAX19RQS\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664820042390613,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659280169562453,\\\"rrf\\\":0.031746031746031744,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8243113301078707},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:36:16.360932Z\\\"},{\\\"content\\\":\\\"atlas stores its data in Postgres 16 and the schema lives under migrations/.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1M8XBKYDM3ASS90WZ93FANS\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8069056876501025,\\\"signals\\\":{\\"
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "all"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\\\",\\\"created_at\\\":\\\"2026-09-03T18:36:16.541135Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1M8XBRX9ANNVX5QMPTTRQFF\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-09-03T18:36:22.894739Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":4,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:36:16.361124Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"61307-1788460575904410000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run,"
+    }
+  ]
+}

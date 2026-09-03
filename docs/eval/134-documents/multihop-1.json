@@ -1,0 +1,38 @@
+{
+  "scenario": "multihop",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.12vLzX9yrX",
+  "answer": "The atlas search index is owned by the **harbour crew** — Priya Raman is their tech lead, so she'd be the person to reach out to. (Note: repo access for atlas is separately handled by the platform team, and the index is rebuilt from Postgres, so it can be safely discarded/regenerated if that's a faster fix while you wait on them.)",
+  "cost_usd": 0.054266,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "who owns the atlas search index / atlas search index responsible team"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M1M9J2GD1P2ZBZYRMFQM80RT\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249993815816676,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999975263266706,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7805831345542463},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:47:34.413009Z\\\"},{\\\"content\\\":\\\"Repository access for atlas is granted by the platform team.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1M9J2A24RJ1TFCYA29594SM\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8898970680576193,\\\"signals\\\":{\\\"importance\\"
+    }
+  ]
+}

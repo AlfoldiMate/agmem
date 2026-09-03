@@ -1,0 +1,41 @@
+{
+  "scenario": "orient",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.gRhXPkSjQc",
+  "answer": "Based on stored project notes: deploy atlas by running `bin/ship.sh` from the repository root. Note that a `make deploy` target used to exist but was removed, so use the script directly rather than `make`.",
+  "cost_usd": 0.050573599999999996,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas deployment",
+        "entities": [
+          "atlas"
+        ]
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root; the make deploy target was removed.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1M8DH4RE04E9SNW5VYB5AWE\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249994312095591,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999977248382363,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8128785902351234},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:27:37.752242Z\\\"},{\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1M8DH51Y4H6VDC63Q8ZB6G1\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499943172946"
+    }
+  ]
+}

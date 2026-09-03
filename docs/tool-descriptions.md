@@ -437,3 +437,29 @@ so a batch says which of the two it was.
 Results land in `docs/eval/<label>/` — one JSON per session with the full tool
 calls and the answer, plus `descriptions.json` recording the exact text those
 agents read. A number with no wording attached cannot be compared to anything.
+
+## Documents in the wording (#134, `docs/eval/134-documents/`)
+
+`inspect`, `forget` and `consolidate` each gained a sentence for documents:
+`doc:<space>/<title>` and `docs` refs with the window on `inspect`; the
+citation guard and `cascade` on `forget`; `orphan_documents` as a fifth
+list on `consolidate`. `remember`'s description is unchanged — the new
+episode fields describe themselves in the parameter schema.
+
+One `--isolated` batch, 3 runs, every scenario, against the release build
+of this branch:
+
+| scenario | passed | last comparable batch |
+|---|---|---|
+| orient, store, ritual, ritual_correct, correct, restraint | 3/3 each | 3/3 |
+| consolidate (50 rows, the routing control) | 0/3 | 0/3 (`82-consolidate-desc`, `consolidate-bigseed-shipped`) |
+| consolidate_large, consolidate_write | 3/3 | 3/3 |
+| reflect / ritual_reflect | 0/3 / 2/3 | 0/3 / 2/3 (`85-summary`) |
+| multihop / multihop_3 | 3/3 / 2/3 | 3/3 / 3/3 (`multihop-tail`); 2/3 / 3/3 (`multihop-hop`) |
+
+Nothing moved that the wording touched. The one dip, `multihop_3` at 2/3,
+is on `recall`'s side, whose description this change did not edit, and sits
+inside the spread earlier batches already showed. No scenario yet exercises
+a document — writing one, reading it windowed, or cascading a purge — so
+this batch measures that the additions cost nothing, not that they help;
+#137's recall-precision eval is where a document scenario belongs.

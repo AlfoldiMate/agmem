@@ -1,0 +1,39 @@
+{
+  "scenario": "multihop",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": true,
+  "bridged": true,
+  "misled": false,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.9gIBxeXk77",
+  "answer": "The atlas search index is owned by the **harbour crew**, and their tech lead is **Priya Raman** — she'd be the right person to reach out to.\n\nA couple of relevant details for the conversation: atlas runs a nightly job at 02:00 UTC to refresh the search index (that's presumably the job that failed or ran stale), and the index is rebuilt from Postgres, so worst case it can be discarded and regenerated if a manual rebuild is needed.",
+  "cost_usd": 0.0512854,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "who owns atlas search index / on-call for search infrastructure",
+        "space": "all"
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas search index is owned by the harbour crew.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"search-index\\\",\\\"harbour-crew\\\"],\\\"id\\\":\\\"01M1M9JJ8446593HVKMEHRW272\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.9249996480244954,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999985920979818,\\\"rrf\\\":0.03278688524590164,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.7749673880529785},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-03T18:47:50.573463Z\\\"},{\\\"content\\\":\\\"No personal data is written to the atlas search index.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M1M9JJ696EKZ3RB72JHBR661\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8659244203455999,\\\"signals\\\":{\\\"importance\\\":0.5"
+    }
+  ]
+}

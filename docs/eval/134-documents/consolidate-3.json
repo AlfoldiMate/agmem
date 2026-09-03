@@ -1,0 +1,43 @@
+{
+  "scenario": "consolidate",
+  "run": 3,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.q9yUrhsNYp",
+  "answer": "I pulled all 46 stored memories tagged with `atlas` (mostly in the `eval` space). Here's what stands out as duplicated or contradictory — nothing has been changed:\n\n**Contradiction (needs a decision):**\n- \"Merging to main deploys atlas to staging automatically.\" **vs.** \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand.\" These directly conflict — one says auto-deploy on merge, the other says manual only. One of these is stale.\n\n**Duplicates (same fact stored multiple times):**\n- Deploy-via-`bin/ship.sh` is stored three separate ways:\n  1. \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n  2. \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n  3. \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" (this one has the extra detail that `make deploy` is retired — likely the most complete/recent version)\n- Test runner fact stored twice, word-for-word equivalent:\n  1. \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n  2. \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n**Likely stale / time-bound, worth pruning before handover:**\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — phrased as a this-week status note, not a durable fact; already showing low retention/importance in the memory's own signals.\n- \"The branch under review is spike/consolidate.\" — reads like leftover session context from whatever review was happening, not a project fact a new owner needs.\n\n**Minor inconsistency worth double-checking:**\n- \"atlas stores its data in Postgres 16 and the schema lives under migrations/.\" vs. \"atlas supports Postgres 15 and 16; support for 14 was dropped in v2.0.\" Not strictly contradictory, but the first implies only 16 is used while the second says 15+16 are both supported — worth confirming which is accurate before handoff.\n\nEverything else (CI pipeline steps, crate layout, API auth/port/rate-limiting, release process, branch/PR conventions, docs/build tooling, lessons about the lock file and stale search index) looks internally consistent with no overlap.\n\nWant me to correct/merge these once you confirm which deploy-automation claim is actually true, or should I leave the memory store untouched entirely?",
+  "cost_usd": 0.11769800000000001,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1M8QKMEZ32D13DWC8FMEVX0\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819527032381,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.7659278108129528,\\\"rrf\\\":0.03252247488101534,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8276705968295893},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-03T18:33:07.980825Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1M8QKN6J8CRAG2RYV67RY6F\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8478632815724851,\\\"sig"
+    }
+  ]
+}

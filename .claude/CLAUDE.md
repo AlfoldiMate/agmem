@@ -155,7 +155,7 @@ memory already in front of it:
 
 Prefer several short sessions chained through memory over one long one — a
 600k-token session produces worse output than a 100k one even when it never
-compacts.
+compacts. A hook says so at 120k tokens of context, and again per 40k after.
 
 ## Playbooks
 

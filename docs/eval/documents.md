@@ -108,11 +108,93 @@ claims distilled from it. Every probe still seeds its own fresh store.
 
 ## Results
 
-_Not yet run._
+First run 2026-09-05, before any rung of the ladder, seven scenarios
+(the six plus `agmem-notes`), 18 documents, 211 recorded chunks:
 
 <!-- eval:documents -->
 ```json
-{}
+{
+  "documents": 18,
+  "scenarios": {
+    "agmem-notes": {
+      "ndcg5_without": 0.7232,
+      "ndcg5_drop": 0.125,
+      "found": 4,
+      "expected": 4,
+      "returned": 20,
+      "mrr": 0.4583,
+      "ndcg5": 0.5982,
+      "chunk_hits_top5": 3,
+      "capped_pages": 0
+    },
+    "deploy-migration": {
+      "ndcg5_without": 0.5308,
+      "ndcg5_drop": 0.2153,
+      "found": 1,
+      "expected": 2,
+      "returned": 10,
+      "mrr": 0.25,
+      "ndcg5": 0.3155,
+      "chunk_hits_top5": 3,
+      "capped_pages": 0
+    },
+    "episode-flood": {
+      "ndcg5_without": 0.5706,
+      "ndcg5_drop": 0.0,
+      "found": 2,
+      "expected": 2,
+      "returned": 4,
+      "mrr": 0.3333,
+      "ndcg5": 0.5706,
+      "chunk_hits_top5": 1,
+      "capped_pages": 1
+    },
+    "formatter-switch": {
+      "ndcg5_without": 0.7103,
+      "ndcg5_drop": 0.2334,
+      "found": 2,
+      "expected": 3,
+      "returned": 15,
+      "mrr": 0.4167,
+      "ndcg5": 0.4769,
+      "chunk_hits_top5": 4,
+      "capped_pages": 0
+    },
+    "playbook-flood": {
+      "ndcg5_without": 0.0,
+      "ndcg5_drop": 0.0,
+      "found": 0,
+      "expected": 0,
+      "returned": 0,
+      "mrr": 0.0,
+      "ndcg5": 0.0,
+      "chunk_hits_top5": 0,
+      "capped_pages": 0
+    },
+    "session-summary": {
+      "ndcg5_without": 1.0,
+      "ndcg5_drop": 0.0,
+      "found": 4,
+      "expected": 4,
+      "returned": 4,
+      "mrr": 1.0,
+      "ndcg5": 1.0,
+      "chunk_hits_top5": 0,
+      "capped_pages": 0
+    },
+    "user-profile": {
+      "ndcg5_without": 0.877,
+      "ndcg5_drop": 0.3334,
+      "found": 2,
+      "expected": 3,
+      "returned": 12,
+      "mrr": 0.5,
+      "ndcg5": 0.5436,
+      "chunk_hits_top5": 2,
+      "capped_pages": 0
+    }
+  }
+}
 ```
 
 ## Hygiene

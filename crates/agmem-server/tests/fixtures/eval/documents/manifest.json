@@ -1,0 +1,146 @@
+[
+  {
+    "title": "82-desc-eval-2",
+    "doc_kind": "probe",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "82-desc-eval-2.md"
+  },
+  {
+    "title": "82-desc-eval",
+    "doc_kind": "probe",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "82-desc-eval.md"
+  },
+  {
+    "title": "checkpoint-2026-09-02-takeover",
+    "doc_kind": "other",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "checkpoint-2026-09-02-takeover.md"
+  },
+  {
+    "title": "embedder-required-plan",
+    "doc_kind": "plan",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "embedder-required-plan.md"
+  },
+  {
+    "title": "framework-audit-2026-09-03",
+    "doc_kind": "review",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "framework-audit-2026-09-03.md"
+  },
+  {
+    "title": "issue-retire-race-2026-09-02",
+    "doc_kind": "other",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "issue-retire-race-2026-09-02.md"
+  },
+  {
+    "title": "phase8-issues",
+    "doc_kind": "other",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "phase8-issues.md"
+  },
+  {
+    "title": "plan-134-documents",
+    "doc_kind": "plan",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "plan-134-documents.md"
+  },
+  {
+    "title": "plan-136-retire-notes",
+    "doc_kind": "plan",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "plan-136-retire-notes.md"
+  },
+  {
+    "title": "plan-86-round2-2026-09-02",
+    "doc_kind": "plan",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "plan-86-round2-2026-09-02.md"
+  },
+  {
+    "title": "plan-hard-issues-2026-09-02",
+    "doc_kind": "plan",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "plan-hard-issues-2026-09-02.md"
+  },
+  {
+    "title": "plan-recall-abstain",
+    "doc_kind": "plan",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "plan-recall-abstain.md"
+  },
+  {
+    "title": "plugin-audit-2026-09-03",
+    "doc_kind": "review",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "plugin-audit-2026-09-03.md"
+  },
+  {
+    "title": "research-doc-store-2026-09-03",
+    "doc_kind": "report",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "research-doc-store-2026-09-03.md"
+  },
+  {
+    "title": "research-embedding-models-2026-09-03",
+    "doc_kind": "report",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "research-embedding-models-2026-09-03.md"
+  },
+  {
+    "title": "review-architecture",
+    "doc_kind": "review",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "review-architecture.md"
+  },
+  {
+    "title": "review-consistency",
+    "doc_kind": "review",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "review-consistency.md"
+  },
+  {
+    "title": "review-research",
+    "doc_kind": "review",
+    "tags": [
+      "legacy-notes"
+    ],
+    "file": "review-research.md"
+  }
+]

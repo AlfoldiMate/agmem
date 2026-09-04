@@ -13,6 +13,7 @@ use agmem_embed::Embedder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::documents::Document;
 use crate::harness::{headings, hits};
 use crate::scenario::{self, GateExpect, Scenario};
 
@@ -55,6 +56,10 @@ pub struct Retrieval {
 
 /// The cut-off nDCG is scored at.
 pub const NDCG_AT: usize = 5;
+
+/// The most a scenario's `ndcg5` may fall with the document corpus seeded
+/// (issue #137's own number; `docs/eval/documents.md`).
+pub const DOCUMENTS_BAR: f64 = 0.02;
 
 /// Normalised discounted cumulative gain at [`NDCG_AT`] for one page:
 /// binary gain, `log2(rank + 1)` discount, ideal DCG from as many relevant
@@ -152,13 +157,36 @@ fn hit_ids(found: &Value) -> Vec<&str> {
 
 /// recall@k and MRR over the probes, each on a fresh store.
 pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retrieval {
+    retrieval_with(scenario, embedder, &[]).await.retrieval
+}
+
+/// [`Retrieval`] plus what the document corpus did to the pages (issue
+/// #137): how many chunk hits reached the top five across the probes, and
+/// how many pages the occupancy cap reshaped. Both are zero by construction
+/// when no documents are seeded and the scenario carries no episodes.
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RetrievalWithDocuments {
+    #[serde(flatten)]
+    pub retrieval: Retrieval,
+    pub chunk_hits_top5: u32,
+    pub capped_pages: u32,
+}
+
+/// [`retrieval`] with `documents` stored ahead of every probe's seeds.
+pub async fn retrieval_with(
+    scenario: &Scenario,
+    embedder: Arc<dyn Embedder>,
+    documents: &[Document],
+) -> RetrievalWithDocuments {
     let mut found = 0;
     let mut expected = 0;
     let mut returned_total = 0;
     let mut reciprocal_sum = 0.0;
     let mut ndcg_sum = 0.0;
+    let mut chunk_hits_top5 = 0;
+    let mut capped_pages = 0;
     for probe in &scenario.probes {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_with(scenario, embedder.clone(), documents).await;
         let answer = seeded
             .agmem
             .recall(json!({ "query": probe.query, "k": probe.k }))
@@ -176,6 +204,12 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
             reciprocal_sum += 1.0 / (rank + 1) as f64;
         }
         ndcg_sum += ndcg(&returned, &relevant);
+        chunk_hits_top5 += hits(&answer)
+            .iter()
+            .take(NDCG_AT)
+            .filter(|hit| hit["kind"].as_str() == Some("episode"))
+            .count() as u32;
+        capped_pages += u32::from(!answer["capped"].is_null());
         seeded.shutdown().await;
     }
     let probes = scenario.probes.len();
@@ -186,12 +220,61 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
             round4(sum / probes as f64)
         }
     };
-    Retrieval {
-        found,
-        expected,
-        returned: returned_total,
-        mrr: mean(reciprocal_sum),
-        ndcg5: mean(ndcg_sum),
+    RetrievalWithDocuments {
+        retrieval: Retrieval {
+            found,
+            expected,
+            returned: returned_total,
+            mrr: mean(reciprocal_sum),
+            ndcg5: mean(ndcg_sum),
+        },
+        chunk_hits_top5,
+        capped_pages,
+    }
+}
+
+/// The measurement `docs/eval/documents.md` records: per scenario, the
+/// retrieval numbers with the corpus seeded beside the plain run's `ndcg5`,
+/// and the drop between them, which is what the bar is on.
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct DocumentsReport {
+    pub documents: u32,
+    pub scenarios: BTreeMap<String, DocumentsScore>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct DocumentsScore {
+    /// `ndcg5` with nothing but the scenario in the store.
+    pub ndcg5_without: f64,
+    /// `ndcg5_without − ndcg5`, rounded; positive means documents cost.
+    pub ndcg5_drop: f64,
+    #[serde(flatten)]
+    pub with_documents: RetrievalWithDocuments,
+}
+
+/// Scores retrieval for every scenario twice — bare, and with the corpus —
+/// and reports the difference.
+pub async fn documents_report(
+    scenarios: &[Scenario],
+    embedder: Arc<dyn Embedder>,
+    documents: &[Document],
+) -> DocumentsReport {
+    let mut scores = BTreeMap::new();
+    for scenario in scenarios {
+        let without = retrieval(scenario, embedder.clone()).await;
+        let with_documents = retrieval_with(scenario, embedder.clone(), documents).await;
+        scores.insert(
+            scenario.name.clone(),
+            DocumentsScore {
+                ndcg5_without: without.ndcg5,
+                ndcg5_drop: round4(without.ndcg5 - with_documents.retrieval.ndcg5),
+                with_documents,
+            },
+        );
+    }
+    DocumentsReport {
+        documents: documents.len() as u32,
+        scenarios: scores,
     }
 }
 

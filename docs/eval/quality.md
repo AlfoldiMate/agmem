@@ -36,6 +36,44 @@ cap covers exactly the flood the gate lets through.
 ```json
 {
   "scenarios": {
+    "agmem-notes": {
+      "retrieval": {
+        "found": 4,
+        "expected": 4,
+        "returned": 18,
+        "mrr": 0.625,
+        "ndcg5": 0.7232
+      },
+      "timeline": {
+        "passed": 2,
+        "total": 2
+      },
+      "gate": {
+        "correct": 2,
+        "total": 2,
+        "false_gates": 0,
+        "missed": 0,
+        "wrong_original": 0
+      },
+      "context": {
+        "passed": 0,
+        "total": 0
+      },
+      "staleness": {
+        "stale_hits": 0,
+        "pages": 5
+      },
+      "abstention": {
+        "fired": 0,
+        "expected": 2,
+        "false_abstentions": 0,
+        "pages": 4
+      },
+      "temporal": {
+        "passed": 0,
+        "total": 0
+      }
+    },
     "deploy-migration": {
       "retrieval": {
         "found": 2,

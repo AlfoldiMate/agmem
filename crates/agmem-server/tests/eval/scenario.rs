@@ -16,6 +16,7 @@ use agmem_embed::Embedder;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
+use crate::documents::Document;
 use crate::harness::{Harness, ids};
 
 /// One scripted session: what goes in, and what each metric may ask about it.
@@ -220,7 +221,40 @@ impl Seeded {
 /// store: `recall` reinforces what it returns, so two probes on one store
 /// would couple — the second measured against strengths the first shifted.
 pub async fn seed(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Seeded {
+    seed_with(scenario, embedder, &[]).await
+}
+
+/// [`seed`], with a document corpus stored first (issue #137). Documents go
+/// in before the scenario's seeds so their `occurred_at` order mirrors a real
+/// store, where the plan predates the claims distilled from it; nothing in
+/// the scenario refers to them, and a probe's labelled-relevant set never
+/// names a chunk, so the corpus is pure competition for the page.
+pub async fn seed_with(
+    scenario: &Scenario,
+    embedder: Arc<dyn Embedder>,
+    documents: &[Document],
+) -> Seeded {
     let agmem = Harness::start(embedder).await;
+    for document in documents {
+        let answer = agmem
+            .remember(json!({
+                "memories": [],
+                "episode": {
+                    "content": document.content,
+                    "title": document.title,
+                    "doc_kind": document.doc_kind,
+                    "tags": document.tags,
+                    "mime": "text/markdown"
+                }
+            }))
+            .await;
+        assert!(
+            answer["episode"].is_string(),
+            "document {:?} must land before {:?} is scored: {answer}",
+            document.title,
+            scenario.name
+        );
+    }
     let mut id_of: HashMap<String, String> = HashMap::new();
     for seed in &scenario.seeds {
         if !seed.derived_from.is_empty() {

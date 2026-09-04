@@ -131,6 +131,14 @@ fn regenerate_knn_fixture() {
 /// an unrecorded string makes `RecordedEmbedder` panic, deliberately, rather
 /// than fall back to a zero vector that would read as a scoring regression.
 ///
+/// The fixture documents (issue #137) are recorded to a second file,
+/// `documents-vectors.json`, chunked with the same `agmem_core::chunk::chunk`
+/// that `remember` applies to an episode — the store asks the embedder for
+/// chunk texts, never the whole document, and a chunk the recording lacks
+/// panics the replay. Seed episodes are chunked the same way for the same
+/// reason. Two files so a scenario edit diffs as the strings it touched
+/// rather than rewriting the corpus's ~0.75 MB of vectors.
+///
 /// Run with `cargo test -p agmem-embed --test fastembed -- --ignored
 /// regenerate_eval_vectors`.
 #[test]
@@ -143,6 +151,40 @@ fn regenerate_eval_vectors() {
     fn json_vector(vector: &[f32]) -> String {
         let components: Vec<String> = vector.iter().map(|x| format!("{x}")).collect();
         format!("[{}]", components.join(","))
+    }
+
+    /// One recording file: passages and queries keyed by text, sorted.
+    fn write_recording(
+        path: &std::path::Path,
+        passages: &BTreeMap<String, Vec<f32>>,
+        queries: &BTreeMap<String, Vec<f32>>,
+    ) {
+        let entry = |(text, vector): (&String, &Vec<f32>)| {
+            format!(
+                "    {}: {}",
+                serde_json::to_string(text).expect("encode text"),
+                json_vector(vector)
+            )
+        };
+        let passage_entries: Vec<String> = passages.iter().map(entry).collect();
+        let query_entries: Vec<String> = queries.iter().map(entry).collect();
+        let document = format!(
+            "{{\n  \"model\": \"BGE-small-en-v1.5-q\",\n  \"dim\": {},\n  \
+             \"passages\": {{\n{}\n  }},\n  \"queries\": {{\n{}\n  }}\n}}\n",
+            DIM,
+            passage_entries.join(",\n"),
+            query_entries.join(",\n")
+        );
+        std::fs::write(path, document).expect("write fixture");
+    }
+
+    /// Embeds every key of `passages` in place, in one batch.
+    fn fill_passages(embedder: &FastembedBackend, passages: &mut BTreeMap<String, Vec<f32>>) {
+        let texts: Vec<String> = passages.keys().cloned().collect();
+        let vectors = embedder.embed_passages(&texts).expect("embed passages");
+        for (text, vector) in texts.iter().zip(vectors) {
+            passages.insert(text.clone(), vector);
+        }
     }
 
     fn strings_of(section: &serde_json::Value, field: &str) -> Vec<String> {
@@ -174,8 +216,12 @@ fn regenerate_eval_vectors() {
         let scenario: serde_json::Value = serde_json::from_str(&raw).expect("parse scenario");
         for text in strings_of(&scenario["seeds"], "content")
             .into_iter()
-            .chain(strings_of(&scenario["seeds"], "episode"))
             .chain(strings_of(&scenario["gate"], "candidate"))
+            .chain(
+                strings_of(&scenario["seeds"], "episode")
+                    .iter()
+                    .flat_map(|episode| agmem_core::chunk::chunk(episode)),
+            )
         {
             passages.insert(text, Vec::new());
         }
@@ -190,35 +236,35 @@ fn regenerate_eval_vectors() {
         }
     }
 
+    // The fixture corpus: every chunk of every document the manifest lists.
+    let documents_dir = eval_dir.join("documents");
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(documents_dir.join("manifest.json")).expect("read manifest"),
+    )
+    .expect("parse manifest");
+    let mut document_chunks: BTreeMap<String, Vec<f32>> = BTreeMap::new();
+    for file in strings_of(&manifest, "file") {
+        let text = std::fs::read_to_string(documents_dir.join(&file))
+            .unwrap_or_else(|error| panic!("read fixture document {file}: {error}"));
+        for chunk in agmem_core::chunk::chunk(&text) {
+            document_chunks.insert(chunk, Vec::new());
+        }
+    }
+    assert!(!document_chunks.is_empty(), "the manifest lists no documents");
+
     let cache = std::env::temp_dir().join("agmem-model-cache");
     let embedder = FastembedBackend::new(Some(cache)).expect("load model");
 
-    let passage_texts: Vec<String> = passages.keys().cloned().collect();
-    let vectors = embedder
-        .embed_passages(&passage_texts)
-        .expect("embed passages");
-    for (text, vector) in passage_texts.iter().zip(vectors) {
-        passages.insert(text.clone(), vector);
-    }
+    fill_passages(&embedder, &mut passages);
     for (text, slot) in &mut queries {
         *slot = embedder.embed_query(text).expect("embed query");
     }
+    write_recording(&eval_dir.join("vectors.json"), &passages, &queries);
 
-    let entry = |(text, vector): (&String, &Vec<f32>)| {
-        format!(
-            "    {}: {}",
-            serde_json::to_string(text).expect("encode text"),
-            json_vector(vector)
-        )
-    };
-    let passage_entries: Vec<String> = passages.iter().map(entry).collect();
-    let query_entries: Vec<String> = queries.iter().map(entry).collect();
-    let document = format!(
-        "{{\n  \"model\": \"BGE-small-en-v1.5-q\",\n  \"dim\": {},\n  \
-         \"passages\": {{\n{}\n  }},\n  \"queries\": {{\n{}\n  }}\n}}\n",
-        DIM,
-        passage_entries.join(",\n"),
-        query_entries.join(",\n")
+    fill_passages(&embedder, &mut document_chunks);
+    write_recording(
+        &eval_dir.join("documents-vectors.json"),
+        &document_chunks,
+        &BTreeMap::new(),
     );
-    std::fs::write(eval_dir.join("vectors.json"), document).expect("write fixture");
 }

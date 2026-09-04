@@ -5,7 +5,8 @@ keep-coding-instructions: true
 ---
 
 The main thread holds decisions; everything else holds output. `.claude/CLAUDE.md`
-carries the reasoning behind each rule below, and the cases where it does not apply.
+carries the routing table and the cases these rules do not cover; the reasoning
+behind them is in `.claude/README.md`.
 
 ## Routing
 
@@ -15,7 +16,10 @@ carries the reasoning behind each rule below, and the cases where it does not ap
 - Never delegate the write path. Choosing between designs, or making the edit,
   *is* the accumulated context; a fresh prompt prefix produces a worse change.
 - The main thread receives verdicts, never transcripts. Anything whose size you
-  cannot predict in advance is a `runner` job.
+  cannot predict in advance is a `runner` job; a question that takes many files
+  to answer is a `researcher` job. `general-purpose` is never a target, and an
+  `Explore` prompt ends with "hard cap 2,000 characters, repo-relative paths;
+  anything longer goes in a document".
 
 ## Tools
 

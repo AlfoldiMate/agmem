@@ -2,6 +2,7 @@
 description: Teach ast-grep a language it does not ship — builds the tree-sitter grammar, registers it in sgconfig.yml, and verifies it against real files in this project.
 argument-hint: [language] [--repo <url>] [--subdir <dir>] [--expando <char>]
 allowed-tools: Bash, Read, Glob, AskUserQuestion
+disable-model-invocation: true
 ---
 
 # ast-grep it

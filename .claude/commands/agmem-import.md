@@ -1,6 +1,7 @@
 ---
 description: Migrate a checkout's retired .claude/notes into the agmem store, once — subagent artifacts become documents, a pre-agmem LEDGER.md and branch state files become claims. Showing and tidying the store are the plugin's /agmem:memory.
 allowed-tools: Read, Bash, Glob, mcp__agmem__recall, mcp__agmem__remember, mcp__plugin_agmem_agmem__recall, mcp__plugin_agmem_agmem__remember
+disable-model-invocation: true
 ---
 
 # agmem-import

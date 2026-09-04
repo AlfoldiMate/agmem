@@ -29,8 +29,8 @@ the crate version, since the hooks are subcommands of that binary.
 | Piece | What it does |
 |---|---|
 | `.mcp.json` | Registers `agmem` over stdio. The space derives from the repo, so every branch and worktree of a project reads one store. |
-| `SessionStart` hook | Injects the briefing (`agmem context`) before the first token, names the branch tag, and after a compaction lists the claims the session had recalled so the next checkpoint can cite them. |
-| `PostToolUse` hook | Logs the ids each `recall` returned and each `remember`/`reflect` wrote or cited, under `<data dir>/hooks/<session>.jsonl`. Nudges once after a successful `git push`, and after every answered `AskUserQuestion` — both are decision seams. |
+| `SessionStart` hook | Injects the briefing (`agmem context`, aimed at the branch and last commit) before the first token, names the branch tag and how many documents carry it, and after a compaction lists the claims the session had recalled so the next checkpoint can cite them. |
+| `PostToolUse` hook | Logs the ids each `recall` returned and each `remember`/`reflect` wrote or cited, under `<data dir>/hooks/<session>.jsonl`. Nudges once per session after a successful `git push`, and once after an answered `AskUserQuestion` — both are decision seams. |
 | `Stop` hook | Nudges once per session when memory was recalled and nothing was written back. |
 | `/agmem:checkpoint` | The distil → recall → remember → reflect ritual. Step 4 (cite with `derived_from`) is byte-identical to the server's own checkpoint prompt; a test in the server crate fails if they drift. |
 | `/agmem:memory show\|tidy` | Show the store and judge the briefing; consolidate duplicates, contradictions and stale claims. |

@@ -1199,7 +1199,7 @@ rather than details:
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip, vector coverage; prints report, exits |
 | `--reindex` | — | Re-embed every row under the configured backend and record its model/dim pair — the one sanctioned way to change embedders; exits |
 | `context` subcommand | — | Print one session-start briefing to stdout and exit (`--query`, `--space`, `--budget-chars`) — the shell-hook surface, no MCP served |
-| `hook <event>` subcommand | — | The Claude Code plugin's hooks, reading the hook JSON on stdin: `session-start` (briefing plus branch tag, post-compaction recall list), `post-tool-use` (recall/write log, seam nudges), `stop` (recalled-but-wrote-nothing nudge); no MCP served |
+| `hook <event>` subcommand | — | The Claude Code plugin's hooks, reading the hook JSON on stdin: `session-start` (aimed briefing, one-sentence footer, branch tag with its document count, post-compaction recall list), `post-tool-use` (recall/write log, once-per-session seam nudges), `stop` (recalled-but-wrote-nothing nudge); no MCP served |
 
 Client registration: in Claude Code the plugin does it — `claude plugin
 marketplace add AlfoldiMate/agmem`, then `claude plugin install agmem@agmem`

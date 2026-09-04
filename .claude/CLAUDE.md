@@ -14,9 +14,9 @@ anything missing.
   framework wants
 - **agmem** — persistent cross-session memory over MCP, wired in by its
   Claude Code plugin (`claude plugin marketplace add AlfoldiMate/agmem`,
-  then `claude plugin install agmem@agmem`); needs ≥ v0.1.10, since the
-  plugin's hooks are `agmem hook …` and an older binary answers them with
-  silence. The plugin registers the server, injects the briefing at session
+  then `claude plugin install agmem@agmem`); needs ≥ v0.2.0, since the
+  plugin's hooks are `agmem hook …` and subagents write artifacts with
+  `agmem doc …` — an older binary answers both with a usage error. The plugin registers the server, injects the briefing at session
   start, logs what each session recalled, and nudges at seams; this
   framework adds only the learnings gate in `/checkpoint`
 - **ast-grep** — structural search; prefer over `rg` whenever the question is
@@ -145,8 +145,9 @@ memory already in front of it:
   `instruction` (pinned into every briefing — be sparing). Branch state
   (Next/Blocked) → `fact` with `decay_class: fast`, tagged `branch:<slug>`; it
   fades in days, as branch state should.
-- Subagents still write long output to `.claude/notes/` and return the
-  **path** — agmem holds claims, not artifacts.
+- Subagents write long output as **documents** (`scripts/doc-put.nu`, which
+  tags them with the branch) and return `DOC: <id> <uri>` — claims and the
+  artifacts they cite live in one store, and `.claude/notes/` is retired.
 
 Prefer several short sessions chained through memory over one long one — a
 600k-token session produces worse output than a 100k one even when it never

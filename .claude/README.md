@@ -297,9 +297,13 @@ ledger/state files used to: `fact` (fades over weeks unless used), `lesson`
 is a `fact` with `decay_class: fast` tagged `branch:<slug>` — it dies in days,
 as branch state should, with no file to prune.
 
-What agmem does **not** replace: `.claude/notes/` stays as the artifact
-dropbox — subagents write long output there and return the path. Claims go in
-the store; blobs go on disk.
+Artifacts live there too, since v0.2.0: a subagent's long output — a plan,
+a review, a test log — is a **document**, written through
+`scripts/doc-put.nu` (which tags it with the branch and the role) and handed
+back as `DOC: <id> memory://…`. `/checkpoint` reads a `LEARNED:` proposal
+out of the document and stores the accepted lesson citing it. The old
+`.claude/notes/` dropbox is retired; `/agmem-import` moves one in and
+`/ctx-flow-doctor` flags one that comes back.
 
 ## Playbooks — knowledge that accumulates
 
@@ -322,9 +326,9 @@ never self-modify at all.
 ## Git, gitignore, and worktrees
 
 Memory is no longer a git question: the store lives under your home directory,
-not in the repo. What remains in `.claude/` is the framework itself plus
-`notes/`, the scratch dropbox — gitignore `notes/` (artifacts are
-machine-local). When you do write `.gitignore` rules for `.claude`, use
+not in the repo, and so do subagent artifacts. What remains in `.claude/` is
+the framework itself; keep `notes/` gitignored so a regressed agent can never
+commit a blob. When you do write `.gitignore` rules for `.claude`, use
 `.claude/*` (contents), never `.claude/` (directory) — git will not descend
 into an excluded directory, so `!` negations under it would be silently dead.
 
@@ -358,17 +362,16 @@ compacts; the token saving is a side effect of the quality win.
 .claude/                    this folder, copied into your project
 ├── CLAUDE.md               the routing discipline — loads every session
 ├── settings.json           hook registration
-├── .gitignore              the machine-local parts: notes/, settings.local.json, one local skill (sgconfig.yml lives at the repo root)
+├── .gitignore              the machine-local parts: settings.local.json, one local skill, the retired notes/ (sgconfig.yml lives at the repo root)
 ├── agents/                 runner, verifier, architect, browser, tracker, scout
 ├── commands/               checkpoint (wraps the plugin's), agmem-import, ctx-flow-doctor, ast-grep-it, bare-worktree
 ├── docs/reference.md       contracts, memory mapping, rationale — loaded on demand
 ├── hooks/scripts/          the three hooks + shared _common.nu + paths resolver
 ├── output-styles/          ctx-flow.md — the hard rules, appended to the system prompt
-├── scripts/                doctor.nu + build-grammar.nu + grammars.nu registry + bare-worktree.nu
+├── scripts/                doctor.nu + doc-put.nu (subagent artifacts → documents) + import-notes.nu + build-grammar.nu + grammars.nu registry + bare-worktree.nu
 ├── skills/nushell/         deep Nushell reference, loaded when writing nu
 ├── skills/ast-grep/        rule-writing workflow, loaded when a query needs more than a pattern
-│                           (a machine-local skill dropped in here stays untracked — list it in .gitignore)
-└── notes/                  subagent artifact dropbox   (created by use)
+└── skills/                 (a machine-local skill dropped in here stays untracked — list it in .gitignore)
 ```
 
 MIT.

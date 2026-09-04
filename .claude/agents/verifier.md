@@ -37,7 +37,10 @@ VERDICT: CONFIRMED | REFUTED | UNCERTAIN
 BECAUSE: <one sentence>
 ```
 
-If REFUTED you may add `INSTEAD: <what is actually true>`.
+If REFUTED you may add `INSTEAD: <what is actually true>`. Evidence that
+outgrows the three lines becomes a document — pipe it into
+`nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" verifier review review-<claim>-<date>`
+— and add `DOC: <id> <uri>`.
 
 Forbidden: preamble, restating the claim, hedging paragraphs, next steps.
 
@@ -49,5 +52,7 @@ Only if it would change a future run of this agent **in this project**, end with
 LEARNED: <one sentence> — <evidence>
 ```
 
+If you wrote a document, the same line closes it under a `## Learned`
+heading, so the proposal survives the reply scrolling out of context.
 You propose; the caller commits. Skip it unless durable, non-obvious, and earned
 twice or once at real cost. Most runs emit nothing.

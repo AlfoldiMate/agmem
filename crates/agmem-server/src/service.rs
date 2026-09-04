@@ -30,9 +30,10 @@ use rmcp::{
     transport::stdio,
 };
 
-use crate::config::Config;
+use crate::config::{Config, ToolGroup};
 use crate::prompts::{self, Focus};
 use crate::resources;
+use crate::tools::GATED;
 use crate::tools::consolidate::{self, ConsolidateParams, ConsolidateResult};
 use crate::tools::context::{self, ContextParams};
 use crate::tools::forget::{self, ForgetParams, ForgetResult, Pending};
@@ -99,7 +100,7 @@ impl AgmemService {
                 std::process::id(),
                 jiff::Timestamp::now().as_nanosecond()
             ),
-            tool_router: described(Self::tool_router(), &config),
+            tool_router: gated(described(Self::tool_router(), &config), &config),
             prompt_router: Self::prompt_router(),
             config,
         }
@@ -156,6 +157,24 @@ fn described(mut router: ToolRouter<AgmemService>, config: &Config) -> ToolRoute
             }
             None => tracing::warn!(tool, "no such route; the override was dropped"),
         }
+    }
+    router
+}
+
+/// Serve the default list, or everything, as `config.tools` says (#150).
+///
+/// Runs after [`described`] on purpose: an override names a tool from
+/// [`NAMES`], which still holds the gated pair, so `AGMEM_TOOL_DESC_FORGET`
+/// under `core` is accepted and applied — and then has no route to be read
+/// from. Removing the route is what makes a gated tool absent from both
+/// `tools/list` and `tools/call`: `#[tool_handler]` lists and dispatches from
+/// the same field, so there is no second list to keep in step.
+fn gated(mut router: ToolRouter<AgmemService>, config: &Config) -> ToolRouter<AgmemService> {
+    if config.tools == ToolGroup::Core {
+        for name in GATED {
+            router.remove_route(name);
+        }
+        tracing::debug!(gated = ?GATED, "serving the core tool list");
     }
     router
 }
@@ -594,6 +613,61 @@ mod tests {
             .expect("resolve");
         config.tool_desc = tool_desc;
         config
+    }
+
+    fn names(router: &ToolRouter<AgmemService>) -> Vec<String> {
+        let mut names: Vec<String> = router
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn the_core_list_is_every_tool_but_the_gated_pair() {
+        let mut config = config(ToolDescriptions::default());
+        assert_eq!(config.tools, ToolGroup::Core, "core is the default");
+        let core = gated(AgmemService::tool_router(), &config);
+
+        let mut expected: Vec<String> = NAMES
+            .iter()
+            .filter(|name| !GATED.contains(name))
+            .map(|name| (*name).to_owned())
+            .collect();
+        expected.sort();
+        assert_eq!(names(&core), expected);
+        for name in GATED {
+            assert!(
+                !core.has_route(name),
+                "{name} is neither listed nor callable"
+            );
+        }
+
+        config.tools = ToolGroup::All;
+        let all = gated(AgmemService::tool_router(), &config);
+        let mut everything: Vec<String> = NAMES.iter().map(|name| (*name).to_owned()).collect();
+        everything.sort();
+        assert_eq!(names(&all), everything, "`all` is the whole surface");
+    }
+
+    #[test]
+    fn an_override_survives_gating() {
+        let config = config(ToolDescriptions::from_iter([
+            ("recall", "Ask the store first."),
+            ("forget", "Never read."),
+        ]));
+        let core = gated(described(AgmemService::tool_router(), &config), &config);
+        assert_eq!(
+            core.get("recall").expect("routed").description,
+            Some(Cow::Borrowed("Ask the store first.")),
+            "gating removes routes; it does not undo the wording"
+        );
+        assert!(
+            core.get("forget").is_none(),
+            "an override for a gated tool is accepted and then has nowhere to land"
+        );
     }
 
     #[test]

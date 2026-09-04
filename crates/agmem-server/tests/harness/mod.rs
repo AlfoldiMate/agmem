@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use agmem_core::{MemoryRecord, SpaceName};
 use agmem_embed::{EmbedError, Embedder};
-use agmem_server::config::{Cli, ToolDescriptions};
+use agmem_server::config::{Cli, ToolDescriptions, ToolGroup};
 use agmem_server::service::AgmemService;
 use agmem_store::db::Db;
 use agmem_store::migrate;
@@ -46,18 +46,36 @@ impl Harness {
     /// `().serve(..)` is a complete MCP client: rmcp implements `ClientHandler`
     /// for the unit type, and `serve` does not return until initialize has been
     /// answered — so anything the client says afterwards is post-handshake.
+    ///
+    /// Serves the whole surface (`AGMEM_TOOLS=all`), because the suite
+    /// exercises every tool; [`Self::start_core`] is the list an agent reads.
     pub async fn start(embedder: Arc<dyn Embedder>) -> Self {
         Self::start_with(embedder, ToolDescriptions::default()).await
     }
 
-    /// The same, serving `tool_desc` instead of agmem's own wording.
+    /// The default list (#150): what a session with nothing configured
+    /// serves, which leaves out `consolidate` and `forget`.
+    pub async fn start_core(embedder: Arc<dyn Embedder>) -> Self {
+        Self::configure(embedder, ToolDescriptions::default(), ToolGroup::Core).await
+    }
+
+    /// The whole surface, serving `tool_desc` instead of agmem's own wording.
+    pub async fn start_with(embedder: Arc<dyn Embedder>, tool_desc: ToolDescriptions) -> Self {
+        Self::configure(embedder, tool_desc, ToolGroup::All).await
+    }
+
+    /// A client on an empty store, serving `tools` with `tool_desc` applied.
     ///
     /// The overrides are set on the resolved config rather than left to
-    /// `AGMEM_TOOL_DESC_*`: `Cli::resolve` reads the real environment, and a
-    /// developer who has one of those exported would otherwise fail the
-    /// `list_tools` snapshot with a diff that has nothing to do with their
-    /// change.
-    pub async fn start_with(embedder: Arc<dyn Embedder>, tool_desc: ToolDescriptions) -> Self {
+    /// `AGMEM_TOOL_DESC_*` and `AGMEM_TOOLS`: `Cli::resolve` reads the real
+    /// environment, and a developer who has one of those exported would
+    /// otherwise fail the `list_tools` snapshot with a diff that has nothing
+    /// to do with their change.
+    pub async fn configure(
+        embedder: Arc<dyn Embedder>,
+        tool_desc: ToolDescriptions,
+        tools: ToolGroup,
+    ) -> Self {
         let data = tempfile::tempdir().expect("tempdir");
         let mut config = Cli::try_parse_from([
             "agmem",
@@ -78,6 +96,7 @@ impl Harness {
         .resolve()
         .expect("resolve");
         config.tool_desc = tool_desc;
+        config.tools = tools;
         let db = agmem_store::db::connect(&config.db_url)
             .await
             .expect("connect mem://");

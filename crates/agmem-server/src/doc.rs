@@ -8,17 +8,18 @@
 //! session would have called: `remember` for `put`, `inspect` for `get` and
 //! `list`, `forget` for `forget`.
 //!
-//! Every verb goes through the tool's own JSON answer, on both routes, so
+//! Every verb goes through the tool's own JSON answer, on both routes
+//! (`oneshot::call`, shared with `agmem consolidate` and `agmem forget`), so
 //! what the shell prints is what an MCP client would have seen: the same
-//! refusals, the same window, the same versions. The daemon route reads the
-//! tool result's structured content; the direct route serialises the typed
-//! result. The rendering is the only thing added here.
+//! refusals, the same window, the same versions. The rendering is the only
+//! thing added here.
 
-use agmem_core::{EpisodeId, SpaceName, Writer};
+use agmem_core::{EpisodeId, SpaceName};
 use anyhow::{Context as _, bail};
 use serde_json::{Value, json};
 
 use crate::config::{Config, DocArgs, DocForgetArgs, DocGetArgs, DocListArgs, DocPutArgs, DocVerb};
+use crate::oneshot::{call, pretty};
 use crate::resources;
 use crate::tools::remember::MAX_EPISODE_CHARS;
 
@@ -225,104 +226,4 @@ fn written_space(cfg: &Config, space: Option<&str>) -> anyhow::Result<SpaceName>
             .parse()
             .with_context(|| format!("`{name}` is not a space name")),
     }
-}
-
-/// The tool's JSON answer, by whichever route this configuration serves.
-pub(crate) async fn call(
-    cfg: &Config,
-    tool: &'static str,
-    arguments: Value,
-) -> anyhow::Result<Value> {
-    #[cfg(unix)]
-    if crate::daemon::wanted(cfg) {
-        return through_daemon(cfg, tool, arguments).await;
-    }
-    direct(cfg, tool, arguments).await
-}
-
-/// Ask a shared daemon, as a real MCP client on the session socket.
-#[cfg(unix)]
-async fn through_daemon(
-    cfg: &Config,
-    tool: &'static str,
-    arguments: Value,
-) -> anyhow::Result<Value> {
-    use rmcp::model::{CallToolRequestParams, ContentBlock};
-
-    let session = crate::oneshot::daemon_session(cfg).await?;
-    let arguments = arguments
-        .as_object()
-        .cloned()
-        .context("tool arguments are an object")?;
-    let result = session
-        .call_tool(CallToolRequestParams::new(tool).with_arguments(arguments))
-        .await
-        .map_err(|error| anyhow::anyhow!("the {tool} tool refused: {error}"))?;
-    // Detach politely so the daemon logs a session that ended, not one that
-    // broke; the answer is already in hand either way.
-    let _ = session.cancel().await;
-
-    let text = || {
-        result
-            .content
-            .iter()
-            .filter_map(|block| match block {
-                ContentBlock::Text(text) => Some(text.text.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    if result.is_error == Some(true) {
-        bail!("the {tool} tool answered with an error: {}", text());
-    }
-    if let Some(value) = result.structured_content {
-        return Ok(value);
-    }
-    serde_json::from_str(&text())
-        .context("the tool answered with no JSON; agmem versions disagree?")
-}
-
-/// Open the store in this process and call the tool with no wire at all.
-async fn direct(cfg: &Config, tool: &'static str, arguments: Value) -> anyhow::Result<Value> {
-    use crate::tools::{forget, inspect, remember};
-
-    let (service, lock) = crate::oneshot::open_direct(cfg).await?;
-    let refused = |error: rmcp::ErrorData| anyhow::anyhow!("the {tool} tool refused: {error}");
-    let answer = match tool {
-        "remember" => {
-            // Who wrote it (issue #75): no MCP handshake here, so the CLI
-            // introduces itself, and the session is the one this process
-            // minted for itself.
-            let writer = Writer {
-                client: "agmem-cli".to_owned(),
-                client_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
-                session: service.session().to_owned(),
-                tool: tool.to_owned(),
-            };
-            let params = serde_json::from_value(arguments)?;
-            serde_json::to_value(
-                remember::run(&service, params, writer)
-                    .await
-                    .map_err(refused)?,
-            )?
-        }
-        "inspect" => {
-            let params = serde_json::from_value(arguments)?;
-            serde_json::to_value(inspect::run(&service, params).await.map_err(refused)?)?
-        }
-        "forget" => {
-            let params = serde_json::from_value(arguments)?;
-            serde_json::to_value(forget::run(&service, params).await.map_err(refused)?)?
-        }
-        other => bail!("`agmem doc` has no direct route for the {other} tool"),
-    };
-    drop(lock);
-    Ok(answer)
-}
-
-fn pretty(answer: &Value) -> anyhow::Result<String> {
-    let mut text = serde_json::to_string_pretty(answer)?;
-    text.push('\n');
-    Ok(text)
 }

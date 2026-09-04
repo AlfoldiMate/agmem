@@ -535,7 +535,7 @@ Behavioral rules baked into the tools:
 # Memory context (space: <name> + user)
 ## Instructions        ← kind=instruction, live, all (pinned, cheap)
 ## Profile             ← facts tagged `identity`, live, ranked by strength
-## Relevant            ← recall(query) top-k if query given, else recent high-strength facts
+## Relevant            ← recall(query) top-10 if query given, else the 5 strongest facts
 ## Lessons             ← kind=lesson, live, top 5 by strength·recency, ≤3 per tag (#82)
 ```
 
@@ -545,6 +545,16 @@ best idea (`context` verb) merged with its `profile` layout, minus the LLM
 synthesis — pure retrieval and formatting.
 
 What the sketch leaves out, settled while building it (#19):
+
+- **Priority decides who fills first, not who gets to exist (#152).** Lessons
+  holds a reserve — 2000 characters, capped at a third of the budget, and never
+  more than the section could actually use — that the sections above it may
+  not spend. On a real store ten 600-character facts filled the default budget
+  before a single lesson landed, which turned the one section that carries
+  hard-won how-tos into decoration. The unaimed Relevant list is also cut to
+  five: without a query it is orientation, not an answer, and the plugin's
+  SessionStart hook now aims it with `<branch>: <last commit subject>` so a
+  session opens on what the repo says the work is.
 
 - **Every line ends with its memory id**, in backticks. 26 characters of the
   budget per entry buys a block an agent can act on: a stale claim goes to

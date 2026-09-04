@@ -2187,6 +2187,50 @@ async fn a_small_budget_keeps_the_first_section_and_says_it_trimmed() {
 }
 
 #[tokio::test]
+async fn lessons_reach_the_block_when_the_facts_alone_would_fill_it() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    // Ten facts of ~700 characters: on their own they exceed the default
+    // budget, which is exactly the store shape that used to leave the Lessons
+    // section starved (issue #152).
+    let mut memories: Vec<Value> = (1..=10)
+        .map(|n| {
+            json!({ "content": format!("fact {n}: {}", "the deployment pipeline runs the same way every time ".repeat(13)) })
+        })
+        .collect();
+    for lesson in [
+        "lesson: warm the cargo cache before the release build",
+        "lesson: the toolchain pin must match the CI image",
+        "lesson: a green cold build is not a green warm one",
+    ] {
+        memories.push(json!({ "content": lesson, "kind": "lesson" }));
+    }
+    agmem.remember(json!({ "memories": memories })).await;
+
+    let block = agmem.context(json!({})).await;
+    assert!(block.chars().count() <= 6_000, "{block}");
+    assert_eq!(
+        block.matches("lesson:").count(),
+        3,
+        "every lesson reaches the session: {block}"
+    );
+    assert!(
+        block.contains("fact "),
+        "the reserve costs Relevant room, not its place: {block}"
+    );
+    assert!(
+        block.matches("\n- fact ").count() <= 5,
+        "an unaimed Relevant section is orientation, five at most: {block}"
+    );
+
+    // Squeezed to two thirds, the block still carries lessons — at least two,
+    // the issue's acceptance line.
+    let squeezed = agmem.context(json!({ "budget_chars": 4_000 })).await;
+    assert!(squeezed.chars().count() <= 4_000, "{squeezed}");
+    assert!(squeezed.matches("lesson:").count() >= 2, "{squeezed}");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
 async fn a_flooded_tag_yields_lessons_slots_and_recall_stays_uncapped() {
     let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
     agmem

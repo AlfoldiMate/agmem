@@ -35,11 +35,25 @@ const DEFAULT_BUDGET_CHARS: u32 = 6_000;
 /// budget this small is refused rather than served misleadingly.
 const MIN_BUDGET_CHARS: u32 = 200;
 
-/// How many claims the Relevant section contributes.
+/// How many claims the Relevant section contributes when a query aims it.
 const RELEVANT_K: usize = 10;
+
+/// How many claims the Relevant section contributes with no query (issue
+/// #152). Unaimed, the section is a recency-and-strength list rather than an
+/// answer, and ten of those filled the default budget before Lessons got a
+/// line on a real store.
+const RELEVANT_UNAIMED_K: usize = 5;
 
 /// How many lessons the Lessons section contributes (design §3.2).
 const LESSONS_K: usize = 5;
+
+/// How much of the budget the sections above Lessons may not spend, so a
+/// store's hard-won how-tos reach the session even when Relevant could fill
+/// the block on its own (issue #152). A third of the default budget: three
+/// lessons of the length a real store writes them (~600 characters). Capped at
+/// a third of any budget so a small block still leads with its instructions,
+/// and never held back for room the section has nothing to put in.
+const LESSONS_RESERVE_CHARS: usize = 2_000;
 
 /// The tag that makes a fact part of the profile (design §3.2).
 const IDENTITY_TAG: &str = "identity";
@@ -86,6 +100,27 @@ pub struct ContextParams {
 struct Section {
     heading: &'static str,
     entries: Vec<Entry>,
+    /// Characters the sections before this one may not spend, so that filling
+    /// in priority order cannot starve it. Bounded by what the section could
+    /// actually use, so an empty section reserves nothing.
+    reserve: usize,
+}
+
+impl Section {
+    /// The room this section can hold back from the ones above it: its
+    /// reserve, or less when its heading and every entry would not fill it.
+    fn held(&self) -> usize {
+        if self.reserve == 0 || self.entries.is_empty() {
+            return 0;
+        }
+        let demand = format!("\n\n{}", self.heading).chars().count()
+            + self
+                .entries
+                .iter()
+                .map(|entry| entry.line().chars().count())
+                .sum::<usize>();
+        self.reserve.min(demand)
+    }
 }
 
 /// One line of the block: a claim, and the id that leads back to it.
@@ -136,10 +171,13 @@ pub async fn run(
     let pool = usize::from(service.config().pool);
 
     // The order is the priority order: what the agent must obey, who it is
-    // working for, what today is about, what past sessions paid to learn.
+    // working for, what today is about, what past sessions paid to learn. The
+    // last of those holds a reserve (issue #152): priority decides who fills
+    // first, not who gets to exist.
     let sections = [
         Section {
             heading: HEADING_INSTRUCTIONS,
+            reserve: 0,
             entries: lookup_section(
                 service,
                 &spaces,
@@ -155,6 +193,7 @@ pub async fn run(
         },
         Section {
             heading: HEADING_PROFILE,
+            reserve: 0,
             entries: lookup_section(
                 service,
                 &spaces,
@@ -171,12 +210,15 @@ pub async fn run(
         },
         Section {
             heading: HEADING_RELEVANT,
+            reserve: 0,
             entries: match &query {
                 Some(text) => search_section(service, &spaces, text, now).await?,
                 // No query is not "nothing to say" — it is the general case,
                 // and what a session wants then is the strongest facts that
                 // have held up (design §3.2), with the summaries that stand
-                // in for whole groups of them (issue #85) alongside.
+                // in for whole groups of them (issue #85) alongside. Fewer of
+                // them than an aimed search returns: unaimed, the list is
+                // orientation, not an answer (issue #152).
                 None => {
                     lookup_section(
                         service,
@@ -185,7 +227,7 @@ pub async fn run(
                             kinds: vec![Kind::Fact, Kind::Summary],
                             ..Filters::default()
                         },
-                        RELEVANT_K,
+                        RELEVANT_UNAIMED_K,
                         None,
                         now,
                     )
@@ -195,6 +237,7 @@ pub async fn run(
         },
         Section {
             heading: HEADING_LESSONS,
+            reserve: lessons_reserve(budget),
             entries: lookup_section(
                 service,
                 &spaces,
@@ -212,6 +255,11 @@ pub async fn run(
 
     let markdown = assemble(&spaces, &sections, budget);
     Ok(CallToolResult::success(vec![ContentBlock::text(markdown)]))
+}
+
+/// What Lessons holds back from the sections above it at this budget.
+fn lessons_reserve(budget: usize) -> usize {
+    LESSONS_RESERVE_CHARS.min(budget / 3)
 }
 
 /// The block, fitted to its budget in up to three fills.
@@ -392,6 +440,13 @@ fn cap_by_tag(records: Vec<MemoryRecord>, cap: usize) -> Vec<MemoryRecord> {
 /// marks everything it covers as already shown, so its children neither cost
 /// budget nor count as dropped — the digest is standing in for them, which is
 /// what it was written to do, and each one stays one `inspect` away.
+///
+/// A section fills against the budget less what every later section holds
+/// back (`Section::held`), so filling in priority order can no longer starve a
+/// section that has something to say (issue #152). What a reserved section
+/// then leaves unused is not lost — it simply was not needed. The first
+/// section never yields to a reserve: what the agent must obey outranks what
+/// would help it, and at the budget floor the two cannot both fit.
 fn render(
     spaces: &[SpaceName],
     sections: &[Section],
@@ -406,7 +461,13 @@ fn render(
     let mut dropped = 0;
     let mut seen: HashSet<&MemoryId> = HashSet::new();
 
-    for section in sections {
+    for (index, section) in sections.iter().enumerate() {
+        let held: usize = if index == 0 {
+            0
+        } else {
+            sections[index + 1..].iter().map(Section::held).sum()
+        };
+        let budget = budget.saturating_sub(held);
         let header = format!("\n\n{}", section.heading);
         let mut header_cost = header.chars().count();
         for entry in &section.entries {
@@ -510,10 +571,12 @@ mod tests {
         let sections = [
             Section {
                 heading: HEADING_INSTRUCTIONS,
+                reserve: 0,
                 entries: vec![entry('A', "Run the linter before committing.")],
             },
             Section {
                 heading: HEADING_PROFILE,
+                reserve: 0,
                 entries: Vec::new(),
             },
         ];
@@ -541,10 +604,12 @@ mod tests {
         let sections = [
             Section {
                 heading: HEADING_INSTRUCTIONS,
+                reserve: 0,
                 entries: vec![entry('A', "Short instruction.")],
             },
             Section {
                 heading: HEADING_LESSONS,
+                reserve: 0,
                 entries: vec![entry('B', &"long ".repeat(60))],
             },
         ];
@@ -557,9 +622,94 @@ mod tests {
     }
 
     #[test]
+    fn a_reserve_keeps_a_later_section_from_being_starved() {
+        // Ten facts of ~90 chars would take every character of a 700 budget on
+        // their own; the reserve holds room back for the lessons behind them.
+        let sections = |reserve| {
+            [
+                Section {
+                    heading: HEADING_INSTRUCTIONS,
+                    reserve: 0,
+                    entries: vec![entry('Z', "Obey the budget.")],
+                },
+                Section {
+                    heading: HEADING_RELEVANT,
+                    reserve: 0,
+                    entries: ('A'..='J')
+                        .map(|last| entry(last, &format!("fact {last} {}", "words ".repeat(8))))
+                        .collect(),
+                },
+                Section {
+                    heading: HEADING_LESSONS,
+                    reserve,
+                    entries: vec![
+                        entry('K', "lesson one: warm the cache first"),
+                        entry('L', "lesson two: pin the toolchain"),
+                        entry('M', "lesson three: never trust a green cold build"),
+                    ],
+                },
+            ]
+        };
+
+        let (starved, _) = render(&spaces(), &sections(0), 700, false);
+        assert!(!starved.contains(HEADING_LESSONS), "{starved}");
+
+        let (fed, _) = render(&spaces(), &sections(220), 700, false);
+        assert!(fed.chars().count() <= 700, "{fed}");
+        for lesson in ["lesson one", "lesson two", "lesson three"] {
+            assert!(fed.contains(lesson), "{lesson} is missing from {fed}");
+        }
+        assert!(
+            fed.contains("fact A"),
+            "the section above still fills first: {fed}"
+        );
+
+        // A reserve is bounded by demand: an empty section holds nothing back
+        // from the ones above it.
+        let empty = [
+            Section {
+                heading: HEADING_INSTRUCTIONS,
+                reserve: 0,
+                entries: vec![entry('Z', "Obey the budget.")],
+            },
+            Section {
+                heading: HEADING_RELEVANT,
+                reserve: 0,
+                entries: vec![entry('A', "the only fact")],
+            },
+            Section {
+                heading: HEADING_LESSONS,
+                reserve: 5_000,
+                entries: Vec::new(),
+            },
+        ];
+        let (block, dropped) = render(&spaces(), &empty, 250, false);
+        assert_eq!(dropped, 0, "{block}");
+        assert!(block.contains("the only fact"), "{block}");
+
+        // And the first section never yields: a reserve that would evict the
+        // instruction is what gives, not the instruction.
+        let squeezed = [
+            Section {
+                heading: HEADING_INSTRUCTIONS,
+                reserve: 0,
+                entries: vec![entry('Z', &"obey ".repeat(20))],
+            },
+            Section {
+                heading: HEADING_LESSONS,
+                reserve: 5_000,
+                entries: vec![entry('K', &"learn ".repeat(20))],
+            },
+        ];
+        let (block, _) = render(&spaces(), &squeezed, 200, false);
+        assert!(block.contains("obey obey"), "{block}");
+    }
+
+    #[test]
     fn a_later_entry_still_fits_after_one_too_long_for_the_budget() {
         let sections = [Section {
             heading: HEADING_PROFILE,
+            reserve: 0,
             entries: vec![
                 entry('A', &"long ".repeat(60)),
                 entry('B', "The user works in Rust."),
@@ -576,10 +726,12 @@ mod tests {
         let sections = [
             Section {
                 heading: HEADING_PROFILE,
+                reserve: 0,
                 entries: vec![entry('A', "The user prefers Rust.")],
             },
             Section {
                 heading: HEADING_RELEVANT,
+                reserve: 0,
                 entries: vec![entry('A', "The user prefers Rust.")],
             },
         ];
@@ -599,6 +751,7 @@ mod tests {
     fn covered_sections() -> [Section; 1] {
         [Section {
             heading: HEADING_RELEVANT,
+            reserve: 0,
             entries: vec![
                 summary('S', "Refresh was hardened end to end.", &['A', 'B']),
                 entry('A', "The refresh timeout was raised to thirty seconds."),
@@ -731,6 +884,7 @@ mod tests {
     fn a_multi_line_claim_stays_one_bullet() {
         let sections = [Section {
             heading: HEADING_LESSONS,
+            reserve: 0,
             entries: vec![entry('A', "  Builds fail\non a cold cache.\n")],
         }];
         let (block, _) = render(&spaces(), &sections, 6_000, false);

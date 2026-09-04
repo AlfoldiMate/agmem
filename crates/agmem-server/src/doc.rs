@@ -228,7 +228,11 @@ fn written_space(cfg: &Config, space: Option<&str>) -> anyhow::Result<SpaceName>
 }
 
 /// The tool's JSON answer, by whichever route this configuration serves.
-async fn call(cfg: &Config, tool: &'static str, arguments: Value) -> anyhow::Result<Value> {
+pub(crate) async fn call(
+    cfg: &Config,
+    tool: &'static str,
+    arguments: Value,
+) -> anyhow::Result<Value> {
     #[cfg(unix)]
     if crate::daemon::wanted(cfg) {
         return through_daemon(cfg, tool, arguments).await;

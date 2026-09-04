@@ -15,8 +15,9 @@
 //!   and after a compaction lists what the session had recalled so the
 //!   checkpoint that follows can cite it.
 //! - `post-tool-use` keeps the per-session log — which claims `recall`
-//!   returned, which `remember`/`reflect` wrote and cited — and nudges at
-//!   two seams: a successful `git push`, and an answered `AskUserQuestion`.
+//!   returned, which `remember`/`reflect` wrote and cited — and nudges once
+//!   per session at two seams: a successful `git push`, and an answered
+//!   `AskUserQuestion`.
 //! - `stop` nudges once, when a session recalled memory and wrote none.
 //!
 //! The log is the one thing the store cannot keep (issue #86): `REINFORCE`
@@ -60,20 +61,18 @@ const LOG_RETENTION_DAYS: i64 = 7;
 /// recalled hundreds of claims needs the recent ones, not all of them.
 const COMPACT_RECALLED_CAP: usize = 40;
 
-const HEADER: &str = "Durable project memory lives in agmem, not in this window. Before the first \
-move, call the agmem `context` tool with a short query naming the work at hand, and treat \
-the briefing as established fact — do not re-derive what it records; verify a specific \
-claim only before acting on it. The `recall` tool reaches what the briefing omits; ask \
-in words, not keywords. A claim that turns out to be stale is corrected with `remember` + \
-`supersedes` (its id ends its line), never worked around. /agmem:checkpoint stores this \
-session's durable state back.";
+/// What the session gets when the briefing could not be assembled: the one
+/// move that recovers it. The store's own emptiness is not this case — an
+/// empty store still yields a block, with its own note.
+const UNAVAILABLE: &str = "The agmem memory briefing could not be assembled at session start. Before \
+the first move, call the agmem `context` tool with a short query naming the work at hand.";
 
-const FOOTER: &str = "The block above is this project's memory briefing (agmem). Treat it as \
-established fact — do not re-derive what it records; verify a specific claim only \
-before acting on it. The `recall` tool reaches what it omits; ask in words, not \
-keywords. A claim that turns out to be stale is corrected with `remember` + `supersedes` \
-(its id ends its line), never worked around. /agmem:checkpoint stores this session's \
-durable state back.";
+/// One sentence after the block (issue #151). The rules it used to restate —
+/// established fact, correct with `supersedes`, checkpoint at seams — are
+/// already in the server instructions and the `agmem` skill; saying them a
+/// third time cost ~160 tokens per session start and taught nothing.
+const FOOTER: &str = "The block above is this project's agmem memory briefing — established fact, \
+corrected with `remember` + `supersedes` when stale; the `agmem` skill holds the judgement.";
 
 const COMPACTED: &str = "NOTE: context was compacted immediately before this. Anything not in agmem \
 or on disk is gone — re-read files before assuming their contents, and do not trust \
@@ -316,26 +315,61 @@ async fn session_start(cfg: &Config, session: &Session, payload: &Value) -> Opti
         query: aim(branch.as_deref(), last_subject(&cwd).as_deref()),
         ..ContextArgs::default()
     };
-    let briefing = oneshot::fetch(cfg, args).await;
-    let memory = match briefing {
-        Ok(block) if !block.trim().is_empty() => format!("{}\n\n{FOOTER}", block.trim()),
-        Ok(_) => HEADER.to_owned(),
+    // An empty store is not the fallback case: the tool answers it with its
+    // own `_Nothing stored_` note, so only a failed fetch lands here.
+    let memory = match oneshot::fetch(cfg, args).await {
+        Ok(block) => format!("{}\n\n{FOOTER}", block.trim()),
         Err(error) => {
             tracing::warn!(%error, "briefing unavailable; falling back to the pull nudge");
-            HEADER.to_owned()
+            UNAVAILABLE.to_owned()
         }
     };
-    let branch_note = branch
-        .map(|b| {
-            format!(
-                " In-flight state for the current branch ({b}) carries the tag branch:{} — \
-                 recall with that tag when resuming work here.",
-                slug(&b)
-            )
-        })
-        .unwrap_or_default();
+    let branch_note = match branch {
+        Some(b) => {
+            let tag = format!("branch:{}", slug(&b));
+            let documents = documents_tagged(cfg, &tag).await.unwrap_or(0);
+            branch_note(&b, &tag, documents)
+        }
+        None => String::new(),
+    };
     parts.push(format!("{memory}{branch_note}"));
     Some(parts.join("\n\n"))
+}
+
+/// The sentence that names the branch tag, and — when subagents left any —
+/// how many documents carry it (owed from issue #136): the artifacts of the
+/// work in flight are one listing away, and a session that does not know they
+/// exist re-derives what they hold.
+fn branch_note(branch: &str, tag: &str, documents: usize) -> String {
+    let mut note = format!(
+        " In-flight state for the current branch ({branch}) carries the tag {tag} — recall \
+         with that tag when resuming work here"
+    );
+    match documents {
+        0 => note.push('.'),
+        1 => note.push_str(&format!(
+            "; one document carries it too (`agmem doc list --tag {tag}`)."
+        )),
+        n => note.push_str(&format!(
+            "; {n} documents carry it too (`agmem doc list --tag {tag}`)."
+        )),
+    }
+    note
+}
+
+/// How many of the current space's documents carry `tag`, or `None` when the
+/// store could not be asked — the note then says nothing about documents
+/// rather than claiming there are none.
+async fn documents_tagged(cfg: &Config, tag: &str) -> Option<usize> {
+    let answer = crate::doc::call(
+        cfg,
+        "inspect",
+        json!({ "ref": "docs:current", "tags": [tag] }),
+    )
+    .await
+    .map_err(|error| tracing::warn!(%error, "document count unavailable"))
+    .ok()?;
+    answer["found"]["documents"].as_array().map(Vec::len)
 }
 
 fn post_tool_use(session: &Session, payload: &Value) -> Option<String> {
@@ -353,7 +387,11 @@ fn post_tool_use(session: &Session, payload: &Value) -> Option<String> {
                 == 0;
             (ok && is_push(command) && session.first_time("push")).then(|| PUSH_NUDGE.to_owned())
         }
-        "AskUserQuestion" => Some(DECISION_NUDGE.to_owned()),
+        // Once per session, like the push nudge: the second answer of a
+        // session is not a new lesson about answers (issue #151).
+        "AskUserQuestion" => session
+            .first_time("decision")
+            .then(|| DECISION_NUDGE.to_owned()),
         _ => {
             let (server, verb) = mcp_parts(tool)?;
             if !server.contains("agmem") {
@@ -741,5 +779,18 @@ mod tests {
 
         let decision = json!({"session_id": "s4", "tool_name": "AskUserQuestion"});
         assert!(post_tool_use(&session, &decision).is_some());
+        assert_eq!(post_tool_use(&session, &decision), None, "once per session");
+    }
+
+    #[test]
+    fn the_branch_note_counts_documents_only_when_there_are_any() {
+        let none = branch_note("main", "branch:main", 0);
+        assert!(none.ends_with("resuming work here."), "{none}");
+        assert!(!none.contains("document"), "{none}");
+        let one = branch_note("fix/x", "branch:fix-x", 1);
+        assert!(one.contains("one document carries it too"), "{one}");
+        assert!(one.contains("`agmem doc list --tag branch:fix-x`"), "{one}");
+        let many = branch_note("fix/x", "branch:fix-x", 3);
+        assert!(many.contains("3 documents carry it too"), "{many}");
     }
 }

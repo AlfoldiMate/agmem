@@ -52,9 +52,11 @@ posed. When you dispatch:
   answer and one lazy one. Dispatch two agents in the same message instead.
 - **Cap the reply of anything without a contract.** The shipped agents carry
   theirs; a built-in (`Explore`) or a one-off agent gets the cap in the
-  prompt, verbatim: *"Reply under 2,000 characters. Anything longer goes into
+  prompt, verbatim: *"Hard cap: 2,000 characters for the whole reply, paths
+  repo-relative. Anything longer goes into
   `nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" <agent> report <title>`
-  and comes back as `DOC: <id> <uri>`."* Measured over 71 sessions,
+  and comes back as `DOC: <id> <uri>`."* Absolute paths alone pushed three
+  sample Explore replies 10–15% over the cap. Measured over 71 sessions,
   `general-purpose` averaged 16k characters back and `Explore` 11k; the
   reports land whole in the main thread. `general-purpose` is not a target
   at all — `researcher` covers what it was used for.

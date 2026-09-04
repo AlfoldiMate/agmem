@@ -2,6 +2,7 @@
 description: Manage the bare-repo + sibling-worktrees layout — init/transform a repo, add/remove worktrees, apply/discard/inspect profiles.
 argument-hint: "<init|add|remove|apply|discard|which> [args]"
 allowed-tools: Bash, Read, AskUserQuestion
+disable-model-invocation: true
 ---
 
 # bare-worktree

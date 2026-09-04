@@ -33,8 +33,9 @@ CONFIDENCE: HIGH | MEDIUM | LOW — <one clause on what would change it>
 DOC: <id> <uri>                                 (omit if none)
 ```
 
-**Hard cap: the whole reply stays under 2,000 characters.** Count before you
-send. Anything the cap cuts — a comparison table, a walkthrough, a quoted
+**Hard cap: the whole reply stays under 2,000 characters.** The first
+characters of the reply are `ANSWER:` — nothing before it, not one line of
+narration — and paths are repo-relative. Anything the cap cuts — a comparison table, a walkthrough, a quoted
 spec — goes into a document: pipe it into
 `nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" researcher report report-<topic>-<date>`
 and return `DOC: <id> <uri>`. The document holds the detail; the reply holds

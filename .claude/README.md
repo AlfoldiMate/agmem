@@ -105,9 +105,31 @@ and routing that only sometimes applies is routing that silently doesn't.
 Rules that apply to every session belong in the file that loads every session.
 
 It carries: the delegation rule (route by **information ratio**, not task
-type), the routing table, payload discipline, the memory loop, and the answer
-shape — output led by the next action, numbered steps, restated state, no
-preamble, questions asked through `AskUserQuestion` rather than prose.
+type), the routing table, payload discipline, the shell and worktree rules,
+what the framework adds to the plugin's memory rules, and the answer-shape
+cases the output style leaves out. It is rules only, held under 6 kB — on
+2026-09-04 it was 11.6 kB, a third of it justification, and at ~2.9k tokens
+on every turn it was 16% of the fixed prefix. The justification lives here.
+
+Why the shell rules exist: auto mode's preamble asks for `cat`, `sed -n` and
+`sed`. That chooses the tool, not the language, and the language is nu — a
+windowed `sed -n 'a,bp'` read is Read offset/limit spelled in shell and
+passes the read guard, but a `sed` *edit* is regex always over source that
+carries `$ { [ ? |` on nearly every line, so it corrupts quietly rather than
+failing, and every edit tool exits 0 on a missed pattern. Settled 2026-09-04
+when the two rules collided (#146).
+
+Why the answer-shape rules exist: output is shaped so the reader can *act*
+on it, not just read it. Working memory is small, starting is the hardest
+step, and buried wins do not register — so the first line is the outcome or
+the next action, multi-step work is numbered and tracked, and a rule is
+broken only when it would delete the answer itself.
+
+Why the memory section is short: the plugin's briefing footer already states
+the rules every session — the briefing is established fact, `recall` in
+words, correct with `supersedes` — and the same rule used to be repeated in
+the agmem instructions, the skill description and two CLAUDE.md bullets.
+One copy, the plugin's; CLAUDE.md keeps only what the framework adds.
 
 ### Seven agents
 
@@ -192,12 +214,23 @@ momentum, not by topic:
 | File | Holds |
 |---|---|
 | `output-styles/ctx-flow.md` | the ~25 lines that must not be forgotten mid-task — routing, tool choice, answer shape |
-| `CLAUDE.md` | the reasoning behind them, the tables, and every case they do not cover |
+| `CLAUDE.md` | the routing table, the shell/worktree/memory rules, and every case the style does not cover |
+| this README | the reasoning behind both — one `Read` away, never on the prefix |
 
 The cost is duplication: change a rule in one and it drifts from the other.
 Keep the style terse enough that it is obviously a summary. Set via the
 `outputStyle` field in `settings.json`; it is read once, so it takes effect
-after `/clear` or a new session, and it does not reach subagents.
+after `/clear` or a new session, and it does not reach subagents — the
+sections CLAUDE.md dropped in favour of the style (delegation prose, the
+numbered answer shape) do not matter to a subagent, which has a return
+contract instead.
+
+Three commands — `/agmem-import`, `/ast-grep-it`, `/bare-worktree` — carry
+`disable-model-invocation: true`: only you run them, so their description
+lines leave the model's skill listing. The machine-local
+`rust-expert-developer` skill's description is ~300 bytes for the same
+reason; the listing truncates at ~1 kB, so a longer trigger list never
+reached the model anyway.
 
 ## Scoping capability to agents
 

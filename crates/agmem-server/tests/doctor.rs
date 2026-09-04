@@ -23,6 +23,10 @@ fn doctor_passes_on_fresh_setup() {
         stderr.contains("none (test-only, no vectors)"),
         "got: {stderr}"
     );
+    assert!(
+        stderr.contains("documents            no space registered yet"),
+        "the report counts documents per space, even when there is none (#135): {stderr}"
+    );
 }
 
 #[test]

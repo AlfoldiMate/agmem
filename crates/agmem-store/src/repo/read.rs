@@ -227,6 +227,8 @@ pub struct SpaceStats {
     pub episodes: u64,
     /// Retrieval slices of those episodes.
     pub chunks: u64,
+    /// Those episodes that are documents: named and typed (#132).
+    pub documents: u64,
 }
 
 /// Hybrid search over memories and episode chunks, best candidate first.
@@ -1004,6 +1006,7 @@ pub async fn stats(db: &Db, space: &SpaceName) -> Result<SpaceStats, StoreError>
             .collect::<Result<_, StoreError>>()?,
         episodes: count(row.episodes),
         chunks: count(row.chunks),
+        documents: count(row.documents),
     })
 }
 

@@ -149,6 +149,31 @@ agmem context --query "release work" --budget-chars 4000
 It attaches to the running daemon, or starts the one the session is about to
 reuse, and prints the same block the MCP tool returns.
 
+### Documents from the shell
+
+A subagent has a shell before it has MCP tools, and a plan handed around by
+id is a plan nobody has to find on disk. `agmem doc` is the document tier as
+four shell verbs, each the MCP tool it mirrors — `remember`, `inspect`,
+`forget` — with the document fields as flags:
+
+```sh
+agmem doc put --title plan-x --kind plan --tag role:architect < plan.md
+# 01K4…  memory://myproject/doc/01K4…
+agmem doc get plan-x --raw                 # the newest version, as stored
+agmem doc get 01K4… --offset 0 --limit 4000
+agmem doc list --kind plan
+agmem doc forget 01K4… --purge [--cascade]
+```
+
+`put` prints the id and the resource URI on one line — what an agent returns
+to the main thread instead of a path. A second `put` under the same title is
+a new version; `get <title>` resolves to the newest, and every version stays
+readable by id. The same document is an MCP resource at
+`memory://<space>/doc/<id>`, served as its own text under its own media type,
+so a client's `@` picker can attach it like a file; `resources/list` shows the
+newest ten per space, and a `recall` hit that slices a document carries a
+`resource_link` to it.
+
 ## The loop
 
 Seven tools. Two MCP prompts, which Claude Code shows as slash commands, ask
@@ -297,7 +322,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--log`, `--log-file` | `info` to stderr | Telemetry. stdout is the MCP wire and stays empty |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in wording | Replace one tool's description, per server, no rebuild |
 | `FASTEMBED_CACHE_DIR` | `<data>/models` | Where the embedding model lives |
-| `--doctor` | | Self-check, then exit |
+| `--doctor` | | Self-check, then exit. Counts documents per space |
 | `--reindex` | | Re-embed every row under the configured embedder. The one way to change models |
 
 A tool description is most of what decides whether an agent reaches for

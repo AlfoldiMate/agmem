@@ -82,6 +82,13 @@ async fn a_document_reads_back_with_its_name_kind_tags_and_mime() {
         "NONE on the row reads as empty"
     );
     assert!(!plain.episode.is_document());
+
+    let stats = repo::stats(&db, &space()).await.expect("stats");
+    assert_eq!(
+        (stats.episodes, stats.documents),
+        (2, 1),
+        "the count tells the named episode from the anonymous one"
+    );
 }
 
 #[tokio::test]

@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use agmem_core::SpaceName;
+use agmem_core::{DocKind, SpaceName};
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -136,6 +136,142 @@ pub enum CliCommand {
     /// Answer a Claude Code hook event: read the payload on stdin, print the
     /// reply, exit 0. The shell side of the agmem plugin (`plugin/`).
     Hook(HookArgs),
+
+    /// Store, read, list or forget a document — a named, typed text — from
+    /// the shell, with no MCP session.
+    Doc(DocArgs),
+}
+
+/// The `agmem doc` verbs (#135): the shell door into the document tier, for
+/// subagents that have a shell but no MCP tools, and for anything that wants
+/// to hand a plan around by id instead of by path.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct DocArgs {
+    #[command(subcommand)]
+    pub verb: DocVerb,
+}
+
+/// One document operation. Each is the MCP tool it mirrors — `remember`,
+/// `inspect`, `forget` — with the document parameters as flags.
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum DocVerb {
+    /// Store stdin as a document. Prints `<id> <uri>` on one line — the
+    /// address to hand on instead of a file path.
+    Put(DocPutArgs),
+
+    /// Print a document: by id, or by title for the newest version under it.
+    Get(DocGetArgs),
+
+    /// List a space's documents, newest first.
+    List(DocListArgs),
+
+    /// Forget a document, or purge it and its slices outright.
+    Forget(DocForgetArgs),
+}
+
+/// What `agmem doc put` passes to `remember`'s episode arm.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct DocPutArgs {
+    /// The document's name. A second put under the same title is a new
+    /// version; `get <title>` resolves to the newest, and every version
+    /// stays readable by id.
+    #[arg(long)]
+    pub title: String,
+
+    /// What the document is: plan, review, report, probe, transcript or other.
+    #[arg(long, value_parser = parse_doc_kind)]
+    pub kind: DocKind,
+
+    /// A label to list by. Repeatable.
+    #[arg(long = "tag", value_name = "TAG")]
+    pub tags: Vec<String>,
+
+    /// The content's media type, served as the resource's mime type.
+    #[arg(long, default_value = "text/markdown")]
+    pub mime: String,
+
+    /// Where to write: `current` (the default), `user`, or a space name.
+    #[arg(long)]
+    pub space: Option<String>,
+}
+
+/// What `agmem doc get` passes to `inspect`.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct DocGetArgs {
+    /// A document id, or a title. An id is tried first; a title resolves
+    /// to the newest version stored under it.
+    #[arg(value_name = "ID | TITLE")]
+    pub reference: String,
+
+    /// Start of the window, in characters. 0 by default.
+    #[arg(long, value_name = "N")]
+    pub offset: Option<usize>,
+
+    /// Length of the window, in characters. The whole document by default.
+    #[arg(long, value_name = "N")]
+    pub limit: Option<usize>,
+
+    /// Print the content alone, as stored. Without this the answer is the
+    /// `inspect` JSON: the content, its versions, and what cites it.
+    #[arg(long)]
+    pub raw: bool,
+
+    /// Where to look: `current`, `user`, `all`, or a space name. Defaults
+    /// to `current` and `user` together for an id, `current` for a title.
+    #[arg(long)]
+    pub space: Option<String>,
+}
+
+/// What `agmem doc list` passes to `inspect`'s `docs:` form.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct DocListArgs {
+    /// Keep only this kind. Repeatable.
+    #[arg(long = "kind", value_name = "KIND", value_parser = parse_doc_kind)]
+    pub kinds: Vec<DocKind>,
+
+    /// Keep only documents carrying this tag. Repeatable.
+    #[arg(long = "tag", value_name = "TAG")]
+    pub tags: Vec<String>,
+
+    /// The space to list: `current` (the default), `user`, or a name.
+    #[arg(long)]
+    pub space: Option<String>,
+
+    /// Print the `inspect` JSON instead of one line per document.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// What `agmem doc forget` passes to `forget`.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct DocForgetArgs {
+    /// The document id.
+    pub id: String,
+
+    /// Delete outright — the text and its slices. Unrecoverable.
+    #[arg(long)]
+    pub purge: bool,
+
+    /// When purging a document live claims still cite: purge those claims
+    /// with it. Without this the purge is refused and names them.
+    #[arg(long, requires = "purge")]
+    pub cascade: bool,
+
+    /// Where to look: `current`, `user`, `all`, or a space name. Defaults
+    /// to `current` and `user` together.
+    #[arg(long)]
+    pub space: Option<String>,
+}
+
+/// `--kind` as a [`DocKind`], with the spellings that would have worked.
+fn parse_doc_kind(text: &str) -> Result<DocKind, String> {
+    text.parse().map_err(|_| {
+        let kinds: Vec<&str> = DocKind::ALL.iter().map(|kind| kind.as_str()).collect();
+        format!(
+            "`{text}` is not a document kind; one of {}",
+            kinds.join(", ")
+        )
+    })
 }
 
 /// Which event `agmem hook` is answering.

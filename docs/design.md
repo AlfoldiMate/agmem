@@ -86,7 +86,7 @@ Key properties:
 | Background workers: elaboration, consolidation, decay sweeps | **No background jobs.** Decay is computed at read time; pruning runs lazily at startup; consolidation is agent-invoked (phase 3) |
 | decision/retrieval/response trace graph | Provenance (`source`) on every record + supersession chains; `inspect` walks them. Full trace tables deferred |
 | Grants, principals, key attenuation, delegation | Local trust model: space isolation + destructive-op flags. No auth in v1 |
-| REST + Management API + SDKs + CLI/TUI | **None.** MCP tools only (a `--doctor` CLI flag for self-check is the whole CLI) |
+| REST + Management API + SDKs + CLI/TUI | **None.** MCP tools only; the CLI is `--doctor`, `--reindex`, and the one-shots that mirror a tool (`agmem context`, `agmem doc …`, `agmem hook …`) |
 
 ---
 
@@ -405,7 +405,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //              covers,       // summary hits only: the refs it stands in for
 //              doc: { id, title, doc_kind, position } }] }  // episode hits that slice a document (#134)
 // Episode chunks compete in the same order as memories (`kind: "episode"`);
-// they carry no validity window and rank on retrieval alone.
+// they carry no validity window and rank on retrieval alone. On the wire the
+// JSON text block is followed by one `resource_link` per document the hits
+// slice, pointing at memory://<space>/doc/<id> (#135).
 
 // context
 { "query": "optional focus string", "space": "…", "budget_chars": 6000 }
@@ -615,10 +617,20 @@ them. The grammar is two forms: `memory://<space>` reads the index — one page
 of the strongest live claims, slim, each entry carrying its own URI, with a
 `truncated` note naming what the page left out whenever the space holds more
 than one page (#69) — and `memory://<space>/<id>`
-reads the full `inspect` answer for whatever the id names. `resources/list`
-serves one entry per registered space; the record form is published as a URI
-template rather than enumerated, so a large store never pushes thousands of
-rows at a client that renders the list as a menu.
+reads the full `inspect` answer for whatever the id names. A third form,
+`memory://<space>/doc/<id>` (#135), serves a document's text as stored under
+its own media type — the one resource that is not a tool's JSON, because a
+client attaching a plan wants the plan and not an envelope; anonymous text
+has no name to attach by and answers only at its record form. `resources/list`
+serves one entry per registered space plus the newest ten documents of the
+spaces the session reads (`current` and `user`); the record and document
+forms are published as URI templates rather than enumerated, so a large store
+never pushes thousands of rows at a client that renders the list as a menu.
+A `recall` hit that slices a document also carries a `resource_link` content
+block to its `doc/` form, after the JSON text, so a client opens the source
+without a second call. `agmem doc put/get/list/forget` are the same tier from
+the shell, one-shots on the `agmem context` pattern that call `remember`,
+`inspect` and `forget` through the daemon or the store.
 
 ---
 
@@ -674,12 +686,14 @@ agmem/
 │       │   │   ├── mod.rs        #   socket path, handshake, wanted()
 │       │   │   ├── serve.rs      #   owns the store, one service per session
 │       │   │   └── client.rs     #   find or start it, then pump stdio
-│       │   ├── config.rs         # flags + AGMEM_* env + `context` subcommand
+│       │   ├── config.rs         # flags + AGMEM_* env + the subcommands
 │       │   ├── startup.rs        # steps 4–9 of §5.1, shared by every route
 │       │   ├── lock.rs           # the single-writer advisory lock
 │       │   ├── doctor.rs         # --doctor self-check
 │       │   ├── reindex.rs        # --reindex re-embedding pass
-│       │   ├── oneshot.rs        # `agmem context`: one briefing, no server
+│       │   ├── oneshot.rs        # `agmem context`: one briefing, no server;
+│       │   │                     #   the daemon/direct routes `doc` shares
+│       │   ├── doc.rs            # `agmem doc put/get/list/forget` (#135)
 │       │   ├── hook.rs           # `agmem hook <event>`: the plugin's hooks —
 │       │   │                     #   briefing injection, per-session recall
 │       │   │                     #   log, seam nudges
@@ -690,7 +704,7 @@ agmem/
 │       │   │                     #   description text + handler —
 │       │   │                     #   remember / recall / context / forget /
 │       │   │                     #   inspect / consolidate / reflect
-│       │   ├── resources.rs      # memory://<space> index resources
+│       │   ├── resources.rs      # memory:// index, record and doc/ resources
 │       │   ├── prompts.rs        # checkpoint / recall_first rituals
 │       │   └── telemetry.rs      # tracing → stderr (or AGMEM_LOG_FILE)
 │       └── tests/                # protocol, eval, harness, daemon, knn_probe
@@ -1242,7 +1256,7 @@ Each phase is releasable; later phases only add.
   `ws://` sharing-mode hardening docs.
 - **Phase 9 — Documents (#132, #134–#137):** a named, typed artifact tier
   over the episode table (v9 schema, span sidecar); windowed `inspect`, title
-  supersession and cascade purge; `agmem doc` CLI + `agmem://<space>/doc/{id}`
+  supersession and cascade purge; `agmem doc` CLI + `memory://<space>/doc/{id}`
   resource; the ctx-flow framework moves off `.claude/notes/`; recall-precision
   eval with documents present.
 

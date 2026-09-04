@@ -375,6 +375,52 @@ async fn a_one_shot_context_reads_through_the_live_daemon() {
 }
 
 #[tokio::test]
+async fn a_document_put_through_the_daemon_is_read_by_the_sessions() {
+    use agmem_server::config::{DocGetArgs, DocPutArgs};
+
+    let shared = Shared::start().await;
+    let cfg = config(shared.data.path(), "hook");
+
+    // What `agmem doc put < plan.md` runs after parsing (#135): same data
+    // dir, so the one-shot finds the daemon above instead of starting one.
+    let content = "# Plan\n\nStep one.\n".repeat(2_000);
+    let line = agmem_server::doc::put(
+        &cfg,
+        DocPutArgs {
+            title: "plan-x".to_owned(),
+            kind: agmem_core::DocKind::Plan,
+            tags: vec!["role:architect".to_owned()],
+            mime: "text/markdown".to_owned(),
+            space: None,
+        },
+        content.clone(),
+    )
+    .await
+    .expect("put through the daemon");
+    let (id, uri) = line.trim_end().split_once(' ').expect("id and uri");
+    assert_eq!(uri, format!("memory://hook/doc/{id}"), "{line}");
+
+    let session = shared.attach("hook").await;
+    let found = call(&session, "inspect", json!({ "ref": "doc:current/plan-x" })).await;
+    assert_eq!(found["found"]["episode"]["id"], id, "{found}");
+    assert_eq!(found["found"]["episode"]["tags"], json!(["role:architect"]));
+
+    let back = agmem_server::doc::get(
+        &cfg,
+        DocGetArgs {
+            reference: "plan-x".to_owned(),
+            offset: None,
+            limit: None,
+            raw: true,
+            space: None,
+        },
+    )
+    .await
+    .expect("get through the daemon");
+    assert_eq!(back, content, "the whole document, through the socket");
+}
+
+#[tokio::test]
 async fn a_probe_that_says_nothing_does_not_wedge_the_daemon() {
     let shared = Shared::start().await;
     // Connect and leave — what `--doctor` does to find out whether a daemon

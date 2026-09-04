@@ -681,6 +681,7 @@ async fn stats_count_what_a_space_holds() {
         (stats.memories, stats.live, stats.episodes, stats.chunks),
         (5, 5, 1, 3)
     );
+    assert_eq!(stats.documents, 0, "the seeded episode is anonymous");
     assert_eq!(
         stats.live_by_kind,
         [(Kind::Fact, 3), (Kind::Instruction, 1), (Kind::Lesson, 1)],

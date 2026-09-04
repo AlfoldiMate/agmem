@@ -513,6 +513,7 @@ pub(crate) struct StatsRow {
     pub(crate) live: i64,
     pub(crate) episodes: i64,
     pub(crate) chunks: i64,
+    pub(crate) documents: i64,
     pub(crate) live_by_kind: Vec<KindCountRow>,
 }
 

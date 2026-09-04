@@ -235,13 +235,25 @@ believed at some earlier point.",
             read_only_hint = true,
             destructive_hint = false,
             open_world_hint = false
-        )
+        ),
+        // Spelled out because the macro derives it only from a `Json<T>`
+        // return, and this arm builds its own result to append the links.
+        output_schema = rmcp::handler::server::common::schema_for_output::<RecallResult>()
     )]
     async fn recall(
         &self,
         Parameters(params): Parameters<RecallParams>,
-    ) -> Result<Json<RecallResult>, ErrorData> {
-        recall::run(self, params).await.map(Json)
+    ) -> Result<CallToolResult, ErrorData> {
+        // The `Json<T>` shape by hand — JSON text first, structured content
+        // beside it — plus one `resource_link` per document the hits are
+        // slices of (#135), so a client can open the source directly.
+        let result = recall::run(self, params).await?;
+        let links = recall::links(&result);
+        let value = serde_json::to_value(&result)
+            .map_err(|error| crate::tools::internal(format!("rendering recall failed: {error}")))?;
+        let mut answer = CallToolResult::structured(value);
+        answer.content.extend(links);
+        Ok(answer)
     }
 
     /// The session-start verb (design §3.2).

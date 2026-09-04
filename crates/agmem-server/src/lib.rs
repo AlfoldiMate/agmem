@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod daemon;
+pub mod doc;
 pub mod doctor;
 pub mod embedder;
 pub mod hook;

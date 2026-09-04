@@ -422,6 +422,9 @@ pub struct SpaceCounts {
     /// Retrieval slices of those episodes.
     pub chunks: u64,
 
+    /// Those episodes that are documents — named, typed, listed by `docs:`.
+    pub documents: u64,
+
     /// Live memories per kind; a kind with none is absent.
     pub live_by_kind: Vec<KindCount>,
 }
@@ -914,6 +917,7 @@ async fn counts(
             invalidated: stats.memories.saturating_sub(stats.live),
             episodes: stats.episodes,
             chunks: stats.chunks,
+            documents: stats.documents,
             live_by_kind: stats
                 .live_by_kind
                 .into_iter()

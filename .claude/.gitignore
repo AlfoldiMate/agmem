@@ -4,8 +4,9 @@ skills/rust-expert-developer/
 # session-local permissions — never ship
 settings.local.json
 
-# this repo's own scratch dropbox (subagent artifacts, legacy pre-agmem
-# notes) — machine-local, never ship
+# the retired artifact dropbox — subagents write agmem documents now, and
+# anything landing here is invisible to memory (/ctx-flow-doctor flags it);
+# stays ignored so a regressed agent can never commit a blob
 notes/
 
 # macOS noise

@@ -1257,8 +1257,8 @@ Each phase is releasable; later phases only add.
 - **Phase 9 — Documents (#132, #134–#137):** a named, typed artifact tier
   over the episode table (v9 schema, span sidecar); windowed `inspect`, title
   supersession and cascade purge; `agmem doc` CLI + `memory://<space>/doc/{id}`
-  resource; the ctx-flow framework moves off `.claude/notes/`; recall-precision
-  eval with documents present.
+  resource; the ctx-flow framework moves off its notes dropbox onto
+  documents (#136); recall-precision eval with documents present.
 
 ## 9. Risks & open questions
 

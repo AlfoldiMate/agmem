@@ -41,7 +41,9 @@ SUPPRESSED: <n> more of the same kind
 ```
 
 Forbidden: raw log output, stack traces, compiler notes, passing test names. If
-the full log matters, write it to `.claude/notes/` and return the path.
+the full log matters, store it as a document — pipe it into
+`nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" runner report report-<command>-<date>`
+— and add `DOC: <id> <uri>` to the report.
 
 ## Learned
 
@@ -51,5 +53,7 @@ Only if it would change a future run of this agent **in this project**, end with
 LEARNED: <one sentence> — <evidence>
 ```
 
+If you wrote a document, the same line closes it under a `## Learned`
+heading, so the proposal survives the reply scrolling out of context.
 You propose; the caller commits. Skip it unless durable, non-obvious, and earned
 twice or once at real cost. Most runs emit nothing.

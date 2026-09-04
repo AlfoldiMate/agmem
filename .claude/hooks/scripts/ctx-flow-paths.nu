@@ -10,20 +10,25 @@
 # session is cleared, and the branch state is never recalled. Anything git
 # permits but a slug should not carry — `+ # ( ) % &`, non-ASCII, over 80
 # characters — diverges the same way. One resolver, called by both sides, is
-# the only version of this that stays correct. LEDGER/STATE are the legacy
-# file locations, kept so /agmem-import can find a pre-agmem checkout's notes.
+# the only version of this that stays correct. NOTES/LEDGER/STATE are the
+# legacy file locations, kept so /agmem-import can find a pre-agmem
+# checkout's notes; `scripts/doc-put.nu` reaches the same tag through
+# `_common.nu` directly.
 #
 # Usage, from anywhere inside the repo:
 #     nu ctx-flow-paths.nu            # KEY=VALUE lines, shell-friendly
 #     nu ctx-flow-paths.nu --json
+#     nu ctx-flow-paths.nu --tag      # the branch tag alone; nothing on a detached HEAD
 const COMMON = path self "_common.nu"
 use $COMMON *
 
-# Keys are printed straight from the record, so ROOT/LEDGER/BRANCH/STATE/TAG
-# cannot drift from what `paths` actually returns.
-def main [--json]: nothing -> nothing {
+# Keys are printed straight from the record, so ROOT/NOTES/LEDGER/BRANCH/
+# STATE/TAG cannot drift from what `paths` actually returns.
+def main [--json, --tag]: nothing -> nothing {
     let r = paths { cwd: $env.PWD }
-    if $json {
+    if $tag {
+        if $r.tag != null { print $r.tag }
+    } else if $json {
         print ($r | to json)
     } else {
         # BRANCH, STATE and TAG come back empty on a detached HEAD.

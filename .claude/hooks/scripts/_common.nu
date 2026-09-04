@@ -38,9 +38,9 @@ def absolute? [p: string]: nothing -> bool {
 # Root of the MAIN worktree — shared by every linked worktree of this repo.
 #
 # `git rev-parse --git-common-dir` points at the one real .git directory from
-# anywhere in the repo, including linked worktrees, so durable notes written
-# here follow you across every branch and every worktree — with or without a
-# symlinked .claude. Outside a repo this degrades to the cwd.
+# anywhere in the repo, including linked worktrees, so the framework files
+# resolve to one place from every branch and every worktree — with or without
+# a symlinked .claude. Outside a repo this degrades to the cwd.
 export def shared-root [cwd: string]: nothing -> string {
     let common = git-out $cwd rev-parse "--git-common-dir"
     if ($common | is-empty) { return $cwd }
@@ -71,12 +71,12 @@ export def slug [b: string]: nothing -> string {
     | default --empty "detached"
 }
 
-# {root, ledger, branch, state, tag} — root and tag serve the live flow (the
-# .claude/notes artifact dropbox and the agmem branch tag, one slug rule for
-# the hook that announces it and the /checkpoint that writes it); ledger and
-# state are the LEGACY file locations, still resolved so /agmem-import can find
-# what a pre-agmem checkout wrote. `state` and `tag` are null on a detached
-# HEAD.
+# {root, notes, ledger, branch, state, tag} — root and tag serve the live
+# flow (the shared root and the agmem branch tag, one slug rule for the hook
+# that announces it, the /checkpoint that writes it, and doc-put.nu that tags
+# documents with it); notes, ledger and state are the LEGACY file locations,
+# still resolved so /agmem-import can find what a pre-agmem checkout wrote.
+# `state` and `tag` are null on a detached HEAD.
 export def paths [p: record]: nothing -> record {
     let cwd = cwd-of $p
     let root = shared-root $cwd
@@ -84,6 +84,7 @@ export def paths [p: record]: nothing -> record {
 
     {
         root: $root
+        notes: ($root | path join $NOTES_REL)
         ledger: ($root | path join $NOTES_REL "LEDGER.md")
         branch: $branch
         state: (if $branch == null { null } else {
@@ -93,13 +94,28 @@ export def paths [p: record]: nothing -> record {
     }
 }
 
+# Warning text when the retired notes dropbox holds files, or null when it is
+# absent or empty. Subagents write documents into agmem now; a file landing
+# under .claude/notes is invisible to memory and to every other worktree, so
+# it is reported rather than tolerated. `.imported` files count: the directory
+# is meant to be gone, not archived.
+export def notes-check [root: string]: nothing -> any {
+    let dir = $root | path join $NOTES_REL
+    if ($dir | path type) != "dir" { return null }
+    let files = try { glob ($dir | path join "**" "*") --no-dir } | default []
+    if ($files | is-empty) { return null }
+    ($"RETIRED NOTES DROPBOX: ($dir) holds ($files | length) file\(s\). Subagents write agmem "
+        + "documents now \(`agmem doc list`\); nothing reads this directory. Fix: `/agmem-import` "
+        + "moves the files into the store, then `rm -r` the directory.")
+}
+
 # Warning text when the worktree layout strands the shared .claude, or null
-# when the layout is sound. The framework and the .claude/notes artifact
-# dropbox resolve through `shared-root` — the main worktree, or with a bare
-# repo the directory holding the bare git dir — so a `.claude` that exists only
-# inside one linked worktree has diverged from the copy every other worktree
-# shares. (Durable memory itself lives in agmem, keyed off the same shared git
-# dir, so it is immune to this — the stakes here are profiles and artifacts.)
+# when the layout is sound. The framework resolves through `shared-root` — the
+# main worktree, or with a bare repo the directory holding the bare git dir —
+# so a `.claude` that exists only inside one linked worktree has diverged from
+# the copy every other worktree shares. (Durable memory itself lives in agmem,
+# keyed off the same shared git dir, so it is immune to this — the stakes here
+# are profiles and the framework files.)
 export def layout-check [cwd: string]: nothing -> any {
     let top = git-out $cwd rev-parse "--show-toplevel"
     if ($top | is-empty) { return null }                                # not in a work tree
@@ -109,8 +125,8 @@ export def layout-check [cwd: string]: nothing -> any {
     if not ($top | path join ".claude" | path exists) { return null }   # no .claude anywhere — nothing stranded
     ($"WORKTREE LAYOUT MISMATCH: ($root)/.claude does not exist, but this worktree carries its "
         + "own .claude — in this layout the real .claude lives at the shared root and is "
-        + "symlinked into each worktree, so profiles and the .claude/notes artifact dropbox "
-        + "stay one copy. Fix: `bare-worktree apply`. /ctx-flow-doctor explains the layout.")
+        + "symlinked into each worktree, so profiles and the framework files stay one copy. "
+        + "Fix: `bare-worktree apply`. /ctx-flow-doctor explains the layout.")
 }
 
 # --- tunables ------------------------------------------------------------

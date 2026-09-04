@@ -30,8 +30,22 @@ Subagents may end a response with `LEARNED: <claim> — <evidence>`. Those are
 is deliberate: the agent proposing a rule is often the cheapest, least
 informed thing in the system, and rules it writes bind every future run.
 
-For each proposal from this session, apply all four tests. Store it only if it
-passes all of them:
+Collect them from two places. The replies still in context, and this
+branch's **documents** — an agent that wrote one closed it with the same
+line, and that copy survives compaction. List them with the branch tag the
+plugin announced at session start (or `nu
+"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/scripts/ctx-flow-paths.nu" --tag`):
+
+```bash
+agmem doc list --tag branch:<slug>
+agmem doc get <id> --raw | rg '^LEARNED:'      # per document written this session
+```
+
+Keep the documents in the shell; only the proposal lines reach the thread.
+The `agent:<name>` tag on a document names the role a proposal belongs to.
+
+For each proposal, apply all four tests. Store it only if it passes all of
+them:
 
 1. **Durable** — true of this project, not of this task.
 2. **Non-obvious** — not something the repo, a type, or a test already says.
@@ -43,20 +57,25 @@ passes all of them:
 An accepted proposal becomes a `lesson` tagged `role:<agent>`, with the
 evidence in the claim itself ("… — proved by the 2026-08-30 retry-path
 deadlock"), because a rule whose reason is invisible cannot be pruned honestly
-later. A proposal that binds *every* session, not just one role, becomes an
-`instruction` — rare, and worth a second look before pinning.
+later. One that came out of a document is stored with `reflect`, not
+`remember`, with `derived_from: ["episode:<doc id>"]` — the lesson then cites
+the report it was earned in, and `inspect` can open it. A proposal that
+binds *every* session, not just one role, becomes an `instruction` — rare,
+and worth a second look before pinning.
 
 Before storing, `recall` with the same `role:` tag: if an existing rule
 contradicts the new one, resolve it now with `supersedes` — two opposing rules
 are worse than neither.
 
 **Dropping a proposal is the common outcome and needs no justification.** Say
-how many you saw and how many you kept, and move on.
+how many you saw (and how many of those came from documents) and how many
+you kept, and move on.
 
 ## 3. Legacy files
 
-If `.claude/notes/LEDGER.md` exists, this checkout predates agmem — run
-`/agmem-import` once to move its contents into the store.
+If `/ctx-flow-doctor`'s `notes` row is not `ok`, this checkout still carries
+the retired `.claude/notes/` dropbox — a pre-agmem ledger, or artifacts from
+before documents. Run `/agmem-import` once to move them into the store.
 
 ## Then
 

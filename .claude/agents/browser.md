@@ -37,12 +37,14 @@ DID:
 - <step>                     (at most 4)
 SAW:
 - <observation or error, quoted>   (at most 5)
-ARTIFACTS:
-- .claude/notes/<file>       (omit if none)
+DOC: <id> <uri>              (omit if none)
 ```
 
 **Never** paste a snapshot, DOM, accessibility tree, HTML source, or full console
-log. Write it to `.claude/notes/` and return the path. No exceptions.
+log. Store it as a document — pipe it into
+`nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" browser report report-<flow>-<date>`
+(`--mime text/plain` for anything not markdown) — and return `DOC: <id> <uri>`.
+No exceptions.
 
 ## Learned
 
@@ -52,5 +54,7 @@ Only if it would change a future run of this agent **in this project**, end with
 LEARNED: <one sentence> — <evidence>
 ```
 
+If you wrote a document, the same line closes it under a `## Learned`
+heading, so the proposal survives the reply scrolling out of context.
 You propose; the caller commits. Skip it unless durable, non-obvious, and earned
 twice or once at real cost. Most runs emit nothing.

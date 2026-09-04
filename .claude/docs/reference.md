@@ -32,7 +32,9 @@ VERDICT_KEY: <enum of 2-4 values>
 <CLOSING_KEY>: <one sentence>
 
 Forbidden: <the specific padding this role tends to produce>
-Anything longer than N lines → write to .claude/notes/ and return the path.
+Anything longer than N lines → pipe it into
+`nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" <agent> <kind> <title>`
+and return `DOC: <id> <uri>`.
 ```
 
 ## Dispatching well
@@ -82,8 +84,9 @@ The lifetime split the two files used to carry maps onto kinds and decay:
 
 The slug in `branch:<slug>` is computed inside the agmem binary — its
 SessionStart hook announces it and its checkpoint writes it, one rule for
-both sides. `hooks/scripts/ctx-flow-paths.nu` (`TAG=`) carries the same rule
-for `/agmem-import`, and is the one place here that must keep matching it.
+both sides. `hooks/scripts/ctx-flow-paths.nu` (`TAG=`, `--tag`) carries the
+same rule for `/agmem-import`, and `scripts/doc-put.nu` reaches it through
+the same `_common.nu` — the one place here that must keep matching it.
 
 Writing well is `/checkpoint`'s job, and its order matters: distil → `recall`
 the topic → `remember`, with `supersedes` carrying the id of anything now
@@ -93,10 +96,21 @@ checkpoints are idempotent and history survives correction — `inspect` shows
 any claim's chain and source, and `recall` with `as_of` replays what was
 believed at any past instant.
 
-What does **not** go in the store: anything git records, anything the code
-says plainly, anything true only for the current turn — and artifacts. Long
-tool output goes under `.claude/notes/` with the path returned; agmem holds
-claims, not blobs.
+What does **not** go in the store as a *claim*: anything git records,
+anything the code says plainly, anything true only for the current turn.
+Long tool output is not a claim either, but it does go in the store — as a
+**document**, the named, typed artifact tier over the episode table. A
+subagent pipes it into `scripts/doc-put.nu <agent> <kind> <title>` and
+returns `DOC: <id> memory://<space>/doc/<id>`; the wrapper tags it
+`branch:<slug>` (so `agmem doc list --tag branch:<slug>` is this branch's
+artifacts) and `agent:<name>` (so `/checkpoint` knows which role's playbook
+a proposal inside it joins). The kinds: `plan` (architect), `review`
+(verifier), `report` (runner, browser, scout, tracker), `probe`,
+`transcript`, `other`. A lesson accepted from a document is stored with
+`reflect` and `derived_from: ["episode:<id>"]`, so the claim cites the
+artifact it came from — the provenance the old `.claude/notes/` dropbox
+never had. `agmem doc get <id|title> --raw` reads one back; `/agmem-import`
+moves a pre-documents dropbox in.
 
 ## Staying ahead of compaction
 

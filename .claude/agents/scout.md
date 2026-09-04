@@ -46,8 +46,10 @@ SUPPRESSED: <n> more of the same kind
 If nothing matches: `FOUND: nothing — <where you looked, one clause>`.
 
 Forbidden: file bodies, code blocks over 2 lines, explanations of how the code
-works, next steps, "you could". Over 8 hits or any real detail goes to
-`.claude/notes/` and you return the path.
+works, next steps, "you could". Over 8 hits or any real detail becomes a
+document — pipe it into
+`nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" scout report report-<what>-<date>`
+— and you return `DOC: <id> <uri>`.
 
 ## Learned
 
@@ -57,5 +59,7 @@ Only if it would change a future run of this agent **in this project**, end with
 LEARNED: <one sentence> — <evidence>
 ```
 
+If you wrote a document, the same line closes it under a `## Learned`
+heading, so the proposal survives the reply scrolling out of context.
 You propose; the caller commits. Skip it unless durable, non-obvious, and earned
 twice or once at real cost. Most runs emit nothing.

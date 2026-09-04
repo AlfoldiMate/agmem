@@ -31,7 +31,7 @@ const PROJECT_SETTINGS = path self "../settings.json"
 const GRAMMARS = path self "grammars.nu"
 const COMMON = path self "../hooks/scripts/_common.nu"
 use $GRAMMARS *
-use $COMMON [layout-check]
+use $COMMON [layout-check notes-check shared-root]
 
 # agmem's version string under-reports (a build can carry space derivation
 # while still saying 0.1.0), so probe behaviour, not the version: --doctor
@@ -55,6 +55,16 @@ def agmem-row []: nothing -> record {
         let v = (try { ^agmem --version | complete | get stdout | str trim } | default "unknown version")
         return { dep: "agmem", status: "OLD", detail: $"($v), no `agmem hook`"
             fix: "brew upgrade agmem — without `agmem hook` (0.1.10+) the plugin's hooks are silent" }
+    }
+
+    # Subagents hand back long output as documents through `agmem doc put`
+    # (scripts/doc-put.nu); without the subcommand every such write fails and
+    # the agent falls back to a /tmp path nothing else reads.
+    let doc = (try { ^agmem doc --help | complete | get exit_code } | default 1)
+    if $doc != 0 {
+        let v = (try { ^agmem --version | complete | get stdout | str trim } | default "unknown version")
+        return { dep: "agmem", status: "OLD", detail: $"($v), no `agmem doc`"
+            fix: "brew upgrade agmem — without `agmem doc` (0.2.0+) subagents cannot write documents" }
     }
 
     let r = try { ^agmem --doctor | complete }
@@ -91,15 +101,25 @@ def agmem-plugin-row []: nothing -> record {
     }
 }
 
-# In a linked worktree, the framework and the .claude/notes artifact dropbox
-# resolve to the shared root — verify a .claude actually exists there, or
-# subagent artifacts land where nothing reads.
+# In a linked worktree, the framework resolves to the shared root — verify a
+# .claude actually exists there, or profiles and hooks come from a stray copy.
 def layout-row []: nothing -> record {
     let broken = try { layout-check $env.PWD }
     if $broken == null {
         { dep: "worktree layout", status: "ok", detail: "shared .claude reachable", fix: "" }
     } else {
         { dep: "worktree layout", status: "BROKEN", detail: "", fix: $broken }
+    }
+}
+
+# `.claude/notes/` is retired: subagents write agmem documents. A file that
+# lands there is invisible to memory, so a populated directory is a finding.
+def notes-row []: nothing -> record {
+    let warning = try { notes-check (shared-root $env.PWD) }
+    if $warning == null {
+        { dep: "notes", status: "ok", detail: "no .claude/notes dropbox", fix: "" }
+    } else {
+        { dep: "notes", status: "STALE", detail: "retired dropbox holds files", fix: $warning }
     }
 }
 
@@ -136,6 +156,7 @@ def main []: nothing -> nothing {
         (agmem-row)
         (agmem-plugin-row)
         (layout-row)
+        (notes-row)
         (dep "acli" false (probe acli "--version") "https://developer.atlassian.com/cloud/acli/ — only needed for Jira")
     ]
 

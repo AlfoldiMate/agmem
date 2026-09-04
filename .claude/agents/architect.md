@@ -2,7 +2,7 @@
 name: architect
 description: Designs the approach for a non-trivial change — reads the existing code, weighs options, returns a concrete build sequence with files and risks. Read-only; never edits. Use before writing code for anything spanning more than two files.
 model: fable
-effort: xhigh
+effort: high
 tools: Read, Glob, Grep, Bash, mcp__plugin_agmem_agmem__recall, mcp__plugin_agmem_agmem__context
 mcpServers:
   - plugin:agmem:agmem
@@ -51,8 +51,12 @@ UNKNOWNS:
 - <what the code could not tell you>
 ```
 
-Under 60 lines. No code block over 5 lines. A longer design goes to
-`.claude/notes/plan-<name>.md`; return the path plus APPROACH.
+Under 60 lines. No code block over 5 lines. Before returning, store the full
+design as a document — pipe it into
+`nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" architect plan plan-<name>`
+(Bash heredoc; the wrapper tags it with the branch and prints `<id> <uri>`) —
+and open the reply with `DOC: <id> <uri>` so the caller can `agmem doc get`
+what the 60 lines left out. A longer design lives there, never in the reply.
 
 ## Learned
 
@@ -62,5 +66,7 @@ Only if it would change a future run of this agent **in this project**, end with
 LEARNED: <one sentence> — <evidence>
 ```
 
+If you wrote a document, the same line closes it under a `## Learned`
+heading, so the proposal survives the reply scrolling out of context.
 You propose; the caller commits. Skip it unless durable, non-obvious, and earned
 twice or once at real cost. Most runs emit nothing.

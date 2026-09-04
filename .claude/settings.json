@@ -27,6 +27,21 @@
             "type": "command",
             "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/pre-worktree-guard.nu\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/pre-read-guard.nu\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/pre-read-guard.nu\"",
+            "timeout": 5
           }
         ]
       }

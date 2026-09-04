@@ -82,14 +82,18 @@ it is on you at the point of the call.
 
 - Anything you can't predict the size of is a `runner` job.
 - Through `Bash`, filter at the source: `--json`/`--jq`, `git diff --stat`
-  before `git diff`, `Read` with `offset`/`limit` over `cat`.
+  before `git diff`, `Read` with `offset`/`limit` over `cat` — a hook denies a
+  whole-file read past 300 lines and asks for the window.
 - Through the nu MCP server, run once and slice `$history` afterwards.
 
 ## Shell work
 
 The harness sometimes routes file reads and edits through `Bash` rather than the
-Read/Edit tools. That chooses the *tool*, not the *language* — and the language
-is nu, for the same reason as everything else here.
+Read/Edit tools (auto mode's preamble asks for `cat`/`sed -n` and `sed`). That
+chooses the *tool*, not the *language* — and the language is nu, for the same
+reason as everything else here. Settled 2026-09-04: a windowed `sed -n 'a,bp'`
+read is fine (it is Read offset/limit spelled in shell); a `sed` *edit* is not,
+and the nudge stays.
 
 - **Edit with nu, not sed or python.**
   `open --raw f | str replace <old> <new> | save -f f` is safe onto the same

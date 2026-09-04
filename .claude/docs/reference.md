@@ -50,6 +50,18 @@ posed. When you dispatch:
   hypothesis biases a search agent toward confirming it.
 - **One question per agent.** Two questions in one prompt produce one good
   answer and one lazy one. Dispatch two agents in the same message instead.
+- **Cap the reply of anything without a contract.** The shipped agents carry
+  theirs; a built-in (`Explore`) or a one-off agent gets the cap in the
+  prompt, verbatim: *"Reply under 2,000 characters. Anything longer goes into
+  `nu "$CLAUDE_PROJECT_DIR/.claude/scripts/doc-put.nu" <agent> report <title>`
+  and comes back as `DOC: <id> <uri>`."* Measured over 71 sessions,
+  `general-purpose` averaged 16k characters back and `Explore` 11k; the
+  reports land whole in the main thread. `general-purpose` is not a target
+  at all — `researcher` covers what it was used for.
+- **Pass the role's lessons.** `runner`, `tracker`, `browser` and
+  `researcher` carry no memory tool. When the store holds a `role:<agent>`
+  lesson that applies, paste it into the prompt; the agent treats it as an
+  appended rule.
 
 ## Parallel fan-out
 
@@ -105,7 +117,7 @@ returns `DOC: <id> memory://<space>/doc/<id>`; the wrapper tags it
 `branch:<slug>` (so `agmem doc list --tag branch:<slug>` is this branch's
 artifacts) and `agent:<name>` (so `/checkpoint` knows which role's playbook
 a proposal inside it joins). The kinds: `plan` (architect), `review`
-(verifier), `report` (runner, browser, scout, tracker), `probe`,
+(verifier), `report` (runner, browser, scout, tracker, researcher), `probe`,
 `transcript`, `other`. A lesson accepted from a document is stored with
 `reflect` and `derived_from: ["episode:<id>"]`, so the claim cites the
 artifact it came from — the provenance the old `.claude/notes/` dropbox
@@ -145,7 +157,11 @@ A skill is a file plus a description line in the always-loaded listing. That lin
 exists so the model can *discover* the skill — and the listing goes to everything
 holding the `Skill` tool, subagents included. Role-specific knowledge needs no
 discovery: the agent definition names its own `role:<agent>` tag, and the recall
-costs nothing until that agent actually runs. (The same reasoning is why the
+costs nothing until that agent actually runs — where the agent carries the
+`recall` tool at all. It costs ~6k tokens of schema per dispatch, so only
+`architect`, `verifier` and `scout` carry it; the dispatcher pastes lessons
+into a `runner`, `tracker`, `browser` or `researcher` prompt instead, which
+is the same knowledge at zero standing cost. (The same reasoning is why the
 routing rules themselves moved from a skill into `CLAUDE.md`: rules that apply
 to every session shouldn't need discovering, and rules that need discovering
 sometimes aren't discovered.)
@@ -208,4 +224,4 @@ pipes, and no tool schema loads into any prompt.
 - **Reach MCP results only from a dedicated agent.** They are the largest
   objects in the system and the best delegation candidates you have. (agmem is
   the exception by design: its replies are claims, already distilled, and the
-  shipped agents carry their own read-only wiring.)
+  agents that recall carry their own read-only wiring.)

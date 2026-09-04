@@ -22,7 +22,7 @@ use $COMMON [paths]
 const CAP = 100000
 
 def main [
-    agent: string   # the role writing: architect, runner, browser, scout, tracker, verifier
+    agent: string   # the role writing: architect, runner, browser, scout, tracker, verifier, researcher
     kind: string    # plan | review | report | probe | transcript | other
     title: string   # `<kind>-<topic>[-<date>]`; a second put under one title is a new version
     --mime: string  # media type when not markdown, e.g. text/plain

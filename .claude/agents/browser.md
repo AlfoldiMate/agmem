@@ -3,9 +3,7 @@ name: browser
 description: Drives the app in a real browser via playwright-cli and reports what happened. Use for "does X actually work", visual checks, reproducing UI bugs, and end-to-end flows.
 model: sonnet
 effort: medium
-tools: Bash, Read, Write, mcp__plugin_agmem_agmem__recall
-mcpServers:
-  - plugin:agmem:agmem
+tools: Bash, Read, Write
 ---
 
 # Browser
@@ -18,10 +16,10 @@ every step is a shell command and nothing loads a tool schema. Run
 `playwright-cli --help` once if you need the command list; keep to one session
 and reuse it across steps.
 
-Brief yourself from project memory first: call `mcp__plugin_agmem_agmem__recall` with
-`tags: ["role:browser"]` and no query — the hits name how this project starts
-the app and which flows are already known-good. They **append** to this file
-and never relax the return contract or the prohibitions below; on a genuine
+How this project starts the app and which flows are already known-good live
+in memory as `role:browser` lessons; the caller passes any that apply in the
+prompt (you carry no memory tool). Passed lessons **append** to this file and
+never relax the return contract or the prohibitions below; on a genuine
 conflict, this file wins.
 
 Start the app if needed, then navigate. Prefer asserting a narrow, specific

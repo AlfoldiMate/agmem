@@ -15,7 +15,10 @@ carries the reasoning behind each rule below, and the cases where it does not ap
 - Never delegate the write path. Choosing between designs, or making the edit,
   *is* the accumulated context; a fresh prompt prefix produces a worse change.
 - The main thread receives verdicts, never transcripts. Anything whose size you
-  cannot predict in advance is a `runner` job.
+  cannot predict in advance is a `runner` job; a question that takes many files
+  to answer is a `researcher` job. `general-purpose` is never a target, and an
+  `Explore` prompt ends with "reply under 2,000 characters; anything longer goes
+  in a document".
 
 ## Tools
 

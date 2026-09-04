@@ -109,16 +109,17 @@ type), the routing table, payload discipline, the memory loop, and the answer
 shape — output led by the next action, numbered steps, restated state, no
 preamble, questions asked through `AskUserQuestion` rather than prose.
 
-### Six agents
+### Seven agents
 
 | Agent | Model / effort | Absorbs |
 |---|---|---|
 | `runner` | haiku / low | builds, suites, linters — returns the failure signature |
 | `verifier` | sonnet / high | adversarial check of one claim — defaults to refuting |
-| `architect` | opus / high | design of a non-trivial change — read-only, never edits |
+| `architect` | fable / high | design of a non-trivial change — read-only, never edits |
 | `browser` | sonnet / medium | `playwright-cli` sessions — snapshots stop here |
 | `tracker` | haiku / low | Jira/GitHub via `gh`/`acli` — never raw records |
-| `scout` | haiku / low | where a symbol lives, which files match a shape — paths and line refs, never bodies |
+| `scout` | haiku / medium | where a symbol lives, which files match a shape — paths and line refs, never bodies, under 3k chars |
+| `researcher` | sonnet / medium | a bounded question that takes many files, docs or the web — under 2k chars back, the rest as a document |
 
 Every one ends with a **mandatory return contract**: fixed keys, hard caps, and
 an explicit forbidden list. An unschematized subagent writes an essay; a
@@ -126,9 +127,20 @@ schematized one writes 200 tokens. Tiers are picked by *consequence of being
 wrong*, not output size — `runner` misses cost one re-dispatch; a bad
 `architect` plan is discovered late, after the code exists.
 
-Broad codebase exploration stays with Claude Code's built-in `Explore`;
-`scout` is the cheaper cousin for a question with an enumerable answer —
-where is X, which files do Y — that should come back as refs, not prose.
+Broad codebase exploration stays with Claude Code's built-in `Explore`, with
+the same cap pasted into its prompt; `scout` is the cheaper cousin for a
+question with an enumerable answer — where is X, which files do Y — that
+should come back as refs, not prose. `researcher` is the target for what
+used to go to `general-purpose`, which over 71 audited sessions returned 16k
+characters on average and is no longer a target at all.
+
+What each agent preloads is sized to what it returns. `architect`, `verifier`
+and `scout` carry the agmem `recall` tool for their `role:` lessons; `runner`,
+`tracker`, `browser` and `researcher` do not — the schema was ~6k tokens per
+dispatch, runner alone ran 157 times, and the dispatcher pastes any
+applicable lesson into the prompt instead. The three ast-grep users preload
+`skills/ast-grep-lite`, a 2 kB card; the full `ast-grep` skill stays for the
+main thread.
 
 ### Five commands
 
@@ -217,8 +229,8 @@ http/sse both work) or the bare name of an already-registered global server.
 Declaring the server does not grant its tools — list `mcp__<server>__*` (or
 individual `mcp__<server>__<tool>` entries) in `tools:` as well. Two servers
 stay global: `nu --mcp` (it is the shell, and every session wants the shell)
-and `agmem` (it is the memory — the main thread writes it, and every shipped
-agent declares read-only access to recall its own role's rules).
+and `agmem` (it is the memory — the main thread writes it, and the agents
+whose lessons pay for the schema declare read-only access to recall them).
 
 ### Skills: who gets to see one
 
@@ -309,10 +321,11 @@ out of the document and stores the accepted lesson citing it. The old
 ## Playbooks — knowledge that accumulates
 
 A role's project specifics live in the store as `lesson`s tagged
-`role:<agent>`. Each shipped agent recalls its own tag before starting
-(read-only wiring, declared per agent); nothing else loads them, so an unused
-playbook costs nothing. Recalled rules **append** to the agent's definition
-and never override it; on conflict the agent file wins.
+`role:<agent>`. `architect`, `verifier` and `scout` recall their own tag
+before starting (read-only wiring, declared per agent); the other four carry
+no memory tool and receive their lessons in the dispatch prompt. Nothing else
+loads them, so an unused playbook costs nothing. Rules **append** to the
+agent's definition and never override it; on conflict the agent file wins.
 
 The guards the file version needed are mostly the store's behaviour now:
 near-duplicates are refused at write time, unused rules fade by decay instead
@@ -364,7 +377,7 @@ compacts; the token saving is a side effect of the quality win.
 ├── CLAUDE.md               the routing discipline — loads every session
 ├── settings.json           hook registration
 ├── .gitignore              the machine-local parts: settings.local.json, one local skill, the retired notes/ (sgconfig.yml lives at the repo root)
-├── agents/                 runner, verifier, architect, browser, tracker, scout
+├── agents/                 runner, verifier, architect, browser, tracker, scout, researcher
 ├── commands/               checkpoint (wraps the plugin's), agmem-import, ctx-flow-doctor, ast-grep-it, bare-worktree
 ├── docs/reference.md       contracts, memory mapping, rationale — loaded on demand
 ├── hooks/scripts/          the five hooks + shared _common.nu + paths resolver; hooks/tests/ their cases
@@ -372,6 +385,7 @@ compacts; the token saving is a side effect of the quality win.
 ├── scripts/                doctor.nu + doc-put.nu (subagent artifacts → documents) + import-notes.nu + build-grammar.nu + grammars.nu registry + bare-worktree.nu
 ├── skills/nushell/         deep Nushell reference, loaded when writing nu
 ├── skills/ast-grep/        rule-writing workflow, loaded when a query needs more than a pattern
+├── skills/ast-grep-lite/   the 2 kB card preloaded into scout, verifier, architect, researcher
 └── skills/                 (a machine-local skill dropped in here stays untracked — list it in .gitignore)
 ```
 

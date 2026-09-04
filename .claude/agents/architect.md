@@ -7,7 +7,7 @@ tools: Read, Glob, Grep, Bash, mcp__plugin_agmem_agmem__recall, mcp__plugin_agme
 mcpServers:
   - plugin:agmem:agmem
 skills:
-  - ast-grep
+  - ast-grep-lite
 ---
 
 # Architect

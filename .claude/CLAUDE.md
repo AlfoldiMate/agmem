@@ -61,7 +61,9 @@ conclusion — not by task type.
 
 | Situation | Action |
 |---|---|
-| Don't know where the code is | `Explore`, several in parallel — one per subsystem or hypothesis |
+| Don't know where the code is | `Explore`, several in parallel — one per subsystem or hypothesis; the prompt ends with "reply under 2,000 characters; anything longer goes in a document" |
+| Where is X / which files / enumerate Y | `scout` — paths and line refs, under 3k chars |
+| A bounded question that takes many files, docs or the web to answer | `researcher` — under 2k chars back, the rest as a document. **`general-purpose` is never a target**; it returns transcripts |
 | Know where it is, need to understand it | Read it yourself; a summary of it is worthless to you |
 | Non-trivial change, >2 files | `architect` first, read-only; then implement in-thread |
 | Writing the change | **In-thread. Never delegate the write path.** |
@@ -160,8 +162,11 @@ compacts. A hook says so at 120k tokens of context, and again per 40k after.
 ## Playbooks
 
 A role's accumulated project specifics live in agmem as `lesson`s tagged
-`role:<agent>`; each agent recalls its own tag before starting, and nothing
-else loads them. They **append** to the agent definition, never override it.
+`role:<agent>`. `architect`, `verifier` and `scout` recall their own tag
+before starting; `runner`, `tracker`, `browser` and `researcher` carry no
+memory tool (the schema cost more per dispatch than they ever recalled), so
+the dispatcher passes any applicable `role:` lesson in the prompt. Lessons
+**append** to the agent definition, never override it.
 
 Agents *propose* learnings (`LEARNED: <claim> — <evidence>`); `/checkpoint`
 decides what lands — that gate, not the store, is what makes self-updating

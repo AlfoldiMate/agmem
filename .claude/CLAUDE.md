@@ -82,7 +82,8 @@ it is on you at the point of the call.
 
 - Anything you can't predict the size of is a `runner` job.
 - Through `Bash`, filter at the source: `--json`/`--jq`, `git diff --stat`
-  before `git diff`, `Read` with `offset`/`limit` over `cat`.
+  before `git diff`, `Read` with `offset`/`limit` over `cat` — a hook denies a
+  whole-file read past 300 lines and asks for the window.
 - Through the nu MCP server, run once and slice `$history` afterwards.
 
 ## Shell work

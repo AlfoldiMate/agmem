@@ -308,7 +308,15 @@ async fn session_start(cfg: &Config, session: &Session, payload: &Value) -> Opti
         parts.push(note);
     }
 
-    let briefing = oneshot::fetch(cfg, ContextArgs::default()).await;
+    // Aim the Relevant section at the work in front of the session (issue
+    // #152): the branch and the last commit subject are what the repo itself
+    // says the work is. Without them the section is a recency list.
+    let branch = branch_of(&cwd);
+    let args = ContextArgs {
+        query: aim(branch.as_deref(), last_subject(&cwd).as_deref()),
+        ..ContextArgs::default()
+    };
+    let briefing = oneshot::fetch(cfg, args).await;
     let memory = match briefing {
         Ok(block) if !block.trim().is_empty() => format!("{}\n\n{FOOTER}", block.trim()),
         Ok(_) => HEADER.to_owned(),
@@ -317,7 +325,7 @@ async fn session_start(cfg: &Config, session: &Session, payload: &Value) -> Opti
             HEADER.to_owned()
         }
     };
-    let branch_note = branch_of(&cwd)
+    let branch_note = branch
         .map(|b| {
             format!(
                 " In-flight state for the current branch ({b}) carries the tag branch:{} — \
@@ -523,6 +531,32 @@ fn branch_of(cwd: &Path) -> Option<String> {
     (!branch.is_empty() && branch != "HEAD").then_some(branch)
 }
 
+/// The subject line of the last commit, or `None` outside a repo or on an
+/// unborn branch.
+fn last_subject(cwd: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(["log", "-1", "--format=%s"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let subject = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    (!subject.is_empty()).then_some(subject)
+}
+
+/// The briefing query the repo state implies: "<branch>: <subject>", either
+/// half alone when the other is missing, nothing when both are.
+fn aim(branch: Option<&str>, subject: Option<&str>) -> Option<String> {
+    match (branch, subject) {
+        (Some(branch), Some(subject)) => Some(format!("{branch}: {subject}")),
+        (Some(one), None) | (None, Some(one)) => Some(one.to_owned()),
+        (None, None) => None,
+    }
+}
+
 /// A branch name as the tag carries it — the rule the ctx-flow hooks and
 /// `/checkpoint` share, so the two sides of the tag cannot drift.
 fn slug(branch: &str) -> String {
@@ -585,6 +619,17 @@ mod tests {
                 "{shape}"
             );
         }
+    }
+
+    #[test]
+    fn the_briefing_is_aimed_from_whatever_the_repo_can_say() {
+        assert_eq!(
+            aim(Some("main"), Some("Fix the retry loop (#12)")),
+            Some("main: Fix the retry loop (#12)".to_owned())
+        );
+        assert_eq!(aim(Some("main"), None), Some("main".to_owned()));
+        assert_eq!(aim(None, Some("Initial")), Some("Initial".to_owned()));
+        assert_eq!(aim(None, None), None);
     }
 
     #[test]

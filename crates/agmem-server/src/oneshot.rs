@@ -54,15 +54,57 @@ pub async fn fetch(cfg: &Config, args: ContextArgs) -> anyhow::Result<String> {
     direct(cfg, args).await
 }
 
+/// A live MCP session on the shared daemon, attached or freshly started.
+///
+/// # Errors
+/// When no daemon can be reached or started, or the handshake fails.
+#[cfg(unix)]
+pub(crate) async fn daemon_session(
+    cfg: &Config,
+) -> anyhow::Result<rmcp::service::RunningService<rmcp::RoleClient, ()>> {
+    use anyhow::Context as _;
+    use rmcp::ServiceExt as _;
+
+    let (read, write) = crate::daemon::client::attach(cfg).await?.into_split();
+    ().serve((read, write))
+        .await
+        .context("initializing MCP with the shared store")
+}
+
+/// The store, opened in this process the way `main::in_process` opens it —
+/// lock, open, migrate, embedder check, prune, register — so a one-shot
+/// sees exactly the state a served session would.
+///
+/// The lock rides along: dropping the pair releases it, and a caller that
+/// wants the store for longer keeps the pair for longer.
+///
+/// # Errors
+/// When the lock is held elsewhere, the store will not open or migrate, or
+/// the embedder disagrees with what the store was written with.
+pub(crate) async fn open_direct(
+    cfg: &Config,
+) -> anyhow::Result<(AgmemService, Option<lock::DataDirLock>)> {
+    let lock = if cfg.db_is_remote() {
+        None
+    } else {
+        Some(lock::acquire(&cfg.data_dir)?)
+    };
+    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
+    agmem_store::migrate::ensure(&db).await?;
+    let embedder = embedder::build(cfg)?;
+    agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
+    let pruned = crate::startup::prune(&db).await;
+    agmem_store::repo::ensure_space(&db, &cfg.space).await?;
+    tracing::debug!(pruned, "store opened for a one-shot");
+    Ok((AgmemService::new(db, embedder, Arc::new(cfg.clone())), lock))
+}
+
 /// Ask a shared daemon, as a real MCP client on the session socket.
 #[cfg(unix)]
 async fn through_daemon(cfg: &Config, args: ContextArgs) -> anyhow::Result<String> {
-    use anyhow::Context as _;
-    use rmcp::ServiceExt as _;
     use rmcp::model::CallToolRequestParams;
 
-    let (read, write) = crate::daemon::client::attach(cfg).await?.into_split();
-    let session = ().serve((read, write)).await.context("initializing MCP with the shared store")?;
+    let session = daemon_session(cfg).await?;
 
     let ContextArgs {
         query,
@@ -91,25 +133,8 @@ async fn through_daemon(cfg: &Config, args: ContextArgs) -> anyhow::Result<Strin
 }
 
 /// Open the store in this process and call the tool with no wire at all.
-///
-/// The startup mirrors `main::in_process` — lock, open, migrate, embedder
-/// check, prune, register — so the block is assembled from exactly the store
-/// state a served session would see.
 async fn direct(cfg: &Config, args: ContextArgs) -> anyhow::Result<String> {
-    let lock = if cfg.db_is_remote() {
-        None
-    } else {
-        Some(lock::acquire(&cfg.data_dir)?)
-    };
-    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
-    agmem_store::migrate::ensure(&db).await?;
-    let embedder = embedder::build(cfg)?;
-    agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
-    let pruned = crate::startup::prune(&db).await;
-    agmem_store::repo::ensure_space(&db, &cfg.space).await?;
-    tracing::debug!(pruned, "store opened for a one-shot context");
-
-    let service = AgmemService::new(db, embedder, Arc::new(cfg.clone()));
+    let (service, lock) = open_direct(cfg).await?;
     let params = ContextParams {
         query: args.query,
         space: args.space,

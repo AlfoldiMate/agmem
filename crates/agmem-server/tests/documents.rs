@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use agmem_embed::NoopEmbedder;
 use harness::*;
+use rmcp::model::ContentBlock;
 use serde_json::{Value, json};
 
 /// A `remember` carrying one document and nothing else.
@@ -313,6 +314,36 @@ async fn a_verbatim_hit_says_which_document_it_is_a_slice_of() {
     assert!(
         anonymous.get("doc").is_none(),
         "anonymous text has no name to give: {anonymous}"
+    );
+
+    // On the wire the document is also a `resource_link` after the JSON
+    // text (#135): one per document however many slices matched, so a
+    // client can open the source without a second tool call.
+    let result = agmem
+        .call("recall", json!({ "query": "gizmo", "k": 10 }))
+        .await
+        .expect("recall");
+    assert!(
+        matches!(result.content.first(), Some(ContentBlock::Text(_))),
+        "the JSON text stays first: {:?}",
+        result.content
+    );
+    let links: Vec<&rmcp::model::Resource> = result
+        .content
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::ResourceLink(link) => Some(link),
+            _ => None,
+        })
+        .collect();
+    let [link] = links[..] else {
+        panic!("one link for the one document: {:?}", result.content);
+    };
+    assert_eq!(link.uri, format!("memory://{}/doc/{id}", space()));
+    assert_eq!(link.name, "plan-long");
+    assert!(
+        result.structured_content.is_some(),
+        "the structured answer is untouched: {result:?}"
     );
     agmem.shutdown().await;
 }

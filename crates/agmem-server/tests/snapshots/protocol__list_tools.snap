@@ -1466,6 +1466,12 @@ expression: "&tools.tools"
               "minimum": 0,
               "type": "integer"
             },
+            "documents": {
+              "description": "Those episodes that are documents — named, typed, listed by `docs:`.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
             "episodes": {
               "description": "Verbatim episodes.",
               "format": "uint64",
@@ -1509,6 +1515,7 @@ expression: "&tools.tools"
             "invalidated",
             "episodes",
             "chunks",
+            "documents",
             "live_by_kind"
           ],
           "type": "object"

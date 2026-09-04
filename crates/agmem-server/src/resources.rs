@@ -12,18 +12,25 @@
 //! |---|---|
 //! | `memory://<space>` | the index: the space's live claims, slim, marked when cut |
 //! | `memory://<space>/<id>` | the full `inspect` answer for that id |
+//! | `memory://<space>/doc/<id>` | a document's text as stored, under its own media type (#135) |
 //!
-//! `resources/list` serves one entry per registered space; the record form is
-//! published as a *template*, because a store of a thousand claims must not
-//! push a thousand rows at every client that renders the list as a menu. The
-//! index is where the concrete URIs come from: each entry carries its own.
+//! `resources/list` serves one entry per registered space, plus the newest
+//! few documents of the spaces this session reads — enough for a client's
+//! `@` picker, which is not a file browser. The record and document forms
+//! are published as *templates*, because a store of a thousand claims must
+//! not push a thousand rows at every client that renders the list as a menu.
+//! The index is where the concrete URIs come from: each entry carries its own.
 //!
-//! Everything is `application/json`, shaped by the same serde types the tools
-//! answer with — a resource that renders differently from the tool it mirrors
-//! would be two answers to one question.
+//! Everything but a document is `application/json`, shaped by the same serde
+//! types the tools answer with — a resource that renders differently from
+//! the tool it mirrors would be two answers to one question. A document is
+//! the exception on purpose: its JSON form is still there at
+//! `memory://<space>/<id>`, and the `doc/` form exists so a plan can be
+//! attached to a conversation the way a file is.
 
-use agmem_core::SpaceName;
-use agmem_store::repo::{self, Lookup};
+use agmem_core::{Episode, EpisodeId, SpaceName};
+use agmem_store::StoreError;
+use agmem_store::repo::{self, DocumentFilter, Lookup};
 use rmcp::ErrorData;
 use rmcp::model::{
     ErrorCode, ListResourceTemplatesResult, ListResourcesResult, ReadResourceResult, Resource,
@@ -42,6 +49,22 @@ const MIME: &str = "application/json";
 /// the space never contains a slash and the id never needs escaping: spaces
 /// are validated slugs and ids are ULIDs.
 const SCHEME: &str = "memory://";
+
+/// The path segment that tells the document form from the record form.
+const DOC_SEGMENT: &str = "doc/";
+
+/// What a document reads as when it was stored without a media type.
+const DOC_MIME: &str = "text/plain";
+
+/// How many documents per space `resources/list` shows: the newest, for a
+/// picker — every document still answers at its own URI.
+const LISTED_DOCUMENTS: usize = 10;
+
+/// The `memory://<space>/doc/<id>` form of a document — what `agmem doc put`
+/// prints and what a `recall` hit's `resource_link` points at.
+pub fn document_uri(space: &str, id: &str) -> String {
+    format!("{SCHEME}{space}/{DOC_SEGMENT}{id}")
+}
 
 /// The index a `memory://<space>` read answers with.
 #[derive(Debug, Serialize)]
@@ -76,7 +99,8 @@ struct IndexEntry {
     content: String,
 }
 
-/// One resource per registered space.
+/// One resource per registered space, then the newest documents of the
+/// spaces this session reads — `current` and `user`, recall's default pair.
 ///
 /// # Errors
 /// [`ErrorData`] with `INTERNAL_ERROR` for a failing store.
@@ -84,7 +108,7 @@ pub async fn list(service: &AgmemService) -> Result<ListResourcesResult, ErrorDa
     let spaces = repo::spaces(service.db())
         .await
         .map_err(|error| store_error(&error))?;
-    let resources = spaces
+    let mut resources: Vec<Resource> = spaces
         .into_iter()
         .map(|space| {
             Resource::new(format!("{SCHEME}{space}"), space.to_string())
@@ -96,7 +120,48 @@ pub async fn list(service: &AgmemService) -> Result<ListResourcesResult, ErrorDa
                 .with_mime_type(MIME)
         })
         .collect();
+
+    let mut attached = vec![service.config().space.clone()];
+    if !attached.contains(&SpaceName::user()) {
+        attached.push(SpaceName::user());
+    }
+    let filter = DocumentFilter {
+        kinds: Vec::new(),
+        tags: Vec::new(),
+        limit: LISTED_DOCUMENTS,
+    };
+    for space in &attached {
+        let documents = repo::documents(service.db(), space, &filter)
+            .await
+            .map_err(|error| store_error(&error))?;
+        resources.extend(
+            documents
+                .into_iter()
+                .map(|summary| document_resource(space, &summary.episode)),
+        );
+    }
     Ok(ListResourcesResult::with_all_items(resources))
+}
+
+/// A document as a listed resource: named by its title, sized, typed.
+fn document_resource(space: &SpaceName, episode: &Episode) -> Resource {
+    let title = episode.title.clone().unwrap_or_default();
+    let kind = episode
+        .doc_kind
+        .map_or("document", agmem_core::DocKind::as_str);
+    let mut description = format!("A {kind} in `{space}`");
+    if !episode.tags.is_empty() {
+        description.push_str(", tagged ");
+        description.push_str(&episode.tags.join(", "));
+    }
+    Resource::new(
+        document_uri(space.as_str(), episode.id.as_str()),
+        title.clone(),
+    )
+    .with_title(title)
+    .with_description(description)
+    .with_mime_type(episode.mime.as_deref().unwrap_or(DOC_MIME))
+    .with_size(episode.content.len() as u64)
 }
 
 /// The record form, as a template rather than a listing (see the module doc).
@@ -110,6 +175,14 @@ pub fn templates() -> ListResourceTemplatesResult {
                  memory, episode, or chunk.",
             )
             .with_mime_type(MIME),
+        ResourceTemplate::new(format!("{SCHEME}{{space}}/{DOC_SEGMENT}{{id}}"), "document")
+            .with_title("One document, as text")
+            .with_description(
+                "A named, typed document's text as stored, under its own media \
+                 type — the address `agmem doc put` prints, and where a `recall` \
+                 hit from a document links to. Its JSON form, with versions and \
+                 what cites it, is the record form of the same id.",
+            ),
     ])
 }
 
@@ -121,13 +194,16 @@ pub fn templates() -> ListResourceTemplatesResult {
 pub async fn read(service: &AgmemService, uri: &str) -> Result<ReadResourceResult, ErrorData> {
     let Some(path) = uri.strip_prefix(SCHEME) else {
         return Err(not_found(format!(
-            "no such resource: {uri} — this server serves {SCHEME}<space> and \
-             {SCHEME}<space>/<id>"
+            "no such resource: {uri} — this server serves {SCHEME}<space>, \
+             {SCHEME}<space>/<id> and {SCHEME}<space>/{DOC_SEGMENT}<id>"
         )));
     };
     let text = match path.split_once('/') {
         None => index(service, path).await?,
-        Some((space, id)) => record(service, space, id).await?,
+        Some((space, rest)) => match rest.strip_prefix(DOC_SEGMENT) {
+            Some(id) => return document(service, space, id, uri).await,
+            None => record(service, space, rest).await?,
+        },
     };
     Ok(ReadResourceResult::new(vec![
         ResourceContents::text(text, uri).with_mime_type(MIME),
@@ -218,6 +294,42 @@ async fn record(service: &AgmemService, space: &str, id: &str) -> Result<String,
         }
     })?;
     render(&result)
+}
+
+/// The `memory://<space>/doc/<id>` form: the text, as stored, as itself.
+///
+/// The one resource that is not a tool's JSON: a client attaching a plan
+/// wants the plan, not an envelope around it. Anonymous text has no name to
+/// attach by and answers only at its record form, so it is a miss here — a
+/// miss that says where the text does read.
+async fn document(
+    service: &AgmemService,
+    space: &str,
+    id: &str,
+    uri: &str,
+) -> Result<ReadResourceResult, ErrorData> {
+    let space_name: SpaceName = space.parse().map_err(|_| unknown_space(space))?;
+    let episode_id: EpisodeId = id
+        .parse()
+        .map_err(|_| not_found(format!("{uri}: `{id}` is not a document id")))?;
+    let detail = repo::episode(service.db(), &space_name, &episode_id)
+        .await
+        .map_err(|error| match error {
+            StoreError::UnknownEpisode { .. } => {
+                not_found(format!("{uri}: no document with that id in `{space}`"))
+            }
+            other => store_error(&other),
+        })?;
+    let episode = detail.episode;
+    if !episode.is_document() {
+        return Err(not_found(format!(
+            "{uri}: that is anonymous text, not a document; it reads at {SCHEME}{space}/{id}"
+        )));
+    }
+    let mime = episode.mime.unwrap_or_else(|| DOC_MIME.to_owned());
+    Ok(ReadResourceResult::new(vec![
+        ResourceContents::text(episode.content, uri).with_mime_type(mime),
+    ]))
 }
 
 /// Serde is the renderer, so a resource can never drift from its tool.

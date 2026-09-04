@@ -224,10 +224,15 @@ async fn resource_templates_publish_the_record_form() {
         .await
         .expect("list_resource_templates");
 
-    let [template] = &listed.resource_templates[..] else {
-        panic!("one template — records are addressed, never enumerated: {listed:?}");
+    let [record, document] = &listed.resource_templates[..] else {
+        panic!("two templates — records are addressed, never enumerated: {listed:?}");
     };
-    assert_eq!(template.uri_template, "memory://{space}/{id}");
+    assert_eq!(record.uri_template, "memory://{space}/{id}");
+    assert_eq!(document.uri_template, "memory://{space}/doc/{id}");
+    assert_eq!(
+        document.mime_type, None,
+        "a document is served under its own media type, so the template names none"
+    );
 
     agmem.shutdown().await;
 }
@@ -363,6 +368,101 @@ async fn a_uri_naming_nothing_is_resource_not_found() {
             "{uri}: {error:?}"
         );
     }
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_document_reads_as_its_text_under_its_own_mime_and_is_listed() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let content = "# Plan X\n\nStep one.\nStep two.\n";
+    let written = agmem
+        .remember(json!({
+            "memories": [],
+            "episode": {
+                "content": content, "title": "plan-x", "doc_kind": "plan",
+                "tags": ["phase-9"], "mime": "text/markdown"
+            }
+        }))
+        .await;
+    let id = written["episode"].as_str().expect("id").to_owned();
+    let plain = agmem
+        .remember(json!({ "memories": [], "episode": { "content": "just a note" } }))
+        .await;
+    let plain_id = plain["episode"].as_str().expect("id").to_owned();
+
+    let uri = format!("memory://{}/doc/{id}", space());
+    let result = agmem
+        .client
+        .read_resource(ReadResourceRequestParams::new(uri.clone()))
+        .await
+        .expect("read");
+    let [
+        rmcp::model::ResourceContents::TextResourceContents {
+            text,
+            mime_type,
+            uri: echoed,
+            ..
+        },
+    ] = &result.contents[..]
+    else {
+        panic!("one text block, got {result:?}");
+    };
+    assert_eq!(text, content, "the text as stored, not an envelope");
+    assert_eq!(mime_type.as_deref(), Some("text/markdown"));
+    assert_eq!(echoed, &uri);
+
+    // The JSON form still answers at the record address.
+    let record = read_json(&agmem, &format!("memory://{}/{id}", space())).await;
+    assert_eq!(record["found"]["episode"]["title"], "plan-x", "{record}");
+
+    for uri in [
+        format!("memory://{}/doc/{plain_id}", space()),
+        format!("memory://{}/doc/01ARZ3NDEKTSV4RRFFQ69G5FAV", space()),
+        format!("memory://{}/doc/not-an-id", space()),
+        format!("memory://nowhere/doc/{id}"),
+    ] {
+        let error = agmem
+            .client
+            .read_resource(ReadResourceRequestParams::new(uri.clone()))
+            .await
+            .expect_err(&uri);
+        let ServiceError::McpError(error) = &error else {
+            panic!("{uri}: expected a protocol error, got {error:?}");
+        };
+        assert_eq!(
+            error.code,
+            ErrorCode::RESOURCE_NOT_FOUND,
+            "{uri}: {error:?}"
+        );
+    }
+
+    // The picker sees the document, named by its title; anonymous text is
+    // not a thing to attach.
+    let listed = agmem.client.list_resources(None).await.expect("list");
+    let document = listed
+        .resources
+        .iter()
+        .find(|resource| resource.uri == uri)
+        .unwrap_or_else(|| panic!("the document is listed: {:?}", listed.resources));
+    assert_eq!(document.name, "plan-x");
+    assert_eq!(document.mime_type.as_deref(), Some("text/markdown"));
+    assert_eq!(document.size, Some(content.len() as u64));
+    assert!(
+        document
+            .description
+            .as_deref()
+            .is_some_and(|d| d.contains("plan") && d.contains("phase-9")),
+        "{document:?}"
+    );
+    assert!(
+        !listed
+            .resources
+            .iter()
+            .any(|resource| resource.uri.contains(&plain_id)),
+        "{:?}",
+        listed.resources
+    );
 
     agmem.shutdown().await;
 }

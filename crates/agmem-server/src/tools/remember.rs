@@ -443,7 +443,7 @@ const MAX_MEMORY_CHARS: usize = 10_000;
 /// and stored in a single call, monopolising the model every other session
 /// shares. Ground truth bigger than this belongs in a file, with a memory
 /// pointing at it.
-const MAX_EPISODE_CHARS: usize = 100_000;
+pub const MAX_EPISODE_CHARS: usize = 100_000;
 
 /// A document title is a name, not a summary.
 const MAX_TITLE_CHARS: usize = 200;

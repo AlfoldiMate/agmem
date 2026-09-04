@@ -98,6 +98,13 @@ async fn check_store(cfg: &Config) -> u32 {
                     eprintln!("  FAIL  write/read roundtrip {err}");
                 }
             }
+            match document_counts(&db).await {
+                Ok(detail) => eprintln!("  ok    documents            {detail}"),
+                Err(err) => {
+                    failures += 1;
+                    eprintln!("  FAIL  documents            {err}");
+                }
+            }
             Some(db)
         }
         Err(err) => {
@@ -174,6 +181,27 @@ async fn vector_coverage(db: &Db) -> Result<String, String> {
     }
 }
 
+/// How many documents each registered space holds (#135): the named, typed
+/// episodes `agmem doc put` writes and the `@` picker lists. A count, not a
+/// check — it cannot fail short of the store failing — but it is the one
+/// number that says whether the document tier is in use at all.
+async fn document_counts(db: &Db) -> Result<String, String> {
+    let spaces = agmem_store::repo::spaces(db)
+        .await
+        .map_err(|err| err.to_string())?;
+    let mut parts = Vec::with_capacity(spaces.len());
+    for space in &spaces {
+        let stats = agmem_store::repo::stats(db, space)
+            .await
+            .map_err(|err| err.to_string())?;
+        parts.push(format!("{space}: {}", stats.documents));
+    }
+    if parts.is_empty() {
+        return Ok("no space registered yet".to_owned());
+    }
+    Ok(parts.join(", "))
+}
+
 /// One check over an open store, as the daemon logs it at start (issue #112)
 /// and `--doctor` prints it.
 #[derive(Debug)]
@@ -206,6 +234,10 @@ pub async fn selfcheck(db: &Db, embedder: &dyn Embedder) -> Vec<Check> {
             outcome: vector_coverage(db).await,
         });
     }
+    checks.push(Check {
+        name: "documents",
+        outcome: document_counts(db).await,
+    });
     checks
 }
 
@@ -326,8 +358,13 @@ mod tests {
         );
         assert_eq!(
             checks.len(),
-            1,
+            2,
             "with no vector side there is no coverage to check: {checks:?}"
+        );
+        assert_eq!(
+            checks[1].outcome.as_deref(),
+            Ok("no space registered yet"),
+            "a store nothing registered in has nothing to count: {checks:?}"
         );
     }
 }

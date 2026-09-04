@@ -19,9 +19,11 @@ use agmem_core::{DocKind, EpisodeId, Kind, MemoryId, SpaceName};
 use agmem_store::repo::{self, Candidate, Filters, Hit as StoreHit, Liveness, Lookup, Search};
 use jiff::Timestamp;
 use rmcp::ErrorData;
+use rmcp::model::{ContentBlock, Resource};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::resources;
 use crate::service::AgmemService;
 use crate::tools::{self, abstain, embed_query, hop, invalid, occupancy, provenance, store_error};
 
@@ -350,6 +352,37 @@ pub struct RecallHit {
     /// anonymous text and on every other kind of hit.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<DocRef>,
+}
+
+/// The documents the hits are slices of, as `resource_link` content blocks
+/// (#135): one per document, in first-hit order, so a client can open the
+/// source without a second tool call. Appended after the JSON text block,
+/// never before it — anything reading `content[0]` as the answer still can.
+pub fn links(result: &RecallResult) -> Vec<ContentBlock> {
+    let mut seen: Vec<(&str, &str)> = Vec::new();
+    let mut links = Vec::new();
+    for hit in &result.hits {
+        let Some(doc) = &hit.doc else { continue };
+        let key = (hit.space.as_str(), doc.id.as_str());
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        links.push(ContentBlock::resource_link(
+            Resource::new(
+                resources::document_uri(&hit.space, &doc.id),
+                doc.title.clone(),
+            )
+            .with_title(doc.title.clone())
+            .with_description(format!(
+                "The {kind} `{title}` in `{space}`, which the hit is a slice of",
+                kind = doc.doc_kind,
+                title = doc.title,
+                space = hit.space
+            )),
+        ));
+    }
+    links
 }
 
 /// The document a verbatim hit is a slice of (#134).

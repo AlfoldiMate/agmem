@@ -433,6 +433,8 @@ pub(crate) const STATS: &str = "RETURN {
          WHERE space = $space GROUP ALL)[0].count ?? 0,
      chunks: (SELECT count() AS count FROM episode_chunk
          WHERE space = $space GROUP ALL)[0].count ?? 0,
+     documents: (SELECT count() AS count FROM episode
+         WHERE space = $space AND doc_kind IS NOT NONE GROUP ALL)[0].count ?? 0,
      live_by_kind: (SELECT kind, count() AS count FROM memory
          WHERE space = $space AND invalid_at IS NONE GROUP BY kind ORDER BY kind)
  }";

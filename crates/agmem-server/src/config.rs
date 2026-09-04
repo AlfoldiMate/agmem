@@ -56,6 +56,13 @@ pub struct Cli {
     #[arg(long, env = "AGMEM_EMBEDDER", value_enum, default_value_t = EmbedderKind::Fastembed)]
     pub embedder: EmbedderKind,
 
+    /// Which tools the MCP session serves. `core` (the default) leaves out
+    /// the maintenance pair, `consolidate` and `forget`, which the shell
+    /// serves as `agmem consolidate` and `agmem forget` (#150); `all` lists
+    /// every tool over MCP.
+    #[arg(long, env = "AGMEM_TOOLS", value_enum, default_value_t = ToolGroup::Core)]
+    pub tools: ToolGroup,
+
     /// Retrieval candidate pool size.
     #[arg(long, env = "AGMEM_POOL", default_value_t = 64, value_name = "N")]
     pub pool: u16,
@@ -140,6 +147,54 @@ pub enum CliCommand {
     /// Store, read, list or forget a document — a named, typed text — from
     /// the shell, with no MCP session.
     Doc(DocArgs),
+
+    /// Find what stored memory needs tidying up — duplicates, contradictions,
+    /// stale notes, over-full tags, orphan documents — as the `consolidate`
+    /// tool's JSON. Off the default MCP list since #150; this is its door.
+    Consolidate(ConsolidateArgs),
+
+    /// Forget memories by id — close them, or purge them outright. The
+    /// `forget` tool from the shell; by-query forgetting stays on MCP, where
+    /// a dry run can be held against the call that follows it.
+    Forget(ForgetArgs),
+}
+
+/// What `agmem consolidate` passes to `consolidate`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+pub struct ConsolidateArgs {
+    /// Where to look: `current` (the default), `user`, `all`, or a space
+    /// name. Maintenance is scoped to the project unless widened.
+    #[arg(long)]
+    pub space: Option<String>,
+}
+
+/// What `agmem forget` passes to `forget`. Ids only: the tool's by-query
+/// form needs a dry run held in the same session as the call that acts on
+/// it, and a one-shot has no session to hold it in.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct ForgetArgs {
+    /// The ids to forget: `memory:<id>`, `episode:<id>`, or a bare id.
+    #[arg(value_name = "ID", required = true)]
+    pub ids: Vec<String>,
+
+    /// Delete outright — the correction history, a document's text and
+    /// slices. Unrecoverable.
+    #[arg(long)]
+    pub purge: bool,
+
+    /// When purging a document live claims still cite: purge those claims
+    /// with it. Without this the purge is refused and names them.
+    #[arg(long, requires = "purge")]
+    pub cascade: bool,
+
+    /// Print what would be forgotten, as JSON, and change nothing.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Where to look: `current`, `user`, `all`, or a space name. Defaults
+    /// to `current` and `user` together.
+    #[arg(long)]
+    pub space: Option<String>,
 }
 
 /// The `agmem doc` verbs (#135): the shell door into the document tier, for
@@ -325,6 +380,25 @@ impl EmbedderKind {
     }
 }
 
+/// Which tools a session serves over MCP (#150).
+///
+/// Every tool costs an agent context on every turn, and the maintenance pair
+/// — `consolidate` and `forget` — is called from one tidy session in many.
+/// So the default list leaves them out (`agmem consolidate` and `agmem
+/// forget` are the same tools from the shell), and `all` is for a deployment
+/// that wants them on the wire regardless.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolGroup {
+    /// Every tool but the maintenance pair (default).
+    #[default]
+    Core,
+    /// Every tool, `consolidate` and `forget` included.
+    All,
+}
+
 /// Per-tool description overrides, keyed by tool name (design §3.1).
 ///
 /// A tool description is the whole product surface — it is what decides
@@ -422,6 +496,10 @@ pub struct Config {
     pub db_pass: Option<String>,
     pub space: SpaceName,
     pub embedder: EmbedderKind,
+    /// Which tools this session lists and serves — [`ToolGroup::Core`]
+    /// unless `AGMEM_TOOLS=all`. Travels the daemon handshake like
+    /// `tool_desc`, and the one-shots force `All` for their own session.
+    pub tools: ToolGroup,
     pub pool: u16,
     pub max_k: u16,
     /// What this deployment says its tools are for, where it disagrees with
@@ -573,6 +651,7 @@ impl Cli {
             db_pass: self.db_pass,
             space,
             embedder: self.embedder,
+            tools: self.tools,
             pool: self.pool,
             max_k: self.max_k,
             tool_desc: ToolDescriptions::from_env()?,

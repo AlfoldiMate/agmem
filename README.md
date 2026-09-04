@@ -165,6 +165,22 @@ agmem doc list --kind plan
 agmem doc forget 01K4… --purge [--cascade]
 ```
 
+### Maintenance from the shell
+
+`consolidate` and `forget` are maintenance verbs: one tidy session in many
+calls them, and every session would otherwise carry them in context on every
+turn. So a session lists five tools by default, and the two live in the shell
+(`AGMEM_TOOLS=all` puts them back on the wire):
+
+```sh
+agmem consolidate [--space user]           # the tool's JSON: what needs tidying
+agmem forget 01K4… memory:01K4… --dry-run  # what those ids select, as JSON
+agmem forget 01K4…                         # close it; --purge deletes outright
+```
+
+Forgetting by query stays on MCP: its dry run has to be held against the call
+that follows it, and a one-shot has no session to hold it in.
+
 `put` prints the id and the resource URI on one line — what an agent returns
 to the main thread instead of a path. A second `put` under the same title is
 a new version; `get <title>` resolves to the newest, and every version stays
@@ -184,9 +200,9 @@ for them at the right moments.
 | `remember` | Store distilled claims, optionally with the verbatim episode they came from. An episode given a `title` and `doc_kind` is a document: a plan, review, report, probe or transcript kept whole, versioned by title. Answers with a diff: created, duplicates, superseded, related. |
 | `recall` | Ask in words. BM25 and vector search fused, rescored by retention. Every hit carries its signals; a full page says what it cut. |
 | `context` | The session-start block: Instructions, Profile, Relevant, Lessons, within a character budget, every line ending in its id. |
-| `forget` | Close a memory, or purge it. By query it takes two identical calls, the first a dry run, so a deletion never reaches something that merely resembles the request. A document is not purged while live claims cite it, unless `cascade` takes them with it. |
+| `forget` | Close a memory, or purge it. By query it takes two identical calls, the first a dry run, so a deletion never reaches something that merely resembles the request. A document is not purged while live claims cite it, unless `cascade` takes them with it. CLI-first (`agmem forget <id>…`); on MCP with `AGMEM_TOOLS=all`. |
 | `inspect` | The paper trail: a claim's correction chain, the episode behind it, everything ever said about an entity, a document by title read one chunk at a time, the documents a space holds, or per-space counts. |
-| `consolidate` | What needs tidying and nothing done about it: near-duplicate groups, contradiction candidates, stale working notes, over-full tags, documents nothing cites. Full text on every candidate. |
+| `consolidate` | What needs tidying and nothing done about it: near-duplicate groups, contradiction candidates, stale working notes, over-full tags, documents nothing cites. Full text on every candidate. CLI-first (`agmem consolidate`); on MCP with `AGMEM_TOOLS=all`. |
 | `reflect` | Store a conclusion with the ids it was drawn from. A `summary` stands in for its cited claims when `context` runs short of budget. |
 
 | Prompt | Asks the agent to |
@@ -320,6 +336,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process |
 | `--log`, `--log-file` | `info` to stderr | Telemetry. stdout is the MCP wire and stays empty |
+| `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session lists: `core` leaves out `consolidate` and `forget` (the shell serves them), `all` puts them back |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in wording | Replace one tool's description, per server, no rebuild |
 | `FASTEMBED_CACHE_DIR` | `<data>/models` | Where the embedding model lives |
 | `--doctor` | | Self-check, then exit. Counts documents per space |

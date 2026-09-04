@@ -33,7 +33,7 @@ the crate version, since the hooks are subcommands of that binary.
 | `PostToolUse` hook | Logs the ids each `recall` returned and each `remember`/`reflect` wrote or cited, under `<data dir>/hooks/<session>.jsonl`. Nudges once per session after a successful `git push`, and once after an answered `AskUserQuestion` — both are decision seams. |
 | `Stop` hook | Nudges once per session when memory was recalled and nothing was written back. |
 | `/agmem:checkpoint` | The distil → recall → remember → reflect ritual. Step 4 (cite with `derived_from`) is byte-identical to the server's own checkpoint prompt; a test in the server crate fails if they drift. |
-| `/agmem:memory show\|tidy` | Show the store and judge the briefing; consolidate duplicates, contradictions and stale claims. |
+| `/agmem:memory show\|tidy` | Show the store and judge the briefing; tidy shells out to `agmem consolidate` (the tool is off the default MCP list since #150) and closes with `agmem forget`, merging through `remember` with `supersedes`. Needs an agmem release carrying those subcommands. |
 | `/agmem:doctor` | Self-check plus duplicate-registration check. |
 | `agmem` skill | The judgement: what is worth storing, correct-never-contradict, kinds, seams. |
 

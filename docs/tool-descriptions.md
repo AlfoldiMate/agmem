@@ -463,3 +463,33 @@ inside the spread earlier batches already showed. No scenario yet exercises
 a document — writing one, reading it windowed, or cascading a purge — so
 this batch measures that the additions cost nothing, not that they help;
 #137's recall-precision eval is where a document scenario belongs.
+
+
+## The default list without the maintenance pair (#150, `docs/eval/150-tools-gating/`, `docs/eval/150-tools-gating-consolidate/`)
+
+`consolidate` and `forget` left the default `tools/list` for the shell
+(`agmem consolidate`, `agmem forget`), and the surface an agent reads was
+cut to 3,993 tokens of description plus input schema (from 6,954 for all
+seven): the enum variants are described on the type so schemars emits a
+plain `enum` list instead of a `oneOf` arm per variant, and `remember`,
+`recall`, `reflect` and the field docs lost what the schema or the tidy
+playbook already says.
+
+Two batches against the release build of this branch, 3 runs each. The
+first is the regression check on the rewording, `--isolated`, at the
+default list; the second runs the consolidate trio with `AGMEM_TOOLS=all`,
+since at `core` the tool is not there to route to. `descriptions.json`
+still records all 2 tools.
+
+| scenario | passed | last comparable batch |
+|---|---|---|
+| store, correct (core, isolated) | 3/3 each | 3/3 (`134-documents`) |
+| consolidate (50 rows, the routing control) | 0/3 | 0/3 |
+| consolidate_large, consolidate_write | 3/3 | 3/3 |
+
+Nothing moved. The reworded `remember` still stores and corrects at 3/3
+with the client's own memory off; the trio reads exactly as before once
+the pair is served. What the trio now measures is worth saying: no shipped
+path routes to `consolidate` over MCP, so it is the wording's routing
+effect under an opt-in, kept per the standing instruction and to be
+revisited when it is next measured.

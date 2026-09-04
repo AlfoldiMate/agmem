@@ -1,0 +1,104 @@
+{
+  "scenario": "correct",
+  "run": 2,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 2,
+  "superseded": true,
+  "verified": true,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 0,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [
+    {
+      "id": "01M1Q4GRV5EPQR84FMJF4BS3W2",
+      "content": "The user formats Python with black."
+    }
+  ],
+  "landed": [],
+  "checked": [
+    {
+      "tool": "remember",
+      "field": "created",
+      "expect": "nonempty",
+      "pass": true
+    },
+    {
+      "tool": "remember",
+      "field": "superseded",
+      "expect": "seeded",
+      "pass": true
+    }
+  ],
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.AN6eNqv0Bi",
+  "answer": "Noted — updated my memory: you've moved off black to ruff format, and black is uninstalled. This supersedes the old \"uses black\" note.",
+  "cost_usd": 0.0498734,
+  "agent_turns": 4,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format for all code formatting.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling",
+              "formatting"
+            ]
+          },
+          {
+            "content": "Black is uninstalled from the user's environment/project; do not suggest or use black for formatting.",
+            "kind": "instruction",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "tooling",
+              "formatting"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1Q4GYS9PG358JHDF8X46KVE\\\"],\\\"duplicates\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M1Q4GRV5EPQR84FMJF4BS3W2\\\",\\\"of\\\":0,\\\"similarity\\\":0.9586906309994109}],\\\"episode\\\":null,\\\"related\\\":[{\\\"content\\\":\\\"The user formats Python with black.\\\",\\\"id\\\":\\\"01M1Q4GRV5EPQR84FMJF4BS3W2\\\",\\\"of\\\":1,\\\"similarity\\\":0.9002273381434043}],\\\"superseded\\\":[]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "The user has moved off black for Python code formatting and now uses ruff format for all code formatting; black is uninstalled.",
+            "kind": "fact",
+            "entities": [
+              "user"
+            ],
+            "tags": [
+              "identity",
+              "tooling",
+              "formatting"
+            ],
+            "supersedes": [
+              "01M1Q4GRV5EPQR84FMJF4BS3W2"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1Q4H10CCNM2VPFFSS2A8ZYG\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1Q4GRV5EPQR84FMJF4BS3W2\\\"]}\""
+    }
+  ]
+}

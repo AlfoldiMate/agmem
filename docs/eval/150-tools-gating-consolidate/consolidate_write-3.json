@@ -1,0 +1,456 @@
+{
+  "scenario": "consolidate_write",
+  "run": 3,
+  "pass": true,
+  "tools": [
+    "recall",
+    "consolidate",
+    "remember",
+    "forget"
+  ],
+  "calls": 26,
+  "superseded": true,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 22,
+  "on_target": true,
+  "touched": 3,
+  "purged": false,
+  "closed": [
+    {
+      "id": "01M1Q5B39K72PQJGV3CWE0C3CY",
+      "content": "The atlas test suite is run with cargo nextest run, not cargo test."
+    },
+    {
+      "id": "01M1Q5B3E1T9TE5Z1RGJCEC78T",
+      "content": "Tests in atlas are run through cargo nextest run; plain cargo test is not used."
+    },
+    {
+      "id": "01M1Q5B38C20VZFJNAE4JPQHRA",
+      "content": "Project atlas is deployed by running bin/ship.sh from the repository root."
+    },
+    {
+      "id": "01M1Q5B3BPC4WTJPTHN5ZXVRXP",
+      "content": "To ship atlas you run the bin/ship.sh script at the top of the repo."
+    },
+    {
+      "id": "01M1Q5B3FTPRTFZWARD2W2RXQQ",
+      "content": "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone."
+    },
+    {
+      "id": "01M1Q5B3GSYSEFMEQJWYSK9QQD",
+      "content": "The branch under review is spike/consolidate."
+    },
+    {
+      "id": "01M1Q5B3H0W8NP3X8GH8ZENN1R",
+      "content": "The flaky test being chased this week is pagination_ordering in atlas-api."
+    }
+  ],
+  "landed": [
+    {
+      "id": "01M1Q5B38C20VZFJNAE4JPQHRA",
+      "content": "Project atlas is deployed by running bin/ship.sh from the repository root.",
+      "reason": "superseded"
+    },
+    {
+      "id": "01M1Q5B39K72PQJGV3CWE0C3CY",
+      "content": "The atlas test suite is run with cargo nextest run, not cargo test.",
+      "reason": "superseded"
+    },
+    {
+      "id": "01M1Q5B3BPC4WTJPTHN5ZXVRXP",
+      "content": "To ship atlas you run the bin/ship.sh script at the top of the repo.",
+      "reason": "superseded"
+    },
+    {
+      "id": "01M1Q5B3E1T9TE5Z1RGJCEC78T",
+      "content": "Tests in atlas are run through cargo nextest run; plain cargo test is not used.",
+      "reason": "superseded"
+    },
+    {
+      "id": "01M1Q5B3FTPRTFZWARD2W2RXQQ",
+      "content": "Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.",
+      "reason": "superseded"
+    },
+    {
+      "id": "01M1Q5B3GSYSEFMEQJWYSK9QQD",
+      "content": "The branch under review is spike/consolidate.",
+      "reason": "forgotten"
+    },
+    {
+      "id": "01M1Q5B3H0W8NP3X8GH8ZENN1R",
+      "content": "The flaky test being chased this week is pagination_ordering in atlas-api.",
+      "reason": "forgotten"
+    }
+  ],
+  "checked": null,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.39ZBXspc2F",
+  "answer": "Done. Here's what I found and fixed in the atlas memory:\n\n**Merged duplicates** (superseded, old versions kept in history):\n- Two reworded copies of \"tests run via `cargo nextest run`, not `cargo test`\" → merged into one claim.\n- Three reworded copies of \"atlas deploys via `bin/ship.sh`\" → merged into one, keeping the detail that the old `make deploy` target is gone.\n\n**Cleared as stale** (time-bound notes long past their relevance):\n- \"The branch under review is spike/consolidate\" — a specific review that's long since resolved.\n- \"The flaky test being chased this week is pagination_ordering\" — a \"this week\" note that's now meaningless.\n\n**Found a real contradiction I did not resolve — needs your call:**\n- \"Merging to main deploys atlas to staging automatically\"\n- \"Deploys to atlas staging are never automatic: someone runs `bin/ship.sh --staging` by hand\"\n\nThese directly conflict on how staging deploys actually work, and nothing in memory tells me which is current. Since you're handing this project off, getting this right matters — can you confirm which is accurate so I can correct the record? Everything else I checked (roughly 70+ distinct atlas claims) held up as genuinely separate facts, not duplicates or contradictions, despite many surfacing as false-positive matches in the similarity scan.",
+  "cost_usd": 1.1791174,
+  "agent_turns": 30,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas project",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Project atlas is deployed by running bin/ship.sh from the repository root.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1Q5B38C20VZFJNAE4JPQHRA\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664819228496674,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.76592769139867,\\\"rrf\\\":0.032018442622950824,\\\"rrf_normalized\\\":1,\\\"similarity\\\":0.8276705968295893},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.559986Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1Q5B38TDVRX04SN71C37YRQ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8252828709700321,\\\"si"
+    },
+    {
+      "turn": 0,
+      "tool": "consolidate",
+      "input": {
+        "space": "eval"
+      },
+      "answer": "\"{\\\"contradictions\\\":[{\\\"a\\\":{\\\"access_count\\\":9,\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"created_at\\\":\\\"2026-09-04T21:31:35.603594Z\\\",\\\"decay_class\\\":\\\"normal\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1Q5B39K72PQJGV3CWE0C3CY\\\",\\\"kind\\\":\\\"fact\\\",\\\"last_accessed\\\":\\\"2026-09-04T21:31:47.793157Z\\\",\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"strength\\\":4,\\\"tags\\\":[\\\"testing\\\"],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560057Z\\\",\\\"writer\\\":{\\\"client\\\":\\\"desc-eval\\\",\\\"client_version\\\":\\\"1\\\",\\\"session\\\":\\\"59206-1788557495108887000\\\",\\\"tool\\\":\\\"remember\\\"}},\\\"b\\\":{\\\"access_count\\\":8,\\\"content\\\":\\\"Tests in atlas are run through cargo nextest run; plain cargo t"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas"
+        ],
+        "space": "eval",
+        "k": 130
+      },
+      "answer": "\"k must be between 1 and 50\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "tags": [
+          "deploy",
+          "db",
+          "ci",
+          "testing"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"A deploy of atlas that skips bin/ship.sh leaves the search index stale, which cost the team an afternoon of downtime.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"deploy\\\"],\\\"id\\\":\\\"01M1Q5B3B2MDN6JWW6FMFJE4SH\\\",\\\"kind\\\":\\\"lesson\\\",\\\"score\\\":0.36249986039236026,\\\"signals\\\":{\\\"importance\\\":0.75,\\\"retention\\\":0.9999994415694412,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"deploy\\\"],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560132Z\\\"},{\\\"content\\\":\\\"The atlas test suite is run with cargo nextest run, not cargo test.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ci\\\"],\\\"id\\\":\\\"01M1Q5B39K72PQJGV3CWE0C3CY\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499944160225847,\\\"signals\\\":{\\\"impo"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "tags": [
+          "api",
+          "docs",
+          "infra",
+          "security",
+          "sdk"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[],\\\"spaces\\\":[\\\"eval\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "tags": [
+          "release",
+          "process",
+          "product",
+          "build",
+          "support",
+          "billing"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"atlas pins its dependencies exactly; caret ranges are not used in Cargo.toml.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1Q5B3A666QDWE0YR5CYMPS7\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.3249994321841662,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999977287366649,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[\\\"build\\\"],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560092Z\\\"},{\\\"content\\\":\\\"atlas targets Rust 1.98 and the toolchain is pinned in rust-toolchain.toml.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1Q5B38NNGANDTZZ7DM1E0HJ\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.32499943210065946,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999977284026379,\\\"rrf\\\":0"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "api"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Secrets for atlas are read from the environment and never from a file in the repository.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1Q5B3DNP63NTWDFR48V4K1J\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560254Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1Q5B39435TSB21C8CJG4QS3\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "docs"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Secrets for atlas are read from the environment and never from a file in the repository.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1Q5B3DNP63NTWDFR48V4K1J\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560254Z\\\"},{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1Q5B39435TSB21C8CJG4QS3\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "infra"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "security"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "sdk"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "process"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "product"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "support"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "billing"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "testing"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "release"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "db"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "ci"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "deploy"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "entities": [
+          "atlas",
+          "build"
+        ],
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Billing questions about atlas go to the finance team rather than support.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"support\\\"],\\\"id\\\":\\\"01M1Q5B416E3S2CV8E66EN43A2\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560866Z\\\"},{\\\"content\\\":\\\"Postmortems for atlas are blameless and published internally within a week.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"process\\\"],\\\"id\\\":\\\"01M1Q5B40G742W8ZXA9H4M6T2W\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.4,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0,\\\"rrf_normalized\\\":0},\\\"source\\\":\\\"agent\\\","
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "monitoring alerting logging metrics dashboard oncall incident rate limit cache webhook onboarding compliance backup disaster recovery roadmap pricing customers roles permissions authentication email notification kubernetes docker helm",
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Personally identifying fields are redacted from atlas logs at write time.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"security\\\"],\\\"id\\\":\\\"01M1Q5B3JB35BYBNN2C5MQFAMX\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8884316456471952,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999990295323691,\\\"rrf\\\":0.030330882352941176,\\\"rrf_normalized\\\":0.9390531471068383,\\\"similarity\\\":0.7213542109821218},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560426Z\\\"},{\\\"content\\\":\\\"Alerts from atlas page the on-call rota through PagerDuty.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"ops\\\"],\\\"id\\\":\\\"01M1Q5B3HNNW6FB9GJ4GPRQ52W\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664808380160584,\\\"signals\\\":{\\"
+    },
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "config feature flag pagination readiness probe connection pool retention wiki runbook billing seat invoice finance flaky test branch review consolidate spike copyleft cargo-deny",
+        "space": "eval",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"The atlas readiness probe waits for the database connection pool.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"api\\\"],\\\"id\\\":\\\"01M1Q5B3NSXSV4AGSAN5SQY7N5\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8882988267371108,\\\"signals\\\":{\\\"importance\\\":0.5,\\\"retention\\\":0.9999999478415523,\\\"rrf\\\":0.02921395544346364,\\\"rrf_normalized\\\":0.9388313996278713,\\\"similarity\\\":0.7649493884799003},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:31:35.560527Z\\\"},{\\\"content\\\":\\\"The atlas runbooks live in the internal wiki and not in the repository.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"docs\\\"],\\\"id\\\":\\\"01M1Q5B408M7D2FDPWWNZFSDJ5\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.8664808247360648,\\\"signals\\\":{\\"
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "space": "eval",
+        "memories": [
+          {
+            "content": "atlas tests are run with cargo nextest run; plain cargo test is not used.",
+            "kind": "fact",
+            "entities": [
+              "atlas",
+              "ci"
+            ],
+            "tags": [
+              "testing"
+            ],
+            "supersedes": [
+              "01M1Q5B39K72PQJGV3CWE0C3CY",
+              "01M1Q5B3E1T9TE5Z1RGJCEC78T"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1Q5G8TV7VVDZ21BEN8892NP\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1Q5B39K72PQJGV3CWE0C3CY\\\",\\\"01M1Q5B3E1T9TE5Z1RGJCEC78T\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "space": "eval",
+        "memories": [
+          {
+            "content": "atlas is deployed by running bin/ship.sh from the repository root; the old make deploy target has been removed.",
+            "kind": "fact",
+            "entities": [
+              "atlas",
+              "deploy"
+            ],
+            "tags": [
+              "deploy"
+            ],
+            "supersedes": [
+              "01M1Q5B38C20VZFJNAE4JPQHRA",
+              "01M1Q5B3BPC4WTJPTHN5ZXVRXP",
+              "01M1Q5B3FTPRTFZWARD2W2RXQQ"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1Q5G9X6795BKTT78RJ5RHJV\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[\\\"01M1Q5B38C20VZFJNAE4JPQHRA\\\",\\\"01M1Q5B3BPC4WTJPTHN5ZXVRXP\\\",\\\"01M1Q5B3FTPRTFZWARD2W2RXQQ\\\"]}\""
+    },
+    {
+      "turn": 0,
+      "tool": "forget",
+      "input": {
+        "ids": [
+          "01M1Q5B3GSYSEFMEQJWYSK9QQD",
+          "01M1Q5B3H0W8NP3X8GH8ZENN1R"
+        ]
+      },
+      "answer": "\"{\\\"chunks_purged\\\":0,\\\"dry_run\\\":false,\\\"invalidated\\\":[\\\"01M1Q5B3GSYSEFMEQJWYSK9QQD\\\",\\\"01M1Q5B3H0W8NP3X8GH8ZENN1R\\\"],\\\"matched\\\":[{\\\"content\\\":\\\"The branch under review is spike/consolidate.\\\",\\\"id\\\":\\\"01M1Q5B3GSYSEFMEQJWYSK9QQD\\\",\\\"kind\\\":\\\"memory\\\",\\\"space\\\":\\\"eval\\\"},{\\\"content\\\":\\\"The flaky test being chased this week is pagination_ordering in atlas-api.\\\",\\\"id\\\":\\\"01M1Q5B3H0W8NP3X8GH8ZENN1R\\\",\\\"kind\\\":\\\"memory\\\",\\\"space\\\":\\\"eval\\\"}],\\\"purge\\\":false,\\\"purged\\\":[],\\\"spaces\\\":[\\\"eval\\\",\\\"user\\\"]}\""
+    }
+  ]
+}

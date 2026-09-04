@@ -67,7 +67,8 @@ async fn initialize_announces_agmem_and_its_tool_capability() {
 
 #[tokio::test]
 async fn list_tools_matches_the_recorded_surface() {
-    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
+    // The default list — what an agent reads with nothing configured (#150).
+    let agmem = Harness::start_core(Arc::new(RecordedEmbedder)).await;
     let tools = agmem.client.list_tools(None).await.expect("list_tools");
 
     // Every tool issue re-records this: it is the contract each agent reads.
@@ -75,6 +76,85 @@ async fn list_tools_matches_the_recorded_surface() {
     assert!(
         tools.next_cursor.is_none(),
         "the whole surface fits one page"
+    );
+    for name in agmem_server::tools::GATED {
+        assert!(
+            !tools.tools.iter().any(|tool| tool.name == name),
+            "{name} is off the default list; the shell serves it"
+        );
+    }
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_gated_pair_is_served_on_request() {
+    let agmem = Harness::start(Arc::new(RecordedEmbedder)).await;
+    let tools = agmem.client.list_tools(None).await.expect("list_tools");
+    assert_eq!(
+        tools.tools.len(),
+        agmem_server::tools::NAMES.len(),
+        "`all` is the whole surface"
+    );
+
+    // The contract for the two tools an `AGMEM_TOOLS=all` session reads,
+    // recorded on their own so a wording change re-records one list, not two.
+    let gated: Vec<_> = tools
+        .tools
+        .iter()
+        .filter(|tool| agmem_server::tools::GATED.contains(&&*tool.name))
+        .collect();
+    assert_eq!(gated.len(), agmem_server::tools::GATED.len());
+    insta::assert_json_snapshot!("list_tools_gated", &gated);
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_core_session_refuses_a_gated_call() {
+    let agmem = Harness::start_core(Arc::new(NoopEmbedder)).await;
+    let error = agmem
+        .call("consolidate", json!({}))
+        .await
+        .expect_err("a route that is not listed is not callable either");
+    assert!(
+        error.to_string().contains("tool not found"),
+        "a gated tool is unknown to the session, not disabled: {error}"
+    );
+    let stored = agmem
+        .call(
+            "remember",
+            json!({"memories": [{"content": "the rest of the surface still serves"}]}),
+        )
+        .await
+        .expect("remember");
+    assert_ne!(stored.is_error, Some(true));
+
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_core_override_is_what_the_agent_reads() {
+    let agmem = Harness::configure(
+        Arc::new(RecordedEmbedder),
+        ToolDescriptions::from_iter([("recall", "Ask the store before you answer.")]),
+        agmem_server::config::ToolGroup::Core,
+    )
+    .await;
+    let tools = agmem.client.list_tools(None).await.expect("list_tools");
+    assert_eq!(
+        tools.tools.len(),
+        agmem_server::tools::NAMES.len() - agmem_server::tools::GATED.len()
+    );
+    let recall = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name == "recall")
+        .expect("recall");
+    assert_eq!(
+        recall.description.as_deref(),
+        Some("Ask the store before you answer."),
+        "gating and overriding compose"
     );
 
     agmem.shutdown().await;

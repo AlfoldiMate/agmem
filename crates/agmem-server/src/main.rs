@@ -10,9 +10,9 @@
 //!   pump stdio into it, so several sessions share one embedded store.
 //! - `--no-daemon`, a remote `--db`, or a non-Unix platform — open the store
 //!   in this process, which is what agmem always did.
-//! - a subcommand (`agmem context`, issue #46; `agmem doc`, issue #135) —
-//!   answer once on stdout and exit, choosing between the two shapes above
-//!   the same way.
+//! - a subcommand (`agmem context`, issue #46; `agmem doc`, issue #135;
+//!   `agmem consolidate` and `agmem forget`, issue #150) — answer once on
+//!   stdout and exit, choosing between the two shapes above the same way.
 
 use std::sync::Arc;
 
@@ -53,6 +53,10 @@ async fn main() -> anyhow::Result<()> {
         Some(config::CliCommand::Context(args)) => return oneshot::context(cfg, args).await,
         Some(config::CliCommand::Hook(args)) => return hook::run(cfg, args.event).await,
         Some(config::CliCommand::Doc(args)) => return doc::run(cfg, args).await,
+        Some(config::CliCommand::Consolidate(args)) => {
+            return oneshot::consolidate(cfg, args).await;
+        }
+        Some(config::CliCommand::Forget(args)) => return oneshot::forget(cfg, args).await,
         None => {}
     }
 

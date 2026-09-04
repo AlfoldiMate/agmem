@@ -26,42 +26,34 @@ use crate::tools::{internal, invalid, memory_id, resolve_space, store_error};
 /// One `reflect` call: the insight, and what it was drawn from.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ReflectParams {
-    /// Where to store this. Defaults to the space this server was started
-    /// with; `user` is the reserved space for memory that follows the person
-    /// across every project.
+    /// Where to store: this server's space by default, or `user` for what
+    /// follows the person across every project.
     #[serde(default)]
     pub space: Option<String>,
 
-    /// The insight itself: one atomic, self-contained statement in the third
-    /// person, understandable with no conversation around it. What you
-    /// concluded, not the reasoning that got you there.
+    /// The insight: one atomic, self-contained statement in the third
+    /// person. What you concluded, not the reasoning.
     pub insight: String,
 
-    /// The ids this insight was drawn from — memory ids, episode ids, or
-    /// both, exactly as `recall`, `remember` or `context` handed them to you.
-    /// At least one; an insight with nothing behind it belongs in `remember`.
+    /// The ids it was drawn from — memory or episode ids, as `recall`,
+    /// `remember`, `context` or `inspect` handed them to you. At least one.
     pub derived_from: Vec<String>,
 
-    /// What the insight is; defaults to `lesson`. Send `summary` for a
-    /// digest that stands in for the cited claims: under budget pressure
-    /// `context` shows it in their place, and `inspect` expands them.
+    /// Defaults to `lesson`. `summary` is a digest standing in for the cited
+    /// claims: `context` shows it in their place under budget pressure.
     #[serde(default)]
     pub kind: Option<Kind>,
 
-    /// The subjects it is about ("user", "project-x"), for filtered recall.
+    /// Subjects it is about ("user", "project-x"), for filtered recall.
     #[serde(default)]
     pub entities: Vec<String>,
 
-    /// Free labels. `identity` marks a fact that belongs in every session's
-    /// profile.
+    /// Free labels. `identity` marks a fact for every session's profile.
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// The ids of the live claims this insight replaces. Each one is closed
-    /// and stays readable and dated; only the insight is live afterwards.
-    ///
-    /// Several at once is a merge: one cited conclusion standing in for every
-    /// uncited wording of it, closed in the same call rather than forgotten.
+    /// Ids of live claims this replaces: each is closed, stays readable and
+    /// dated, and a list merges them.
     #[serde(default)]
     pub supersedes: Vec<String>,
 }

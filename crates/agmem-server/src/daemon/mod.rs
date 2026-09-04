@@ -33,7 +33,7 @@ use agmem_core::SpaceName;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Config, EmbedderKind, ToolDescriptions};
+use crate::config::{Config, EmbedderKind, ToolDescriptions, ToolGroup};
 
 /// The socket the daemon listens on, inside the data dir.
 pub const SOCKET_FILE: &str = "agmem.sock";
@@ -136,6 +136,10 @@ pub struct Handshake {
     /// The tool descriptions this project wants served, if it replaced any.
     #[serde(default)]
     pub tool_desc: ToolDescriptions,
+    /// Which tools this session lists (#150). Absent on the wire from a
+    /// release before it, which reads as `core` — the safe direction.
+    #[serde(default)]
+    pub tools: ToolGroup,
 }
 
 impl Handshake {
@@ -150,6 +154,7 @@ impl Handshake {
             pool: cfg.pool,
             max_k: cfg.max_k,
             tool_desc: cfg.tool_desc.clone(),
+            tools: cfg.tools,
         }
     }
 
@@ -348,6 +353,7 @@ mod tests {
         // JSON escapes the breaks, so the two are compatible — but only a test
         // keeps them that way.
         cfg.tool_desc = ToolDescriptions::from_iter([("context", "First.\n\nThen the rest.")]);
+        cfg.tools = ToolGroup::All;
         let sent = Handshake::new(&cfg);
         let line = serde_json::to_string(&sent).expect("serialize");
         assert!(!line.contains('\n'), "the handshake is one line: {line}");
@@ -355,6 +361,13 @@ mod tests {
             serde_json::from_str::<Handshake>(&line).expect("deserialize"),
             sent
         );
+
+        // A session from a release before #150 sends no `tools`; it asked
+        // for what was then the whole list, which is now `core`.
+        let mut older: serde_json::Value = serde_json::from_str(&line).expect("json");
+        older.as_object_mut().expect("object").remove("tools");
+        let parsed: Handshake = serde_json::from_value(older).expect("deserialize without tools");
+        assert_eq!(parsed.tools, ToolGroup::Core);
     }
 
     #[test]

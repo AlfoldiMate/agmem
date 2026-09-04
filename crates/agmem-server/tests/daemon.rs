@@ -418,6 +418,51 @@ async fn a_document_put_through_the_daemon_is_read_by_the_sessions() {
     .await
     .expect("get through the daemon");
     assert_eq!(back, content, "the whole document, through the socket");
+
+    // The daemon above was started by a `core` config, and the session it
+    // serves lists the core surface — yet a one-shot reaches `forget`, the
+    // gated tool, because it asks for `all` on its own handshake (#150).
+    let listed = session.list_tools(None).await.expect("list_tools");
+    assert_eq!(
+        listed.tools.len(),
+        agmem_server::tools::NAMES.len() - agmem_server::tools::GATED.len(),
+        "a default session reads the core list"
+    );
+    let purged = agmem_server::doc::forget(
+        &cfg,
+        agmem_server::config::DocForgetArgs {
+            id: id.to_owned(),
+            purge: true,
+            cascade: false,
+            space: None,
+        },
+    )
+    .await
+    .expect("forget through a core daemon");
+    assert!(purged.starts_with("purged 1 record(s)"), "{purged}");
+}
+
+#[tokio::test]
+async fn a_session_asking_for_every_tool_is_served_every_tool() {
+    let shared = Shared::start().await;
+    let mut cfg = config(shared.data.path(), "wide");
+    cfg.tools = agmem_server::config::ToolGroup::All;
+
+    let (read, mut write) = shared.connect().await.into_split();
+    let mut line = serde_json::to_vec(&Handshake::new(&cfg)).expect("serialize");
+    line.push(b'\n');
+    write.write_all(&line).await.expect("send the handshake");
+    let mut read = BufReader::new(read);
+    let mut ack = String::new();
+    read.read_line(&mut ack).await.expect("read the ack");
+    let ack: Ack = serde_json::from_str(&ack).expect("the ack is JSON");
+    assert!(ack.ok, "{ack:?}");
+    let session = ().serve((read, write)).await.expect("initialize");
+
+    let listed = session.list_tools(None).await.expect("list_tools");
+    assert_eq!(listed.tools.len(), agmem_server::tools::NAMES.len());
+    let found = call(&session, "consolidate", json!({})).await;
+    assert_eq!(found["spaces"], json!(["wide"]), "{found}");
 }
 
 #[tokio::test]

@@ -361,7 +361,7 @@ fn branch_note(branch: &str, tag: &str, documents: usize) -> String {
 /// store could not be asked — the note then says nothing about documents
 /// rather than claiming there are none.
 async fn documents_tagged(cfg: &Config, tag: &str) -> Option<usize> {
-    let answer = crate::doc::call(
+    let answer = crate::oneshot::call(
         cfg,
         "inspect",
         json!({ "ref": "docs:current", "tags": [tag] }),

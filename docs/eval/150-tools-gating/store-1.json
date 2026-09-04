@@ -1,0 +1,58 @@
+{
+  "scenario": "store",
+  "run": 1,
+  "pass": true,
+  "tools": [
+    "remember"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": true,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 0,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": [
+    {
+      "tool": "remember",
+      "field": "created",
+      "expect": "nonempty",
+      "pass": true
+    }
+  ],
+  "served": true,
+  "rival_memory": false,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.JiA8VN8uP8",
+  "answer": "Got it — noted for future work: library crates use `thiserror`, binaries use `anyhow`, never swapped. I've saved this as a standing convention so it carries into future sessions.",
+  "cost_usd": 0.1412276,
+  "agent_turns": 3,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "remember",
+      "input": {
+        "memories": [
+          {
+            "content": "In this codebase, library crates must use thiserror for their error types, and binaries must use anyhow; using anyhow in a library or thiserror in a binary is against convention and has caused problems twice before.",
+            "kind": "instruction",
+            "entities": [
+              "project"
+            ],
+            "tags": [
+              "rust",
+              "error-handling",
+              "convention"
+            ]
+          }
+        ]
+      },
+      "answer": "\"{\\\"already_closed\\\":[],\\\"created\\\":[\\\"01M1Q4FN82NBYFS191069BS67W\\\"],\\\"duplicates\\\":[],\\\"episode\\\":null,\\\"related\\\":[],\\\"superseded\\\":[]}\""
+    }
+  ]
+}

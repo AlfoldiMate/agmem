@@ -1,0 +1,43 @@
+{
+  "scenario": "consolidate",
+  "run": 2,
+  "pass": false,
+  "tools": [
+    "recall"
+  ],
+  "calls": 1,
+  "superseded": false,
+  "verified": null,
+  "cited": null,
+  "answered": null,
+  "bridged": null,
+  "misled": null,
+  "reads": 1,
+  "on_target": null,
+  "touched": null,
+  "purged": false,
+  "closed": [],
+  "landed": [],
+  "checked": null,
+  "served": true,
+  "rival_memory": true,
+  "data": "/var/folders/00/95b5m7wj4fq97rcx641b8g4r0000gn/T/tmp.Dj4YujHJld",
+  "answer": "Here's what's stored under `atlas` (49 hits, all in the `eval` memory space). No changes made — just the audit.\n\n**Contradiction (needs resolution before handover):**\n- \"Merging to main deploys atlas to staging automatically.\"\n- \"Deploys to atlas staging are never automatic: someone runs bin/ship.sh --staging by hand.\"\n\nThese directly conflict on whether staging deploys are automatic. Whoever inherits this needs to know which is actually true.\n\n**Duplicates (same fact, restated separately):**\n- Deploy command, said three ways:\n  - \"Project atlas is deployed by running bin/ship.sh from the repository root.\"\n  - \"To ship atlas you run the bin/ship.sh script at the top of the repo.\"\n  - \"Deploying atlas means executing bin/ship.sh; the old make deploy target is gone.\" (this one at least adds new info — the retired `make deploy` target — the other two are pure restatements)\n- Test runner, said twice:\n  - \"The atlas test suite is run with cargo nextest run, not cargo test.\"\n  - \"Tests in atlas are run through cargo nextest run; plain cargo test is not used.\"\n\n**Likely stale / ephemeral (low retention score, time-bound phrasing):**\n- \"The flaky test being chased this week is pagination_ordering in atlas-api.\" — \"this week\" relative to whenever it was written; almost certainly no longer current.\n- \"The branch under review is spike/consolidate.\" — reads like leftover session context tied to a specific review, not a durable project fact.\n\n**Worth double-checking but not clearly wrong:**\n- \"The slowest step in atlas CI is the release build, at about eight minutes.\" — performance snapshot, could easily have drifted.\n- Two Postgres-version facts overlap somewhat (\"stores its data in Postgres 16\" vs \"supports Postgres 15 and 16, dropped 14 in v2.0\") — not contradictory, but could be consolidated into one entry.\n\nEverything else (API auth, rate limiting, health endpoints, crate layout, CI steps, branch/PR/merge conventions, secrets handling, logging format, etc.) looks internally consistent with no overlap.\n\nWant me to fix the contradiction (once you tell me which deploy behavior is correct), merge the duplicates, and drop the two stale entries?",
+  "cost_usd": 0.14180779999999998,
+  "agent_turns": 5,
+  "session": [
+    {
+      "turn": 0,
+      "tool": "recall",
+      "input": {
+        "query": "atlas",
+        "entities": [
+          "atlas"
+        ],
+        "space": "all",
+        "k": 50
+      },
+      "answer": "\"{\\\"hits\\\":[{\\\"content\\\":\\\"Database migrations in atlas run with sqlx migrate run, never by hand.\\\",\\\"entities\\\":[\\\"atlas\\\",\\\"db\\\"],\\\"id\\\":\\\"01M1Q4KJPHYDQNN5ERGRC7A2XX\\\",\\\"kind\\\":\\\"instruction\\\",\\\"score\\\":0.8894373589476701,\\\"signals\\\":{\\\"importance\\\":1,\\\"retention\\\":1,\\\"rrf\\\":0.02804284323271665,\\\"rrf_normalized\\\":0.8157289315794501,\\\"similarity\\\":0.7630027532577515},\\\"source\\\":\\\"agent\\\",\\\"space\\\":\\\"eval\\\",\\\"tags\\\":[],\\\"valid_from\\\":\\\"2026-09-04T21:18:44.919463Z\\\"},{\\\"content\\\":\\\"The atlas workspace has four crates: atlas-core, atlas-store, atlas-api and atlas-cli.\\\",\\\"entities\\\":[\\\"atlas\\\"],\\\"id\\\":\\\"01M1Q4KJP743FT1THZ67M98PNB\\\",\\\"kind\\\":\\\"fact\\\",\\\"score\\\":0.86648191097934,\\\"signals\\\":{\\\"imp"
+    }
+  ]
+}

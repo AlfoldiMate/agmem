@@ -91,6 +91,13 @@ pub const NAMES: [&str; 7] = [
     "reflect",
 ];
 
+/// The tools a default session does **not** list (#150): the maintenance
+/// verbs, which one tidy session in many calls and every session would
+/// otherwise pay for on every turn. The shell serves them as `agmem
+/// consolidate` and `agmem forget`; `AGMEM_TOOLS=all` puts them back on the
+/// wire. Every name here is in [`NAMES`] — the test below says so.
+pub const GATED: [&str; 2] = ["consolidate", "forget"];
+
 use agmem_core::{MemoryId, Source, SpaceName, Writer};
 use agmem_store::{StoreError, repo};
 use rmcp::{ErrorData, RoleServer, service::RequestContext};
@@ -299,7 +306,17 @@ pub(crate) fn store_error(error: &StoreError) -> ErrorData {
 mod tests {
     use rmcp::model::ToolAnnotations;
 
-    use super::memory_id;
+    use super::{GATED, NAMES, memory_id};
+
+    #[test]
+    fn every_gated_tool_is_a_tool() {
+        for name in GATED {
+            assert!(
+                NAMES.contains(&name),
+                "{name} is gated but not a tool; a rename has to land in both lists"
+            );
+        }
+    }
 
     #[test]
     fn a_supersedes_id_is_accepted_with_or_without_its_table() {

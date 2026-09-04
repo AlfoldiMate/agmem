@@ -160,12 +160,13 @@ where is X, which files do Y — that should come back as refs, not prose.
 ### The hooks
 
 Deterministic work that costs zero tokens and happens *every* time, which no
-prompt instruction achieves. Four are `.nu` scripts under `hooks/scripts/`;
-the fifth is rtk's. The memory hooks — briefing injection, the recall log,
+prompt instruction achieves. Five are `.nu` scripts under `hooks/scripts/`;
+the sixth is rtk's. The memory hooks — briefing injection, the recall log,
 the seam nudges — are the agmem plugin's (`agmem hook …`), not this file's.
 
 | Event | Does |
 |---|---|
+| `UserPromptSubmit` | the session-length nudge: reads the context size the last turn was served with (the API `usage` on the transcript's last assistant line — a `tail -c`, no parse of the file) and, from 120k tokens, says once "/checkpoint then /clear", then again only per further 40k. CLAUDE.md's "prefer several short sessions" rule had no enforcement; the audit's two largest sessions ran 400+ turns at ~267k each and never cleared. Knobs `CTX_FLOW_CONTEXT_NUDGE_TOKENS` / `_STEP`; cases in `hooks/tests/context-nudge.nu` |
 | `SessionStart` | the worktree layout check: in a bare layout the real `.claude` is symlinked into each worktree, and one carrying its own copy has silently diverged — a fact about this checkout the plugin cannot know. The briefing, the branch tag and the post-compaction warning arrive through the plugin's SessionStart hook |
 | `PreToolUse` | `rtk hook claude` — transparently rewrites Bash commands so their output arrives compressed; plus the bare-worktree guard that denies raw `git worktree add/remove/move` in a bare layout; plus the read guard (`Read` and `Bash`), which denies a whole-file read — a bare `Read` with no `offset`/`limit`, or `cat`/`head`/`tail`/`sed` printing more than 300 lines of a file over 12 kB — and asks for a window instead. The 2026-09-03 token audit found those two shapes were 46% of every tool-result character this repo's sessions ever paid for. Any windowed call passes, including one whose `limit` covers the whole file; `cat big \| wc -l`, heredocs and redirects pass; knobs `CTX_FLOW_READ_MAX_LINES` / `CTX_FLOW_READ_SMALL_BYTES`; cases in `hooks/tests/read-guard.nu` |
 | `PostToolUse` | one nudge, fired at most once per session and unable to block: when a Bash call reached for `sed`/`python`/`grep` where nu or ast-grep is the house tool. It exists because a rule in an always-loaded file is a rule you stop seeing — this repo`s own transcripts showed CLAUDE.md losing to habit on 18% of Bash calls. The `git push` checkpoint nudge moved to the plugin |
@@ -366,7 +367,7 @@ compacts; the token saving is a side effect of the quality win.
 ├── agents/                 runner, verifier, architect, browser, tracker, scout
 ├── commands/               checkpoint (wraps the plugin's), agmem-import, ctx-flow-doctor, ast-grep-it, bare-worktree
 ├── docs/reference.md       contracts, memory mapping, rationale — loaded on demand
-├── hooks/scripts/          the four hooks + shared _common.nu + paths resolver; hooks/tests/ their cases
+├── hooks/scripts/          the five hooks + shared _common.nu + paths resolver; hooks/tests/ their cases
 ├── output-styles/          ctx-flow.md — the hard rules, appended to the system prompt
 ├── scripts/                doctor.nu + doc-put.nu (subagent artifacts → documents) + import-notes.nu + build-grammar.nu + grammars.nu registry + bare-worktree.nu
 ├── skills/nushell/         deep Nushell reference, loaded when writing nu

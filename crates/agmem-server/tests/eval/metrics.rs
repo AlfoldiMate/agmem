@@ -40,13 +40,39 @@ pub struct ScenarioScore {
 /// hit the probes handed back — the precision denominator, without which a
 /// trim's cost is measured and its benefit is not; `mrr` is the mean
 /// reciprocal rank of each probe's first relevant hit, rounded to four
-/// decimals so the doc round-trips to the same f64.
+/// decimals so the doc round-trips to the same f64; `ndcg5` (issue #137)
+/// is the mean nDCG@5 over the page as returned, chunk hits included at
+/// gain 0, so anything that displaces a relevant claim from the top of the
+/// page costs here even when `found` is unmoved.
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Retrieval {
     pub found: u32,
     pub expected: u32,
     pub returned: u32,
     pub mrr: f64,
+    pub ndcg5: f64,
+}
+
+/// The cut-off nDCG is scored at.
+pub const NDCG_AT: usize = 5;
+
+/// Normalised discounted cumulative gain at [`NDCG_AT`] for one page:
+/// binary gain, `log2(rank + 1)` discount, ideal DCG from as many relevant
+/// items as could have fit. A page with nothing to find scores 0.
+pub fn ndcg(ranked: &[&str], relevant: &HashSet<&str>) -> f64 {
+    if relevant.is_empty() {
+        return 0.0;
+    }
+    let discount = |rank: usize| 1.0 / ((rank + 2) as f64).log2();
+    let dcg: f64 = ranked
+        .iter()
+        .take(NDCG_AT)
+        .enumerate()
+        .filter(|(_, id)| relevant.contains(*id))
+        .map(|(rank, _)| discount(rank))
+        .sum();
+    let ideal: f64 = (0..relevant.len().min(NDCG_AT)).map(discount).sum();
+    dcg / ideal
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -130,6 +156,7 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
     let mut expected = 0;
     let mut returned_total = 0;
     let mut reciprocal_sum = 0.0;
+    let mut ndcg_sum = 0.0;
     for probe in &scenario.probes {
         let seeded = scenario::seed(scenario, embedder.clone()).await;
         let answer = seeded
@@ -148,19 +175,23 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
         if let Some(rank) = returned.iter().position(|id| relevant.contains(id)) {
             reciprocal_sum += 1.0 / (rank + 1) as f64;
         }
+        ndcg_sum += ndcg(&returned, &relevant);
         seeded.shutdown().await;
     }
     let probes = scenario.probes.len();
-    let mrr = if probes == 0 {
-        0.0
-    } else {
-        round4(reciprocal_sum / probes as f64)
+    let mean = |sum: f64| {
+        if probes == 0 {
+            0.0
+        } else {
+            round4(sum / probes as f64)
+        }
     };
     Retrieval {
         found,
         expected,
         returned: returned_total,
-        mrr,
+        mrr: mean(reciprocal_sum),
+        ndcg5: mean(ndcg_sum),
     }
 }
 
@@ -472,4 +503,27 @@ fn cited_ids(block: &str) -> Vec<&str> {
         .step_by(2)
         .filter(|token| token.len() >= 16 && token.chars().all(char::is_alphanumeric))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Hand-computed: relevant at ranks 1 and 3 of a five-hit page with three
+    /// relevant ids in total. DCG = 1/log2(2) + 1/log2(4) = 1.5; ideal over
+    /// three = 1 + 1/log2(3) + 1/log2(4) = 2.1309…; ratio 0.7039.
+    #[test]
+    fn ndcg_scores_a_page_by_rank_and_ideal() {
+        let relevant: HashSet<&str> = ["a", "b", "c"].into_iter().collect();
+        let page = ["a", "x", "b", "y", "z"];
+        assert_eq!(round4(ndcg(&page, &relevant)), 0.7039);
+        // Everything relevant on top is perfect; a relevant hit past the
+        // cut-off earns nothing; an empty page earns nothing.
+        assert_eq!(ndcg(&["a", "b", "c"], &relevant), 1.0);
+        assert_eq!(ndcg(&["x", "y", "z", "w", "v", "a"], &relevant), 0.0);
+        assert_eq!(ndcg(&[], &relevant), 0.0);
+        // One relevant id at rank 2: 1/log2(3) over an ideal of 1.
+        let one: HashSet<&str> = ["a"].into_iter().collect();
+        assert_eq!(round4(ndcg(&["x", "a"], &one)), 0.6309);
+    }
 }

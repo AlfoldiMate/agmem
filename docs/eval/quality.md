@@ -41,7 +41,8 @@ cap covers exactly the flood the gate lets through.
         "found": 2,
         "expected": 2,
         "returned": 9,
-        "mrr": 0.375
+        "mrr": 0.375,
+        "ndcg5": 0.5308
       },
       "timeline": {
         "passed": 1,
@@ -78,7 +79,8 @@ cap covers exactly the flood the gate lets through.
         "found": 2,
         "expected": 2,
         "returned": 4,
-        "mrr": 0.3333
+        "mrr": 0.3333,
+        "ndcg5": 0.5706
       },
       "timeline": {
         "passed": 0,
@@ -115,7 +117,8 @@ cap covers exactly the flood the gate lets through.
         "found": 3,
         "expected": 3,
         "returned": 13,
-        "mrr": 0.6111
+        "mrr": 0.6111,
+        "ndcg5": 0.7103
       },
       "timeline": {
         "passed": 2,
@@ -152,7 +155,8 @@ cap covers exactly the flood the gate lets through.
         "found": 0,
         "expected": 0,
         "returned": 0,
-        "mrr": 0.0
+        "mrr": 0.0,
+        "ndcg5": 0.0
       },
       "timeline": {
         "passed": 0,
@@ -189,7 +193,8 @@ cap covers exactly the flood the gate lets through.
         "found": 4,
         "expected": 4,
         "returned": 4,
-        "mrr": 1.0
+        "mrr": 1.0,
+        "ndcg5": 1.0
       },
       "timeline": {
         "passed": 0,
@@ -226,7 +231,8 @@ cap covers exactly the flood the gate lets through.
         "found": 3,
         "expected": 3,
         "returned": 14,
-        "mrr": 0.8333
+        "mrr": 0.8333,
+        "ndcg5": 0.877
       },
       "timeline": {
         "passed": 1,

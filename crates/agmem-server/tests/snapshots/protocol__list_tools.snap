@@ -50,39 +50,16 @@ expression: "&tools.tools"
     "inputSchema": {
       "$defs": {
         "DocKind": {
-          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
-          "oneOf": [
-            {
-              "const": "plan",
-              "description": "A plan: what is to be built and in which order.",
-              "type": "string"
-            },
-            {
-              "const": "review",
-              "description": "A review of code, a design, or a change.",
-              "type": "string"
-            },
-            {
-              "const": "report",
-              "description": "A report: what was found or measured.",
-              "type": "string"
-            },
-            {
-              "const": "probe",
-              "description": "A probe: the record of an experiment and its outcome.",
-              "type": "string"
-            },
-            {
-              "const": "transcript",
-              "description": "A verbatim session or conversation transcript.",
-              "type": "string"
-            },
-            {
-              "const": "other",
-              "description": "Anything the other kinds do not name.",
-              "type": "string"
-            }
-          ]
+          "description": "What a document is for (schema v9, #132): a plan, a review of code or a\ndesign, a report of what was found, a probe recording an experiment, a\nverbatim transcript, or other.",
+          "enum": [
+            "plan",
+            "review",
+            "report",
+            "probe",
+            "transcript",
+            "other"
+          ],
+          "type": "string"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -178,64 +155,26 @@ expression: "&tools.tools"
           "type": "object"
         },
         "DecayClass": {
-          "description": "How fast a memory's retention falls off between accesses.\n\nThe rates themselves live with the scoring functions; this is the label\nstored on the row.",
-          "oneOf": [
-            {
-              "const": "pinned",
-              "description": "Never decays.",
-              "type": "string"
-            },
-            {
-              "const": "slow",
-              "description": "Fades over months.",
-              "type": "string"
-            },
-            {
-              "const": "normal",
-              "description": "The default: fades over weeks.",
-              "type": "string"
-            },
-            {
-              "const": "fast",
-              "description": "Working context: fades over days, then gets pruned at startup.",
-              "type": "string"
-            }
-          ]
+          "description": "How fast a memory fades between uses: `pinned` never, `slow` over\nmonths, `normal` over weeks (the default), `fast` over days and then\npruned at startup.",
+          "enum": [
+            "pinned",
+            "slow",
+            "normal",
+            "fast"
+          ],
+          "type": "string"
         },
         "DocKind": {
-          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
-          "oneOf": [
-            {
-              "const": "plan",
-              "description": "A plan: what is to be built and in which order.",
-              "type": "string"
-            },
-            {
-              "const": "review",
-              "description": "A review of code, a design, or a change.",
-              "type": "string"
-            },
-            {
-              "const": "report",
-              "description": "A report: what was found or measured.",
-              "type": "string"
-            },
-            {
-              "const": "probe",
-              "description": "A probe: the record of an experiment and its outcome.",
-              "type": "string"
-            },
-            {
-              "const": "transcript",
-              "description": "A verbatim session or conversation transcript.",
-              "type": "string"
-            },
-            {
-              "const": "other",
-              "description": "Anything the other kinds do not name.",
-              "type": "string"
-            }
-          ]
+          "description": "What a document is for (schema v9, #132): a plan, a review of code or a\ndesign, a report of what was found, a probe recording an experiment, a\nverbatim transcript, or other.",
+          "enum": [
+            "plan",
+            "review",
+            "report",
+            "probe",
+            "transcript",
+            "other"
+          ],
+          "type": "string"
         },
         "DocumentView": {
           "description": "One document on a listing.",
@@ -557,29 +496,14 @@ expression: "&tools.tools"
           ]
         },
         "Kind": {
-          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
-          "oneOf": [
-            {
-              "const": "fact",
-              "description": "A distilled statement about the world, the user, or the project.",
-              "type": "string"
-            },
-            {
-              "const": "lesson",
-              "description": "A procedural insight: \"X fails when Y; do Z\".",
-              "type": "string"
-            },
-            {
-              "const": "instruction",
-              "description": "A standing behavioral rule, always part of assembled context.",
-              "type": "string"
-            },
-            {
-              "const": "summary",
-              "description": "A digest standing in for several claims, written through `reflect`\nwith the claims it covers cited in `derived_from` — `context` may show\nit in their place under budget pressure, and `inspect` expands them.",
-              "type": "string"
-            }
-          ]
+          "description": "What a memory is. `fact`: a distilled claim about the world, the user or\nthe project. `lesson`: a procedural insight, \"X fails when Y; do Z\".\n`instruction`: a standing rule, pinned into every briefing. `summary`: a\ndigest standing in for the claims it cites; `reflect` writes it.",
+          "enum": [
+            "fact",
+            "lesson",
+            "instruction",
+            "summary"
+          ],
+          "type": "string"
         },
         "KindCount": {
           "description": "How many live memories of one kind a space holds.",
@@ -925,40 +849,25 @@ expression: "&tools.tools"
   },
   {
     "name": "recall",
-    "description": "Search everything past sessions stored — distilled claims and the verbatim text behind them — before assuming, guessing, or asking the user something they may already have said.\n\nCall this at the start of a session, when a new topic comes up, and before any answer that depends on what the user prefers, decided earlier, or has already been told. Ask in words: the wording is matched literally and the meaning semantically, so a question works better than keywords. Drop `query` entirely to list what `entities`, `tags` or `kinds` select on their own.\n\nHits come back ranked by how well they matched, how well they have held up since they were last used, and how important the storing agent said they were — each of those is in `signals`, so a claim that only surfaced because it never decays is visible as such. Every hit also carries the `source` it was distilled from, which `inspect` takes as it stands — a claim worth acting on is one to check, not one to hedge around. Nothing is hidden: a claim that was corrected is absent unless you ask with `as_of` or `include_invalidated`, which is how you find out what was believed at some earlier point.",
+    "description": "Search everything past sessions stored — distilled claims and the verbatim text behind them — before assuming, guessing, or asking something the user may already have said.\n\nCall it at the start of a session, when a new topic comes up, and before any answer that depends on what the user prefers or decided earlier. Ask in words: the wording is matched literally and the meaning semantically, so a question works better than keywords. Drop `query` to list what `entities`, `tags` or `kinds` select on their own.\n\nHits are ranked by match, by how well they have held up since last used, and by stated importance — each visible in `signals`. Every hit carries the `source` it was distilled from, which `inspect` takes as it stands. A corrected claim is absent unless you ask with `as_of` or `include_invalidated`.",
     "inputSchema": {
       "$defs": {
         "Kind": {
-          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
-          "oneOf": [
-            {
-              "const": "fact",
-              "description": "A distilled statement about the world, the user, or the project.",
-              "type": "string"
-            },
-            {
-              "const": "lesson",
-              "description": "A procedural insight: \"X fails when Y; do Z\".",
-              "type": "string"
-            },
-            {
-              "const": "instruction",
-              "description": "A standing behavioral rule, always part of assembled context.",
-              "type": "string"
-            },
-            {
-              "const": "summary",
-              "description": "A digest standing in for several claims, written through `reflect`\nwith the claims it covers cited in `derived_from` — `context` may show\nit in their place under budget pressure, and `inspect` expands them.",
-              "type": "string"
-            }
-          ]
+          "description": "What a memory is. `fact`: a distilled claim about the world, the user or\nthe project. `lesson`: a procedural insight, \"X fails when Y; do Z\".\n`instruction`: a standing rule, pinned into every briefing. `summary`: a\ndigest standing in for the claims it cites; `reflect` writes it.",
+          "enum": [
+            "fact",
+            "lesson",
+            "instruction",
+            "summary"
+          ],
+          "type": "string"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "as_of": {
           "default": null,
-          "description": "What was believed at this instant, RFC3339 — corrections are dated, so\nthis returns the claim that was live then rather than the one that\nreplaced it. Verbatim text is dated too: an episode recorded after\nthe instant stays out of the answer.",
+          "description": "What was believed at this instant, RFC3339: the claim live then, not\nwhat replaced it. Episodes recorded later stay out.",
           "type": [
             "string",
             "null"
@@ -966,7 +875,7 @@ expression: "&tools.tools"
         },
         "changed_since": {
           "default": null,
-          "description": "Rank claims created or corrected at or after this instant (RFC3339)\nahead of the rest — \"what changed since I last looked\". Soft, like\n`since`.",
+          "description": "Rank claims created or corrected at or after this instant (RFC3339)\nfirst — what changed since you last looked. Soft, like `since`.",
           "type": [
             "string",
             "null"
@@ -982,7 +891,7 @@ expression: "&tools.tools"
         },
         "include_invalidated": {
           "default": false,
-          "description": "Include claims that have since been corrected or forgotten. Off by\ndefault: a closed claim is history, not an answer.",
+          "description": "Include corrected or forgotten claims. Off by default.",
           "type": "boolean"
         },
         "k": {
@@ -1014,7 +923,7 @@ expression: "&tools.tools"
         },
         "since": {
           "default": null,
-          "description": "Rank claims still true at or after this instant (RFC3339) ahead of\nthe rest. A soft window, not a filter: nothing is hidden, and each\nhit reports its fit in `signals.temporal`. Combine with `until` for\na range; use `as_of` instead when you want one instant's hard truth.",
+          "description": "Rank claims still true at or after this instant (RFC3339) first. A\nsoft window: nothing is hidden, and `signals.temporal` reports fit.",
           "type": [
             "string",
             "null"
@@ -1022,7 +931,7 @@ expression: "&tools.tools"
         },
         "space": {
           "default": null,
-          "description": "Where to look: `current` for this project, `user` for the person,\n`all` for every space, or a space name. Defaults to `current` and\n`user` together, which is almost always what you want.",
+          "description": "Where to look: `current`, `user`, `all`, or a space name. Defaults\nto `current` and `user` together.",
           "type": [
             "string",
             "null"
@@ -1038,7 +947,7 @@ expression: "&tools.tools"
         },
         "until": {
           "default": null,
-          "description": "Rank claims already true at or before this instant (RFC3339) ahead\nof the rest. Soft, like `since`. Note that an all-past window over a\nlive read cannot surface claims corrected since — add\n`include_invalidated: true` to reach those.",
+          "description": "Rank claims already true at or before this instant (RFC3339) first.\nSoft, like `since`; corrected claims need `include_invalidated`.",
           "type": [
             "string",
             "null"
@@ -1160,39 +1069,16 @@ expression: "&tools.tools"
           "type": "object"
         },
         "DocKind": {
-          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
-          "oneOf": [
-            {
-              "const": "plan",
-              "description": "A plan: what is to be built and in which order.",
-              "type": "string"
-            },
-            {
-              "const": "review",
-              "description": "A review of code, a design, or a change.",
-              "type": "string"
-            },
-            {
-              "const": "report",
-              "description": "A report: what was found or measured.",
-              "type": "string"
-            },
-            {
-              "const": "probe",
-              "description": "A probe: the record of an experiment and its outcome.",
-              "type": "string"
-            },
-            {
-              "const": "transcript",
-              "description": "A verbatim session or conversation transcript.",
-              "type": "string"
-            },
-            {
-              "const": "other",
-              "description": "Anything the other kinds do not name.",
-              "type": "string"
-            }
-          ]
+          "description": "What a document is for (schema v9, #132): a plan, a review of code or a\ndesign, a report of what was found, a probe recording an experiment, a\nverbatim transcript, or other.",
+          "enum": [
+            "plan",
+            "review",
+            "report",
+            "probe",
+            "transcript",
+            "other"
+          ],
+          "type": "string"
         },
         "DocRef": {
           "description": "The document a verbatim hit is a slice of (#134).",
@@ -1529,39 +1415,24 @@ expression: "&tools.tools"
   },
   {
     "name": "reflect",
-    "description": "Store something you worked out from what memory already holds, together with the ids it was drawn from.\n\nCall it when reading several memories together tells you something none of them says on its own: a pattern across three failures, what a preference and a constraint mean taken together, the reason behind a decision that only became visible later. This is the verb for a conclusion you reached; `remember` is the verb for something you were told.\n\n`derived_from` is required, and it is the point. Pass the ids you actually read — memory ids, episode ids, bare or prefixed, exactly as `recall`, `remember`, `context` or `inspect` handed them to you. They are stored on the insight and shown by `inspect`, so a later session can see what the conclusion was built on and check whether that evidence still stands, instead of taking it on faith. An insight with nothing behind it is a `remember` call.\n\nStored as a `lesson` unless you say otherwise, which fades slowly and appears in the Lessons section of `context`. Send `kind: \"summary\"` for a digest that stands in for the claims it cites — when `context` runs short of budget it shows the summary in their place, and `inspect` expands the cited claims in full, so compressing a finished session this way costs no detail. Ids are looked for in this space and in the shared `user` space, so an insight about the project may cite what is known about the person.\n\nReturns the id it was stored under. `created: false` means an equivalent insight was already there and nothing was written — read `content`, and if yours says something different, send it again with `supersedes` set to that id. `related` carries live claims near the insight with their text, for the same decision.",
+    "description": "Store something you worked out from what memory already holds, together with the ids it was drawn from.\n\nCall it when reading several memories together tells you something none of them says on its own: a pattern across failures, what a preference and a constraint mean taken together, the reason behind a decision. This is the verb for a conclusion you reached; `remember` is for something you were told, and an insight with nothing behind it is a `remember` call. The cited ids are shown by `inspect`, so a later session can check the evidence still stands.\n\nStored as a `lesson` unless you say otherwise. `kind: \"summary\"` is a digest of the cited claims: `context` shows it in their place under budget pressure and `inspect` expands them, so compressing a finished session this way costs no detail.\n\nReturns the id. `created: false` means an equivalent insight was already there — read its `content`, and if yours differs, send it again with `supersedes` set to that id. `related` carries nearby live claims with their text, for the same decision.",
     "inputSchema": {
       "$defs": {
         "Kind": {
-          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
-          "oneOf": [
-            {
-              "const": "fact",
-              "description": "A distilled statement about the world, the user, or the project.",
-              "type": "string"
-            },
-            {
-              "const": "lesson",
-              "description": "A procedural insight: \"X fails when Y; do Z\".",
-              "type": "string"
-            },
-            {
-              "const": "instruction",
-              "description": "A standing behavioral rule, always part of assembled context.",
-              "type": "string"
-            },
-            {
-              "const": "summary",
-              "description": "A digest standing in for several claims, written through `reflect`\nwith the claims it covers cited in `derived_from` — `context` may show\nit in their place under budget pressure, and `inspect` expands them.",
-              "type": "string"
-            }
-          ]
+          "description": "What a memory is. `fact`: a distilled claim about the world, the user or\nthe project. `lesson`: a procedural insight, \"X fails when Y; do Z\".\n`instruction`: a standing rule, pinned into every briefing. `summary`: a\ndigest standing in for the claims it cites; `reflect` writes it.",
+          "enum": [
+            "fact",
+            "lesson",
+            "instruction",
+            "summary"
+          ],
+          "type": "string"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "derived_from": {
-          "description": "The ids this insight was drawn from — memory ids, episode ids, or\nboth, exactly as `recall`, `remember` or `context` handed them to you.\nAt least one; an insight with nothing behind it belongs in `remember`.",
+          "description": "The ids it was drawn from — memory or episode ids, as `recall`,\n`remember`, `context` or `inspect` handed them to you. At least one.",
           "items": {
             "type": "string"
           },
@@ -1569,14 +1440,14 @@ expression: "&tools.tools"
         },
         "entities": {
           "default": [],
-          "description": "The subjects it is about (\"user\", \"project-x\"), for filtered recall.",
+          "description": "Subjects it is about (\"user\", \"project-x\"), for filtered recall.",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "insight": {
-          "description": "The insight itself: one atomic, self-contained statement in the third\nperson, understandable with no conversation around it. What you\nconcluded, not the reasoning that got you there.",
+          "description": "The insight: one atomic, self-contained statement in the third\nperson. What you concluded, not the reasoning.",
           "type": "string"
         },
         "kind": {
@@ -1589,11 +1460,11 @@ expression: "&tools.tools"
             }
           ],
           "default": null,
-          "description": "What the insight is; defaults to `lesson`. Send `summary` for a\ndigest that stands in for the cited claims: under budget pressure\n`context` shows it in their place, and `inspect` expands them."
+          "description": "Defaults to `lesson`. `summary` is a digest standing in for the cited\nclaims: `context` shows it in their place under budget pressure."
         },
         "space": {
           "default": null,
-          "description": "Where to store this. Defaults to the space this server was started\nwith; `user` is the reserved space for memory that follows the person\nacross every project.",
+          "description": "Where to store: this server's space by default, or `user` for what\nfollows the person across every project.",
           "type": [
             "string",
             "null"
@@ -1601,7 +1472,7 @@ expression: "&tools.tools"
         },
         "supersedes": {
           "default": [],
-          "description": "The ids of the live claims this insight replaces. Each one is closed\nand stays readable and dated; only the insight is live afterwards.\n\nSeveral at once is a merge: one cited conclusion standing in for every\nuncited wording of it, closed in the same call rather than forgotten.",
+          "description": "Ids of live claims this replaces: each is closed, stays readable and\ndated, and a list merges them.",
           "items": {
             "type": "string"
           },
@@ -1609,7 +1480,7 @@ expression: "&tools.tools"
         },
         "tags": {
           "default": [],
-          "description": "Free labels. `identity` marks a fact that belongs in every session's\nprofile.",
+          "description": "Free labels. `identity` marks a fact for every session's profile.",
           "items": {
             "type": "string"
           },
@@ -1744,68 +1615,30 @@ expression: "&tools.tools"
   },
   {
     "name": "remember",
-    "description": "Store what this session learned — the distilled claims, and optionally the verbatim text they came from — so the next session starts with it instead of working it out again.\n\nCall it as soon as something durable is said, unprompted and without waiting for the end of the session: a preference or a standing instruction (\"always use X here\"), a decision and the reason behind it, a convention, a constraint, a lesson from something that failed. Nothing you say persists — an answer that ends \"noted\" or \"I'll remember that\" without a call to this tool is a promise the next session cannot keep.\n\nDistil before you call: one atomic, self-contained claim per entry, in the third person, understandable with no conversation around it — \"the user prefers Rust over Python for CLI tools\", not \"he said he likes it better\". Do not store what the code or the ticket already records, or what only matters to this turn.\n\nNothing here is ever rewritten. When something already stored turns out to be wrong, send the correction with `supersedes` set to the id of the claim it replaces, rather than storing a contradiction: the old claim stays readable and dated, and only one of them is live. You do not have to go looking for that id first — see `related` below.\n\nReturns a diff rather than an acknowledgement — what was created, what was already stored, what was closed, and the episode's id. Two of those carry the id and the text of a claim already in the store: `duplicates`, which were **not** written, and `related`, which sit alongside what was. Read the `content` of both before you answer. A correction reads much like the claim it corrects, so it lands in one of those lists rather than in `created` — and if you report it as remembered without checking, the claim that is still live is the old and wrong one. Neither list is a verdict: nothing here judges that two claims disagree, which is why they are handed back rather than acted on. When one of them says something your claim contradicts, send your claim again with `supersedes` set to its id.",
+    "description": "Store what this session learned — distilled claims, optionally with the verbatim text they came from — so the next session starts with it instead of working it out again.\n\nCall it as soon as something durable is said, unprompted: a preference or a standing instruction, a decision and the reason behind it, a convention, a constraint, a lesson from a failure. Nothing you say persists — an answer that ends \"noted\" without this call is a promise the next session cannot keep.\n\nDistil before you call: one atomic, self-contained claim per entry, in the third person, understandable with no conversation around it. Do not store what the code or the ticket already records, or what only matters to this turn.\n\nNothing here is rewritten. When a stored claim turns out to be wrong, send the correction with `supersedes` set to its id rather than storing a contradiction: the old claim stays readable and dated, and only one is live.\n\nReturns a diff, not an acknowledgement: `created`, `duplicates` (**not** written) and `related`, the last two with the id and text of a claim already stored. Read both before you answer: a correction reads much like the claim it corrects, so it lands there rather than in `created`, and reporting it as remembered would leave the old, wrong claim live. When one of them contradicts yours, send yours again with `supersedes` set to its id.",
     "inputSchema": {
       "$defs": {
         "DecayClass": {
-          "description": "How fast a memory's retention falls off between accesses.\n\nThe rates themselves live with the scoring functions; this is the label\nstored on the row.",
-          "oneOf": [
-            {
-              "const": "pinned",
-              "description": "Never decays.",
-              "type": "string"
-            },
-            {
-              "const": "slow",
-              "description": "Fades over months.",
-              "type": "string"
-            },
-            {
-              "const": "normal",
-              "description": "The default: fades over weeks.",
-              "type": "string"
-            },
-            {
-              "const": "fast",
-              "description": "Working context: fades over days, then gets pruned at startup.",
-              "type": "string"
-            }
-          ]
+          "description": "How fast a memory fades between uses: `pinned` never, `slow` over\nmonths, `normal` over weeks (the default), `fast` over days and then\npruned at startup.",
+          "enum": [
+            "pinned",
+            "slow",
+            "normal",
+            "fast"
+          ],
+          "type": "string"
         },
         "DocKind": {
-          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
-          "oneOf": [
-            {
-              "const": "plan",
-              "description": "A plan: what is to be built and in which order.",
-              "type": "string"
-            },
-            {
-              "const": "review",
-              "description": "A review of code, a design, or a change.",
-              "type": "string"
-            },
-            {
-              "const": "report",
-              "description": "A report: what was found or measured.",
-              "type": "string"
-            },
-            {
-              "const": "probe",
-              "description": "A probe: the record of an experiment and its outcome.",
-              "type": "string"
-            },
-            {
-              "const": "transcript",
-              "description": "A verbatim session or conversation transcript.",
-              "type": "string"
-            },
-            {
-              "const": "other",
-              "description": "Anything the other kinds do not name.",
-              "type": "string"
-            }
-          ]
+          "description": "What a document is for (schema v9, #132): a plan, a review of code or a\ndesign, a report of what was found, a probe recording an experiment, a\nverbatim transcript, or other.",
+          "enum": [
+            "plan",
+            "review",
+            "report",
+            "probe",
+            "transcript",
+            "other"
+          ],
+          "type": "string"
         },
         "EpisodeInput": {
           "description": "Verbatim ground truth to store alongside what was distilled from it.",
@@ -1824,11 +1657,11 @@ expression: "&tools.tools"
                 }
               ],
               "default": null,
-              "description": "What kind of document this is. Requires `title`; `transcript` is\nrefused in the `user` space, which every project reads."
+              "description": "What kind of document. Needs `title`; no `transcript` in `user`."
             },
             "mime": {
               "default": null,
-              "description": "The content's media type, such as `text/markdown`.",
+              "description": "Media type, such as `text/markdown`.",
               "type": [
                 "string",
                 "null"
@@ -1836,7 +1669,7 @@ expression: "&tools.tools"
             },
             "occurred_at": {
               "default": null,
-              "description": "When the events described happened, RFC3339. Defaults to now.",
+              "description": "When it happened, RFC3339. Defaults to now.",
               "type": [
                 "string",
                 "null"
@@ -1844,7 +1677,7 @@ expression: "&tools.tools"
             },
             "session": {
               "default": null,
-              "description": "A grouping key for one conversation or working session.",
+              "description": "A grouping key for one session.",
               "type": [
                 "string",
                 "null"
@@ -1852,7 +1685,7 @@ expression: "&tools.tools"
             },
             "tags": {
               "default": [],
-              "description": "Labels a document can be listed by.",
+              "description": "Labels a document is listed by.",
               "items": {
                 "type": "string"
               },
@@ -1860,7 +1693,7 @@ expression: "&tools.tools"
             },
             "title": {
               "default": null,
-              "description": "Names the episode as a document — a plan, review, report, probe or\ntranscript kept whole so claims can cite it. Set with `doc_kind`.\nA later episode under the same title is the newer version; the older\none stays readable.",
+              "description": "Names the episode as a document claims can cite; a later one under\nthe same title is a newer version. Needs `doc_kind`.",
               "type": [
                 "string",
                 "null"
@@ -1873,29 +1706,14 @@ expression: "&tools.tools"
           "type": "object"
         },
         "Kind": {
-          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
-          "oneOf": [
-            {
-              "const": "fact",
-              "description": "A distilled statement about the world, the user, or the project.",
-              "type": "string"
-            },
-            {
-              "const": "lesson",
-              "description": "A procedural insight: \"X fails when Y; do Z\".",
-              "type": "string"
-            },
-            {
-              "const": "instruction",
-              "description": "A standing behavioral rule, always part of assembled context.",
-              "type": "string"
-            },
-            {
-              "const": "summary",
-              "description": "A digest standing in for several claims, written through `reflect`\nwith the claims it covers cited in `derived_from` — `context` may show\nit in their place under budget pressure, and `inspect` expands them.",
-              "type": "string"
-            }
-          ]
+          "description": "What a memory is. `fact`: a distilled claim about the world, the user or\nthe project. `lesson`: a procedural insight, \"X fails when Y; do Z\".\n`instruction`: a standing rule, pinned into every briefing. `summary`: a\ndigest standing in for the claims it cites; `reflect` writes it.",
+          "enum": [
+            "fact",
+            "lesson",
+            "instruction",
+            "summary"
+          ],
+          "type": "string"
         },
         "MemoryInput": {
           "description": "One claim to store.",
@@ -1914,11 +1732,11 @@ expression: "&tools.tools"
                 }
               ],
               "default": null,
-              "description": "How fast this fades between uses. Defaults by kind: facts `normal`,\nlessons `slow`, instructions `pinned`."
+              "description": "How fast it fades. Defaults by kind: facts `normal`, lessons `slow`,\ninstructions `pinned`."
             },
             "entities": {
               "default": [],
-              "description": "The subjects this claim is about (\"user\", \"project-x\"), for filtered\nrecall.",
+              "description": "Subjects it is about (\"user\", \"project-x\"), for filtered recall.",
               "items": {
                 "type": "string"
               },
@@ -1934,11 +1752,11 @@ expression: "&tools.tools"
                 }
               ],
               "default": null,
-              "description": "What the claim is; defaults to `fact`. A `summary` is refused here:\nit has to cite the claims it stands in for, which is `reflect`'s\ncontract."
+              "description": "What the claim is; defaults to `fact`. `summary` is `reflect`'s."
             },
             "supersedes": {
               "default": [],
-              "description": "The ids of the live memories this claim replaces. Each one is closed\nand stays readable and dated; only this claim is live afterwards.\n\nOne id is a correction. Several is a merge — the wording worth keeping,\nclosing every duplicate of it in the same call, which is what\n`consolidate`'s `near_duplicates` clusters are for. Use this rather\nthan `forget` for anything that was once true: a closed claim keeps its\nhistory, a forgotten one does not.",
+              "description": "Ids of live claims this replaces: each is closed, stays readable and\ndated, and a list merges them. Prefer this to `forget` for anything\nthat was once true.",
               "items": {
                 "type": "string"
               },
@@ -1946,7 +1764,7 @@ expression: "&tools.tools"
             },
             "tags": {
               "default": [],
-              "description": "Free labels. `identity` marks a fact that belongs in every session's\nprofile.",
+              "description": "Free labels. `identity` marks a fact for every session's profile.",
               "items": {
                 "type": "string"
               },
@@ -1954,7 +1772,7 @@ expression: "&tools.tools"
             },
             "valid_from": {
               "default": null,
-              "description": "When the claim started being true, RFC3339. Defaults to now — set it\nwhen recording something that became true earlier.",
+              "description": "When it became true, RFC3339. Defaults to now.",
               "type": [
                 "string",
                 "null"
@@ -1978,10 +1796,10 @@ expression: "&tools.tools"
               "type": "null"
             }
           ],
-          "description": "The verbatim text these claims came from, stored unedited as ground\ntruth. Every memory in the same call is provenanced to it."
+          "description": "The verbatim text these came from, stored unedited; every memory in\nthe call is provenanced to it."
         },
         "memories": {
-          "description": "The distilled claims, one per entry. May be empty only when `episode`\nis present.",
+          "description": "The distilled claims, one per entry. Empty only with an `episode`.",
           "items": {
             "$ref": "#/$defs/MemoryInput"
           },
@@ -1989,7 +1807,7 @@ expression: "&tools.tools"
         },
         "space": {
           "default": null,
-          "description": "Where to store this. Defaults to the space this server was started\nwith; `user` is the reserved space for memory that follows the person\nacross every project.",
+          "description": "Where to store: this server's space by default, or `user` for what\nfollows the person across every project.",
           "type": [
             "string",
             "null"

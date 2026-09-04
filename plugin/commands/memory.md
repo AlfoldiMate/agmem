@@ -1,7 +1,7 @@
 ---
 description: Inspect or tidy this project's agmem memory — show what the store holds and whether the briefing is still right, or consolidate duplicates, contradictions and stale claims.
 argument-hint: "[show | tidy]"
-allowed-tools: Read, mcp__agmem__context, mcp__agmem__recall, mcp__agmem__inspect, mcp__agmem__consolidate, mcp__agmem__remember, mcp__agmem__reflect, mcp__agmem__forget, mcp__plugin_agmem_agmem__context, mcp__plugin_agmem_agmem__recall, mcp__plugin_agmem_agmem__inspect, mcp__plugin_agmem_agmem__consolidate, mcp__plugin_agmem_agmem__remember, mcp__plugin_agmem_agmem__reflect, mcp__plugin_agmem_agmem__forget
+allowed-tools: Read, Bash(agmem consolidate:*), Bash(agmem forget:*), Bash(agmem doc forget:*), mcp__agmem__context, mcp__agmem__recall, mcp__agmem__inspect, mcp__agmem__remember, mcp__agmem__reflect, mcp__plugin_agmem_agmem__context, mcp__plugin_agmem_agmem__recall, mcp__plugin_agmem_agmem__inspect, mcp__plugin_agmem_agmem__remember, mcp__plugin_agmem_agmem__reflect
 ---
 
 # agmem memory
@@ -21,8 +21,10 @@ hedge.
 
 ## tidy
 
-Run `consolidate`, then judge each list — it decides nothing itself, and empty
-lists are the healthy outcome, not a failure:
+Run `agmem consolidate` in the shell — the tool is off the default MCP list
+(#150) and the CLI is its door; it prints the tool's JSON — then judge each
+list. It decides nothing itself, and empty lists are the healthy outcome, not
+a failure:
 
 - **near_duplicates** — merge a group with one `remember`: the wording worth
   keeping, `supersedes` set to every other member's id. Check
@@ -35,9 +37,15 @@ lists are the healthy outcome, not a failure:
   When both are right (scope differs), leave them.
 - **stale_contexts** — a `fast` claim recall kept alive: if it proved durable,
   re-store it with a slower `decay_class` (superseding the fast one); if it
-  was scaffolding, `forget` it.
+  was scaffolding, close it with `agmem forget <id>`.
+- **over_full_tags** — merge the way a duplicate group merges: one `remember`
+  with the wording worth keeping and the absorbed lessons' ids in `supersedes`.
+- **orphan_documents** — distil what one still says and `remember` it citing
+  the document, or, once the user confirms, `agmem doc forget <id> --purge`.
 
-Report what you merged, corrected, and expired, in at most five lines.
+Merges and corrections go through MCP `remember`/`reflect` with `supersedes`;
+only closing and purging shell out. Report what you merged, corrected, and
+expired, in at most five lines.
 
-Never `forget` with `purge` during any of these modes without the user
-confirming first.
+Never purge (`agmem forget --purge`, `agmem doc forget --purge`) during any
+of these modes without the user confirming first.

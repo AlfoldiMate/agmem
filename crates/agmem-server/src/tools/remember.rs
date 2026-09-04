@@ -27,18 +27,16 @@ use crate::tools::{internal, invalid, memory_id, resolve_space, store_error};
 /// verbatim text they were distilled from.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct RememberParams {
-    /// Where to store this. Defaults to the space this server was started
-    /// with; `user` is the reserved space for memory that follows the person
-    /// across every project.
+    /// Where to store: this server's space by default, or `user` for what
+    /// follows the person across every project.
     #[serde(default)]
     pub space: Option<String>,
 
-    /// The distilled claims, one per entry. May be empty only when `episode`
-    /// is present.
+    /// The distilled claims, one per entry. Empty only with an `episode`.
     pub memories: Vec<MemoryInput>,
 
-    /// The verbatim text these claims came from, stored unedited as ground
-    /// truth. Every memory in the same call is provenanced to it.
+    /// The verbatim text these came from, stored unedited; every memory in
+    /// the call is provenanced to it.
     #[serde(default)]
     pub episode: Option<EpisodeInput>,
 }
@@ -51,40 +49,30 @@ pub struct MemoryInput {
     /// over Python for CLI tools", not "he said he likes it better".
     pub content: String,
 
-    /// What the claim is; defaults to `fact`. A `summary` is refused here:
-    /// it has to cite the claims it stands in for, which is `reflect`'s
-    /// contract.
+    /// What the claim is; defaults to `fact`. `summary` is `reflect`'s.
     #[serde(default)]
     pub kind: Option<Kind>,
 
-    /// The subjects this claim is about ("user", "project-x"), for filtered
-    /// recall.
+    /// Subjects it is about ("user", "project-x"), for filtered recall.
     #[serde(default)]
     pub entities: Vec<String>,
 
-    /// Free labels. `identity` marks a fact that belongs in every session's
-    /// profile.
+    /// Free labels. `identity` marks a fact for every session's profile.
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// How fast this fades between uses. Defaults by kind: facts `normal`,
-    /// lessons `slow`, instructions `pinned`.
+    /// How fast it fades. Defaults by kind: facts `normal`, lessons `slow`,
+    /// instructions `pinned`.
     #[serde(default)]
     pub decay_class: Option<DecayClass>,
 
-    /// The ids of the live memories this claim replaces. Each one is closed
-    /// and stays readable and dated; only this claim is live afterwards.
-    ///
-    /// One id is a correction. Several is a merge — the wording worth keeping,
-    /// closing every duplicate of it in the same call, which is what
-    /// `consolidate`'s `near_duplicates` clusters are for. Use this rather
-    /// than `forget` for anything that was once true: a closed claim keeps its
-    /// history, a forgotten one does not.
+    /// Ids of live claims this replaces: each is closed, stays readable and
+    /// dated, and a list merges them. Prefer this to `forget` for anything
+    /// that was once true.
     #[serde(default)]
     pub supersedes: Vec<String>,
 
-    /// When the claim started being true, RFC3339. Defaults to now — set it
-    /// when recording something that became true earlier.
+    /// When it became true, RFC3339. Defaults to now.
     #[serde(default)]
     pub valid_from: Option<String>,
 }
@@ -95,31 +83,28 @@ pub struct EpisodeInput {
     /// The text, unedited. It is chunked for retrieval but never rewritten.
     pub content: String,
 
-    /// When the events described happened, RFC3339. Defaults to now.
+    /// When it happened, RFC3339. Defaults to now.
     #[serde(default)]
     pub occurred_at: Option<String>,
 
-    /// A grouping key for one conversation or working session.
+    /// A grouping key for one session.
     #[serde(default)]
     pub session: Option<String>,
 
-    /// Names the episode as a document — a plan, review, report, probe or
-    /// transcript kept whole so claims can cite it. Set with `doc_kind`.
-    /// A later episode under the same title is the newer version; the older
-    /// one stays readable.
+    /// Names the episode as a document claims can cite; a later one under
+    /// the same title is a newer version. Needs `doc_kind`.
     #[serde(default)]
     pub title: Option<String>,
 
-    /// What kind of document this is. Requires `title`; `transcript` is
-    /// refused in the `user` space, which every project reads.
+    /// What kind of document. Needs `title`; no `transcript` in `user`.
     #[serde(default)]
     pub doc_kind: Option<DocKind>,
 
-    /// Labels a document can be listed by.
+    /// Labels a document is listed by.
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// The content's media type, such as `text/markdown`.
+    /// Media type, such as `text/markdown`.
     #[serde(default)]
     pub mime: Option<String>,
 }

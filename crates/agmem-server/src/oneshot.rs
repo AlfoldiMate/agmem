@@ -1,7 +1,7 @@
 //! `agmem context` — the context block as a one-shot print (issue #46) —
 //! and, since #150, `agmem consolidate` and `agmem forget`: the maintenance
 //! pair off the default MCP list, served from the shell instead. `agmem doc`
-//! (`doc.rs`) rides the same [`call`].
+//! (`doc.rs`) rides the same `call`.
 //!
 //! The MCP `context` tool needs a live session, which a shell hook does not
 //! have: hand-rolling the JSON-RPC over the server's stdin means faking the

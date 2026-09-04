@@ -180,7 +180,10 @@ fn is_ulid(candidate: &str) -> bool {
             .all(|c| c.is_ascii_digit() || c.is_ascii_uppercase())
 }
 
-/// What a memory *is*, which decides how it is used and how fast it fades.
+/// What a memory is. `fact`: a distilled claim about the world, the user or
+/// the project. `lesson`: a procedural insight, "X fails when Y; do Z".
+/// `instruction`: a standing rule, pinned into every briefing. `summary`: a
+/// digest standing in for the claims it cites; `reflect` writes it.
 // Under the `schema` feature these docs are also what an MCP tool's input
 // schema offers the calling agent, so keep them about the domain — an
 // implementation note here becomes noise in every agent's context.
@@ -188,15 +191,12 @@ fn is_ulid(candidate: &str) -> bool {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
-    /// A distilled statement about the world, the user, or the project.
+    // No per-variant docs on purpose: schemars would turn each into a
+    // `oneOf` arm, three times the wire size of a plain `enum` list. The
+    // variants are described on the type instead.
     Fact,
-    /// A procedural insight: "X fails when Y; do Z".
     Lesson,
-    /// A standing behavioral rule, always part of assembled context.
     Instruction,
-    /// A digest standing in for several claims, written through `reflect`
-    /// with the claims it covers cited in `derived_from` — `context` may show
-    /// it in their place under budget pressure, and `inspect` expands them.
     Summary,
 }
 
@@ -250,26 +250,23 @@ impl std::str::FromStr for Kind {
     }
 }
 
-/// What kind of artifact a document is (schema v9, #132).
-///
-/// A document is an episode with a name and one of these; the rest of the row
-/// is an ordinary episode, so retrieval and purge share one path with
-/// anonymous verbatim text.
+/// What a document is for (schema v9, #132): a plan, a review of code or a
+/// design, a report of what was found, a probe recording an experiment, a
+/// verbatim transcript, or other.
+// A document is an episode with a name and one of these; the rest of the row
+// is an ordinary episode, so retrieval and purge share one path with
+// anonymous verbatim text. (A `//` comment: the doc line above is also the
+// MCP schema's text, and every agent pays for it.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DocKind {
-    /// A plan: what is to be built and in which order.
+    // Variants undocumented for the same reason as `Kind`'s.
     Plan,
-    /// A review of code, a design, or a change.
     Review,
-    /// A report: what was found or measured.
     Report,
-    /// A probe: the record of an experiment and its outcome.
     Probe,
-    /// A verbatim session or conversation transcript.
     Transcript,
-    /// Anything the other kinds do not name.
     Other,
 }
 
@@ -319,24 +316,22 @@ impl std::str::FromStr for DocKind {
     }
 }
 
-/// How fast a memory's retention falls off between accesses.
-///
-/// The rates themselves live with the scoring functions; this is the label
-/// stored on the row.
+/// How fast a memory fades between uses: `pinned` never, `slow` over
+/// months, `normal` over weeks (the default), `fast` over days and then
+/// pruned at startup.
+// The rates themselves live with the scoring functions; this is the label
+// stored on the row.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
 )]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DecayClass {
-    /// Never decays.
+    // Variants undocumented for the same reason as `Kind`'s.
     Pinned,
-    /// Fades over months.
     Slow,
-    /// The default: fades over weeks.
     #[default]
     Normal,
-    /// Working context: fades over days, then gets pruned at startup.
     Fast,
 }
 

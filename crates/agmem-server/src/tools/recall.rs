@@ -44,9 +44,8 @@ pub struct RecallParams {
     #[serde(default)]
     pub k: Option<u16>,
 
-    /// Where to look: `current` for this project, `user` for the person,
-    /// `all` for every space, or a space name. Defaults to `current` and
-    /// `user` together, which is almost always what you want.
+    /// Where to look: `current`, `user`, `all`, or a space name. Defaults
+    /// to `current` and `user` together.
     #[serde(default)]
     pub space: Option<String>,
 
@@ -62,35 +61,27 @@ pub struct RecallParams {
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// What was believed at this instant, RFC3339 — corrections are dated, so
-    /// this returns the claim that was live then rather than the one that
-    /// replaced it. Verbatim text is dated too: an episode recorded after
-    /// the instant stays out of the answer.
+    /// What was believed at this instant, RFC3339: the claim live then, not
+    /// what replaced it. Episodes recorded later stay out.
     #[serde(default)]
     pub as_of: Option<String>,
 
-    /// Rank claims still true at or after this instant (RFC3339) ahead of
-    /// the rest. A soft window, not a filter: nothing is hidden, and each
-    /// hit reports its fit in `signals.temporal`. Combine with `until` for
-    /// a range; use `as_of` instead when you want one instant's hard truth.
+    /// Rank claims still true at or after this instant (RFC3339) first. A
+    /// soft window: nothing is hidden, and `signals.temporal` reports fit.
     #[serde(default)]
     pub since: Option<String>,
 
-    /// Rank claims already true at or before this instant (RFC3339) ahead
-    /// of the rest. Soft, like `since`. Note that an all-past window over a
-    /// live read cannot surface claims corrected since — add
-    /// `include_invalidated: true` to reach those.
+    /// Rank claims already true at or before this instant (RFC3339) first.
+    /// Soft, like `since`; corrected claims need `include_invalidated`.
     #[serde(default)]
     pub until: Option<String>,
 
     /// Rank claims created or corrected at or after this instant (RFC3339)
-    /// ahead of the rest — "what changed since I last looked". Soft, like
-    /// `since`.
+    /// first — what changed since you last looked. Soft, like `since`.
     #[serde(default)]
     pub changed_since: Option<String>,
 
-    /// Include claims that have since been corrected or forgotten. Off by
-    /// default: a closed claim is history, not an answer.
+    /// Include corrected or forgotten claims. Off by default.
     #[serde(default)]
     pub include_invalidated: bool,
 }

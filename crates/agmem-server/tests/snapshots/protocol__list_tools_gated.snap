@@ -5,7 +5,7 @@ expression: "&gated"
 [
   {
     "name": "consolidate",
-    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nFive lists come back, and every claim in each carries its full text rather than only its id, so you can judge it here instead of looking it up:\n\n- `near_duplicates` — groups of live claims saying the same thing. Merge a group with one `remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other member. `supersedes` takes a list, so a group of any size closes in that single call — reaching for `forget` instead deletes the history the merge exists to keep. Read `min_similarity` before you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means the group chained together through a middle claim and may not be one claim at all.\n- `contradictions` — pairs about the same subject that are close without being the same. Nothing here has judged that they disagree; read both and decide. When one of them is wrong, send the right one with the wrong one's id in `supersedes`.\n- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point their class would have expired them. If one turned out to be durable, store it again with a slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n- `over_full_tags` — tags carrying more live lessons than a session's briefing will show for one tag. Merge the way a duplicate group merges: one `remember` with the wording worth keeping and the absorbed lessons' ids in `supersedes` — a few sharp lessons under a tag outwork a pile of them.\n- `orphan_documents` — documents no live claim cites. Nothing removes them on its own: distil what one still says and store it citing the document, or `forget` it with `purge: true`.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
+    "description": "Find what stored memory needs tidying up, and get back everything needed to do it. This decides nothing and changes nothing.\n\nCall it when memory has started to feel noisy: recall keeps returning the same claim in different words, two stored claims look like they disagree, or you are picking up a project that has accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use `recall`.\n\nFive lists come back, every claim in each with its full text so you can judge it here:\n\n- `near_duplicates` — groups of live claims saying the same thing; merge a group with one `remember` whose `supersedes` lists every other member. `min_similarity` is the weakest pair anywhere in the group, so a low number means it chained through a middle claim.\n- `contradictions` — pairs about one subject that are close without being the same; nothing here has judged that they disagree. Read both and decide.\n- `stale_contexts` — short-lived claims recall has kept alive past their class; store a durable one again with a slower `decay_class`, `forget` scaffolding.\n- `over_full_tags` — tags carrying more live lessons than a briefing shows for one; merge as a duplicate group merges.\n- `orphan_documents` — documents no live claim cites; distil and cite one, or `forget` it with `purge: true`.\n\nEvery list can be empty, and usually some are — an empty answer means there is nothing worth your attention, not that the call failed. `scanned` says what was actually compared.\n\nThis looks in the current space only, unlike every other read here: a tidy-up should not reach the shared user space unless you name it with `space`.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -93,89 +93,36 @@ expression: "&gated"
           "type": "object"
         },
         "DecayClass": {
-          "description": "How fast a memory's retention falls off between accesses.\n\nThe rates themselves live with the scoring functions; this is the label\nstored on the row.",
-          "oneOf": [
-            {
-              "const": "pinned",
-              "description": "Never decays.",
-              "type": "string"
-            },
-            {
-              "const": "slow",
-              "description": "Fades over months.",
-              "type": "string"
-            },
-            {
-              "const": "normal",
-              "description": "The default: fades over weeks.",
-              "type": "string"
-            },
-            {
-              "const": "fast",
-              "description": "Working context: fades over days, then gets pruned at startup.",
-              "type": "string"
-            }
-          ]
+          "description": "How fast a memory fades between uses: `pinned` never, `slow` over\nmonths, `normal` over weeks (the default), `fast` over days and then\npruned at startup.",
+          "enum": [
+            "pinned",
+            "slow",
+            "normal",
+            "fast"
+          ],
+          "type": "string"
         },
         "DocKind": {
-          "description": "What kind of artifact a document is (schema v9, #132).\n\nA document is an episode with a name and one of these; the rest of the row\nis an ordinary episode, so retrieval and purge share one path with\nanonymous verbatim text.",
-          "oneOf": [
-            {
-              "const": "plan",
-              "description": "A plan: what is to be built and in which order.",
-              "type": "string"
-            },
-            {
-              "const": "review",
-              "description": "A review of code, a design, or a change.",
-              "type": "string"
-            },
-            {
-              "const": "report",
-              "description": "A report: what was found or measured.",
-              "type": "string"
-            },
-            {
-              "const": "probe",
-              "description": "A probe: the record of an experiment and its outcome.",
-              "type": "string"
-            },
-            {
-              "const": "transcript",
-              "description": "A verbatim session or conversation transcript.",
-              "type": "string"
-            },
-            {
-              "const": "other",
-              "description": "Anything the other kinds do not name.",
-              "type": "string"
-            }
-          ]
+          "description": "What a document is for (schema v9, #132): a plan, a review of code or a\ndesign, a report of what was found, a probe recording an experiment, a\nverbatim transcript, or other.",
+          "enum": [
+            "plan",
+            "review",
+            "report",
+            "probe",
+            "transcript",
+            "other"
+          ],
+          "type": "string"
         },
         "Kind": {
-          "description": "What a memory *is*, which decides how it is used and how fast it fades.",
-          "oneOf": [
-            {
-              "const": "fact",
-              "description": "A distilled statement about the world, the user, or the project.",
-              "type": "string"
-            },
-            {
-              "const": "lesson",
-              "description": "A procedural insight: \"X fails when Y; do Z\".",
-              "type": "string"
-            },
-            {
-              "const": "instruction",
-              "description": "A standing behavioral rule, always part of assembled context.",
-              "type": "string"
-            },
-            {
-              "const": "summary",
-              "description": "A digest standing in for several claims, written through `reflect`\nwith the claims it covers cited in `derived_from` — `context` may show\nit in their place under budget pressure, and `inspect` expands them.",
-              "type": "string"
-            }
-          ]
+          "description": "What a memory is. `fact`: a distilled claim about the world, the user or\nthe project. `lesson`: a procedural insight, \"X fails when Y; do Z\".\n`instruction`: a standing rule, pinned into every briefing. `summary`: a\ndigest standing in for the claims it cites; `reflect` writes it.",
+          "enum": [
+            "fact",
+            "lesson",
+            "instruction",
+            "summary"
+          ],
+          "type": "string"
         },
         "MemoryView": {
           "description": "A memory as `inspect` renders it: the whole row, including the counters\n`recall` folds away into a score.",
@@ -550,7 +497,7 @@ expression: "&gated"
   },
   {
     "name": "forget",
-    "description": "Remove memories the store should no longer act on — by id when you know which, or by query when you do not.\n\nReach for `remember` with `supersedes` first: a claim that turned out to be wrong is a correction, and a correction stays readable and dated. Forget is for what should not have been stored at all — something private, something that only made sense inside one session, notes on a project that no longer exists.\n\nBy default a forgotten memory is closed, not deleted: it stops surfacing in `recall` and `context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it is the only way to remove something that must not stay on disk. Purging anonymous text does not purge the claims distilled from it; purging a document (an episode with a title and kind) is refused while live claims cite it, unless `cascade: true` purges those claims with it.\n\nForgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what matched, then send the identical call with `dry_run: false` to act. Any other second call is refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: true` previews them too.\n\nA query here matches on the words you write, not on their meaning: it selects the memories that contain those terms, so write the words you want gone. That is the opposite of `recall`, and deliberately — a deletion should never reach something that merely resembles what you asked for.",
+    "description": "Remove memories the store should no longer act on — by id when you know which, or by query when you do not.\n\nReach for `remember` with `supersedes` first: a claim that turned out to be wrong is a correction, and a correction stays readable and dated. Forget is for what should not have been stored at all — something private, something that only made sense inside one session, notes on a project that no longer exists.\n\nBy default a forgotten memory is closed, not deleted: it stops surfacing in `recall` and `context`, and stays visible to `inspect` with `forgotten` as the reason, so a mistaken forget is recoverable and an audit still adds up. `purge: true` deletes outright — the claim, its whole correction history, and for an episode its verbatim text and slices. That is unrecoverable, and it is the only way to remove something that must not stay on disk. Purging anonymous text does not purge the claims distilled from it; purging a document (an episode with a title and kind) is refused while live claims cite it, unless `cascade: true` purges those claims with it.\n\nForgetting by `query` is refused until the identical call has been made with `dry_run: true`, and a query matches on the words you write, not on their meaning — the opposite of `recall`, deliberately, so a deletion never reaches something that merely resembles what you asked for.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {

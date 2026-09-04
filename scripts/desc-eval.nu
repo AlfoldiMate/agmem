@@ -340,6 +340,7 @@ const SCENARIOS = [
     {
         name: "consolidate"
         asks: "when a user asks for the thing this tool does, is the tool found?"
+        env: {AGMEM_TOOLS: "all"}
         # A store big enough that reading it is not the same as auditing it.
         # The five-memory version of this seed measured nothing: an agent asked
         # `recall` for everything about atlas with `k: 50`, got the whole store
@@ -371,6 +372,7 @@ const SCENARIOS = [
     {
         name: "consolidate_large"
         asks: "past the k ceiling, does an answer that admits it is a page change what happens?"
+        env: {AGMEM_TOOLS: "all"}
         # `consolidate` with seventy more claims behind it and nothing else
         # different: same turn, same plants, same wording. Fifty rows is a store
         # one `recall` carries whole, which is what all three earlier batches
@@ -386,6 +388,7 @@ const SCENARIOS = [
     {
         name: "consolidate_write"
         asks: "with the lists in front of it and the turn allowing the write, does the right claim get closed?"
+        env: {AGMEM_TOOLS: "all"}
         # `consolidate_large` with the prohibition lifted: same seed, same
         # plants, same sentence up to the last clause. The large seed and not
         # the fifty-row one, because that is the arm where the tool is
@@ -795,7 +798,10 @@ def run-one [
                 command: $binary
                 # No daemon: one store per scenario, gone with the temp dir.
                 args: ["--no-daemon"]
-                env: (agmem-env $data $cache $overrides)
+                # A scenario may ask for its own environment — the consolidate
+                # trio runs with `AGMEM_TOOLS=all`, since #150 took the pair
+                # off the default list and the shell is now its door.
+                env: (agmem-env $data $cache ($overrides | merge ($scenario.env? | default {})))
             }
         }
     }
@@ -1395,8 +1401,10 @@ def descriptions [binary: string, cache: string, overrides: record] {
         | each {|message| $message | to json --raw}
         | str join "\n"
     )
+    # Always the whole surface: `descriptions.json` is the record of every
+    # tool's wording, whichever list a scenario's session reads.
     $wire
-    | with-env (agmem-env $data $cache $overrides) {
+    | with-env (agmem-env $data $cache ({AGMEM_TOOLS: "all"} | merge $overrides)) {
         ^$binary --no-daemon --embedder none | complete
     }
     | get stdout

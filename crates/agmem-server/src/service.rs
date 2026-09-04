@@ -197,31 +197,23 @@ impl AgmemService {
     /// one wall the model has to re-segment.
     #[tool(
         name = "remember",
-        description = "Store what this session learned — the distilled claims, and optionally the \
-verbatim text they came from — so the next session starts with it instead of working it out \
-again.\n\n\
-Call it as soon as something durable is said, unprompted and without waiting for the end of the \
-session: a preference or a standing instruction (\"always use X here\"), a decision and the \
-reason behind it, a convention, a constraint, a lesson from something that failed. Nothing you \
-say persists — an answer that ends \"noted\" or \"I'll remember that\" without a call to this \
-tool is a promise the next session cannot keep.\n\n\
+        description = "Store what this session learned — distilled claims, optionally with the verbatim \
+text they came from — so the next session starts with it instead of working it out again.\n\n\
+Call it as soon as something durable is said, unprompted: a preference or a standing instruction, \
+a decision and the reason behind it, a convention, a constraint, a lesson from a failure. Nothing \
+you say persists — an answer that ends \"noted\" without this call is a promise the next session \
+cannot keep.\n\n\
 Distil before you call: one atomic, self-contained claim per entry, in the third person, \
-understandable with no conversation around it — \"the user prefers Rust over Python for CLI \
-tools\", not \"he said he likes it better\". Do not store what the code or the ticket already \
+understandable with no conversation around it. Do not store what the code or the ticket already \
 records, or what only matters to this turn.\n\n\
-Nothing here is ever rewritten. When something already stored turns out to be wrong, send the \
-correction with `supersedes` set to the id of the claim it replaces, rather than storing a \
-contradiction: the old claim stays readable and dated, and only one of them is live. You do not \
-have to go looking for that id first — see `related` below.\n\n\
-Returns a diff rather than an acknowledgement — what was created, what was already stored, what \
-was closed, and the episode's id. Two of those carry the id and the text of a claim already in \
-the store: `duplicates`, which were **not** written, and `related`, which sit alongside what was. \
-Read the `content` of both before you answer. A correction reads much like the claim it corrects, \
-so it lands in one of those lists rather than in `created` — and if you report it as remembered \
-without checking, the claim that is still live is the old and wrong one. Neither list is a \
-verdict: nothing here judges that two claims disagree, which is why they are handed back rather \
-than acted on. When one of them says something your claim contradicts, send your claim again with \
-`supersedes` set to its id.",
+Nothing here is rewritten. When a stored claim turns out to be wrong, send the correction with \
+`supersedes` set to its id rather than storing a contradiction: the old claim stays readable and \
+dated, and only one is live.\n\n\
+Returns a diff, not an acknowledgement: `created`, `duplicates` (**not** written) and `related`, \
+the last two with the id and text of a claim already stored. Read both before you answer: a \
+correction reads much like the claim it corrects, so it lands there rather than in `created`, and \
+reporting it as remembered would leave the old, wrong claim live. When one of them contradicts \
+yours, send yours again with `supersedes` set to its id.",
         annotations(destructive_hint = false, idempotent_hint = true)
     )]
     async fn remember(
@@ -236,20 +228,16 @@ than acted on. When one of them says something your claim contradicts, send your
     /// The read verb (design §5.3).
     #[tool(
         name = "recall",
-        description = "Search everything past sessions stored — distilled claims and the verbatim \
-text behind them — before assuming, guessing, or asking the user something they may already have \
-said.\n\n\
-Call this at the start of a session, when a new topic comes up, and before any answer that \
-depends on what the user prefers, decided earlier, or has already been told. Ask in words: the \
-wording is matched literally and the meaning semantically, so a question works better than \
-keywords. Drop `query` entirely to list what `entities`, `tags` or `kinds` select on their own.\n\n\
-Hits come back ranked by how well they matched, how well they have held up since they were last \
-used, and how important the storing agent said they were — each of those is in `signals`, so a \
-claim that only surfaced because it never decays is visible as such. Every hit also carries the \
-`source` it was distilled from, which `inspect` takes as it stands — a claim worth acting on is \
-one to check, not one to hedge around. Nothing is hidden: a claim that was corrected is absent \
-unless you ask with `as_of` or `include_invalidated`, which is how you find out what was \
-believed at some earlier point.",
+        description = "Search everything past sessions stored — distilled claims and the verbatim text \
+behind them — before assuming, guessing, or asking something the user may already have said.\n\n\
+Call it at the start of a session, when a new topic comes up, and before any answer that depends \
+on what the user prefers or decided earlier. Ask in words: the wording is matched literally and \
+the meaning semantically, so a question works better than keywords. Drop `query` to list what \
+`entities`, `tags` or `kinds` select on their own.\n\n\
+Hits are ranked by match, by how well they have held up since last used, and by stated \
+importance — each visible in `signals`. Every hit carries the `source` it was distilled from, \
+which `inspect` takes as it stands. A corrected claim is absent unless you ask with `as_of` or \
+`include_invalidated`.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -331,13 +319,9 @@ correction history, and for an episode its verbatim text and slices. That is unr
 is the only way to remove something that must not stay on disk. Purging anonymous text does not \
 purge the claims distilled from it; purging a document (an episode with a title and kind) is \
 refused while live claims cite it, unless `cascade: true` purges those claims with it.\n\n\
-Forgetting by `query` takes two calls: send it once with `dry_run: true`, read exactly what \
-matched, then send the identical call with `dry_run: false` to act. Any other second call is \
-refused — including the same query with `purge` flipped. Ids need no dry run, though `dry_run: \
-true` previews them too.\n\n\
-A query here matches on the words you write, not on their meaning: it selects the memories that \
-contain those terms, so write the words you want gone. That is the opposite of `recall`, and \
-deliberately — a deletion should never reach something that merely resembles what you asked for.",
+Forgetting by `query` is refused until the identical call has been made with `dry_run: true`, \
+and a query matches on the words you write, not on their meaning — the opposite of `recall`, \
+deliberately, so a deletion never reaches something that merely resembles what you asked for.",
         annotations(destructive_hint = true)
     )]
     async fn forget(
@@ -386,26 +370,18 @@ Call it when memory has started to feel noisy: recall keeps returning the same c
 words, two stored claims look like they disagree, or you are picking up a project that has \
 accumulated a lot. It is a maintenance verb, not a search one — to find a particular claim, use \
 `recall`.\n\n\
-Five lists come back, and every claim in each carries its full text rather than only its id, so \
-you can judge it here instead of looking it up:\n\n\
-- `near_duplicates` — groups of live claims saying the same thing. Merge a group with one \
-`remember` call: the one wording worth keeping, and `supersedes` set to the ids of every other \
-member. `supersedes` takes a list, so a group of any size closes in that single call — reaching \
-for `forget` instead deletes the history the merge exists to keep. Read `min_similarity` before \
-you do: it is the weakest pair anywhere in the group, not the weakest link, so a low number means \
-the group chained together through a middle claim and may not be one claim at all.\n\
-- `contradictions` — pairs about the same subject that are close without being the same. Nothing \
-here has judged that they disagree; read both and decide. When one of them is wrong, send the \
-right one with the wrong one's id in `supersedes`.\n\
-- `stale_contexts` — claims filed as short-lived that recall has kept alive far past the point \
-their class would have expired them. If one turned out to be durable, store it again with a \
-slower `decay_class`; if it was only scaffolding for one session, `forget` it.\n\
-- `over_full_tags` — tags carrying more live lessons than a session's briefing will show for one \
-tag. Merge the way a duplicate group merges: one `remember` with the wording worth keeping and \
-the absorbed lessons' ids in `supersedes` — a few sharp lessons under a tag outwork a pile of \
-them.\n\
-- `orphan_documents` — documents no live claim cites. Nothing removes them on its own: distil \
-what one still says and store it citing the document, or `forget` it with `purge: true`.\n\n\
+Five lists come back, every claim in each with its full text so you can judge it here:\n\n\
+- `near_duplicates` — groups of live claims saying the same thing; merge a group with one \
+`remember` whose `supersedes` lists every other member. `min_similarity` is the weakest pair \
+anywhere in the group, so a low number means it chained through a middle claim.\n\
+- `contradictions` — pairs about one subject that are close without being the same; nothing here \
+has judged that they disagree. Read both and decide.\n\
+- `stale_contexts` — short-lived claims recall has kept alive past their class; store a durable \
+one again with a slower `decay_class`, `forget` scaffolding.\n\
+- `over_full_tags` — tags carrying more live lessons than a briefing shows for one; merge as a \
+duplicate group merges.\n\
+- `orphan_documents` — documents no live claim cites; distil and cite one, or `forget` it with \
+`purge: true`.\n\n\
 Every list can be empty, and usually some are — an empty answer means there is nothing worth your \
 attention, not that the call failed. `scanned` says what was actually compared.\n\n\
 This looks in the current space only, unlike every other read here: a tidy-up should not reach \
@@ -427,27 +403,19 @@ the shared user space unless you name it with `space`.",
     /// row like any other; the citations are what make it one.
     #[tool(
         name = "reflect",
-        description = "Store something you worked out from what memory already holds, together \
-with the ids it was drawn from.\n\n\
-Call it when reading several memories together tells you something none of them says on its own: a \
-pattern across three failures, what a preference and a constraint mean taken together, the reason \
-behind a decision that only became visible later. This is the verb for a conclusion you reached; \
-`remember` is the verb for something you were told.\n\n\
-`derived_from` is required, and it is the point. Pass the ids you actually read — memory ids, \
-episode ids, bare or prefixed, exactly as `recall`, `remember`, `context` or `inspect` handed them \
-to you. They are stored on the insight and shown by `inspect`, so a later session can see what the \
-conclusion was built on and check whether that evidence still stands, instead of taking it on \
-faith. An insight with nothing behind it is a `remember` call.\n\n\
-Stored as a `lesson` unless you say otherwise, which fades slowly and appears in the Lessons \
-section of `context`. Send `kind: \"summary\"` for a digest that stands in for the claims it \
-cites — when `context` runs short of budget it shows the summary in their place, and `inspect` \
-expands the cited claims in full, so compressing a finished session this way costs no detail. \
-Ids are looked for in this space and in the shared `user` space, so an \
-insight about the project may cite what is known about the person.\n\n\
-Returns the id it was stored under. `created: false` means an equivalent insight was already \
-there and nothing was written — read `content`, and if yours says something different, send it \
-again with `supersedes` set to that id. `related` carries live claims near the insight with their \
-text, for the same decision.",
+        description = "Store something you worked out from what memory already holds, together with \
+the ids it was drawn from.\n\n\
+Call it when reading several memories together tells you something none of them says on its own: \
+a pattern across failures, what a preference and a constraint mean taken together, the reason \
+behind a decision. This is the verb for a conclusion you reached; `remember` is for something you \
+were told, and an insight with nothing behind it is a `remember` call. The cited ids are shown by \
+`inspect`, so a later session can check the evidence still stands.\n\n\
+Stored as a `lesson` unless you say otherwise. `kind: \"summary\"` is a digest of the cited \
+claims: `context` shows it in their place under budget pressure and `inspect` expands them, so \
+compressing a finished session this way costs no detail.\n\n\
+Returns the id. `created: false` means an equivalent insight was already there — read its \
+`content`, and if yours differs, send it again with `supersedes` set to that id. `related` \
+carries nearby live claims with their text, for the same decision.",
         annotations(destructive_hint = false, idempotent_hint = true)
     )]
     async fn reflect(

@@ -77,7 +77,7 @@ Key properties:
 
 | Spectron | agmem |
 |---|---|
-| 7 verbs: remember/recall/context/reflect/forget/upload/inspect | 7 tools: **remember, recall, context, reflect, forget, consolidate, inspect** (upload dropped) |
+| 7 verbs: remember/recall/context/reflect/forget/upload/inspect | 7 tools: **remember, recall, context, reflect, forget, consolidate, inspect** (upload dropped); 5 on the default list, `forget` and `consolidate` CLI-first since #150 |
 | Server-side 3-stage LLM extraction pipeline | **The calling agent extracts**; tool descriptions + input schemas are the contract |
 | Reconciler (create/update/supersede/flag, confidence floor) | Caller-driven supersession (`supersedes:` param) + server-side dedup gate (exact hash + cosine ≥ 0.95 → report duplicate instead of insert) |
 | Tri-temporal (system/known/valid time) | **Bi-temporal-lite**: `created_at` (known) + `valid_from`/`invalid_at` (valid); supersede-don't-delete chains |
@@ -346,9 +346,9 @@ session's wording for every project sharing the store.
 | `remember` | `destructive: false, idempotent: true` | Write distilled memories and/or a verbatim episode |
 | `recall` | `read_only: true, open_world: false` | Hybrid search over memories + episode chunks |
 | `context` | `read_only: true, open_world: false` | Prompt-ready markdown block for session start / topic switch |
-| `forget` | `destructive: true` | Soft-invalidate (default) or purge by id/query |
+| `forget` | `destructive: true` | Soft-invalidate (default) or purge by id/query. Off the default list (#150): `agmem forget <id>…` from the shell, on MCP with `AGMEM_TOOLS=all` |
 | `inspect` | `read_only: true, open_world: false` | Provenance, history chains, stats, health |
-| `consolidate` | `read_only: true, open_world: false` | Merge, contradiction and staleness *candidates*, for the agent to act on (phase 3) |
+| `consolidate` | `read_only: true, open_world: false` | Merge, contradiction and staleness *candidates*, for the agent to act on (phase 3). Off the default list (#150): `agmem consolidate` from the shell, on MCP with `AGMEM_TOOLS=all` |
 | `reflect` | `destructive: false, idempotent: true` | Persist an insight with the memory/episode ids it was drawn from (phase 3) |
 
 Input schemas (sketch; exact schemars structs are a phase-1 task):
@@ -1191,6 +1191,7 @@ rather than details:
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only supported backend (`none` is a hidden test-only value) |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
+| `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session serves: `core` removes `consolidate` and `forget` from the router (neither listed nor callable), `all` serves every tool. Travels the daemon handshake per session; one-shots ask for `all` on their own (#150) |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
 | `--log`, `--log-file` / `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process instead of through the shared daemon (#37) |

@@ -89,8 +89,11 @@ it is on you at the point of the call.
 ## Shell work
 
 The harness sometimes routes file reads and edits through `Bash` rather than the
-Read/Edit tools. That chooses the *tool*, not the *language* — and the language
-is nu, for the same reason as everything else here.
+Read/Edit tools (auto mode's preamble asks for `cat`/`sed -n` and `sed`). That
+chooses the *tool*, not the *language* — and the language is nu, for the same
+reason as everything else here. Settled 2026-09-04: a windowed `sed -n 'a,bp'`
+read is fine (it is Read offset/limit spelled in shell); a `sed` *edit* is not,
+and the nudge stays.
 
 - **Edit with nu, not sed or python.**
   `open --raw f | str replace <old> <new> | save -f f` is safe onto the same

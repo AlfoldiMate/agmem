@@ -447,21 +447,73 @@ async fn consolidate_lists_the_documents_nothing_cites() {
     let orphan = agmem
         .remember(document("plan-b", "plan", "the orphan plan"))
         .await;
+    // Uncited for a month; the one written just now is not ignored yet.
+    age_episode(&agmem.db, orphan["episode"].as_str().expect("id"), 31).await;
+    agmem
+        .remember(document("plan-c", "plan", "the fresh plan"))
+        .await;
 
     let listed = agmem.inspect("docs:current").await;
     let documents = listed["found"]["documents"].as_array().expect("documents");
-    assert_eq!(documents[0]["id"], orphan["episode"]);
+    assert_eq!(documents.len(), 3, "{listed}");
+    assert_eq!(documents[0]["title"], "plan-c");
     assert_eq!(documents[0]["cited"], 0, "{listed}");
     assert_eq!(documents[1]["id"], cited["episode"]);
     assert_eq!(documents[1]["cited"], 1);
+    assert_eq!(
+        documents[2]["id"], orphan["episode"],
+        "the aged one lists last"
+    );
 
     let tidy = agmem.consolidate(json!({})).await;
     let orphans = tidy["orphan_documents"].as_array().expect("orphans");
-    assert_eq!(orphans.len(), 1, "{tidy}");
+    assert_eq!(
+        orphans.len(),
+        1,
+        "only the month-old orphan is reported: {tidy}"
+    );
     assert_eq!(
         orphans[0]["episode"],
         format!("episode:{}", orphan["episode"].as_str().expect("id"))
     );
     assert_eq!(orphans[0]["title"], "plan-b");
+    assert_eq!(orphans[0]["age_days"], 31, "{tidy}");
+    assert_eq!(tidy["churning_documents"], json!([]), "{tidy}");
+    agmem.shutdown().await;
+}
+
+#[tokio::test]
+async fn consolidate_lists_the_titles_rewritten_more_than_twice() {
+    let agmem = Harness::start(Arc::new(NoopEmbedder)).await;
+    let mut newest = String::new();
+    for n in 0..4 {
+        let written = agmem
+            .remember(document(
+                "plan-churn",
+                "plan",
+                &format!("version {n} of the plan"),
+            ))
+            .await;
+        newest = written["episode"].as_str().expect("id").to_owned();
+        age_episode(&agmem.db, &newest, 10 - n).await;
+    }
+    for n in 0..2 {
+        agmem
+            .remember(document("plan-steady", "review", &format!("take {n}")))
+            .await;
+    }
+
+    let tidy = agmem.consolidate(json!({})).await;
+    let churn = tidy["churning_documents"].as_array().expect("churn");
+    assert_eq!(churn.len(), 1, "two versions is not churn: {tidy}");
+    assert_eq!(churn[0]["title"], "plan-churn");
+    assert_eq!(churn[0]["doc_kind"], "plan");
+    assert_eq!(churn[0]["versions"], 4);
+    assert_eq!(churn[0]["newest"], format!("episode:{newest}"), "{tidy}");
+    assert!(
+        churn[0]["first_at"].as_str().expect("stamp")
+            < churn[0]["latest_at"].as_str().expect("stamp"),
+        "{tidy}"
+    );
     agmem.shutdown().await;
 }

@@ -13,7 +13,10 @@
 //! - `fixtures/eval/vectors.json` — every text the eval scenarios use,
 //!   written by `regenerate_eval_vectors` in `agmem-embed/tests/fastembed.rs`
 //!   from the scenario files. Scenario-driven, so a scenario edit regenerates
-//!   it wholesale.
+//!   it wholesale. Its sibling `fixtures/eval/documents-vectors.json` holds
+//!   every chunk of the fixture document corpus (issue #137), written by the
+//!   same regenerator and merged in here; a separate file so the corpus's
+//!   vectors do not churn with every scenario edit.
 //! - `fixtures/protocol/vectors.json` — every text the protocol tests write
 //!   or ask, which are Rust literals nothing static can enumerate. It grows
 //!   by capture: run the suite with `AGMEM_RECORD_VECTORS=1`, and any text
@@ -85,8 +88,20 @@ impl Kind {
 fn eval() -> &'static Recording {
     static EVAL: OnceLock<Recording> = OnceLock::new();
     EVAL.get_or_init(|| {
-        serde_json::from_str(include_str!("../fixtures/eval/vectors.json"))
-            .expect("fixtures/eval/vectors.json parses")
+        let mut eval: Recording =
+            serde_json::from_str(include_str!("../fixtures/eval/vectors.json"))
+                .expect("fixtures/eval/vectors.json parses");
+        let documents: Recording =
+            serde_json::from_str(include_str!("../fixtures/eval/documents-vectors.json"))
+                .expect("fixtures/eval/documents-vectors.json parses");
+        assert_eq!(
+            (&documents.model, documents.dim),
+            (&eval.model, eval.dim),
+            "the two eval recordings must come from the same model"
+        );
+        eval.passages.extend(documents.passages);
+        eval.queries.extend(documents.queries);
+        eval
     })
 }
 

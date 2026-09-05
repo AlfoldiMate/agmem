@@ -1,0 +1,102 @@
+{
+  "name": "agmem-notes",
+  "about": "Claims distilled from the fixture document corpus (issue #137): the retired .claude/notes plans and reviews about agmem itself. The only scenario whose documents and claims compete on topic — every chunk of the corpus talks about abstention floors, gates and chunking — so it is where a document displacing a claim would show first. One probe is keyword-shaped on purpose; the rest share as few words as possible with their targets.",
+  "seeds": [
+    {
+      "label": "abstain-floor",
+      "content": "recall empties its page when the top hit's measured cosine similarity is under the abstention floor; a hit with no vector-arm similarity never abstains, because the absence of a vector arm is not evidence of irrelevance.",
+      "entities": ["recall"]
+    },
+    {
+      "label": "floor-initial",
+      "content": "The abstention floor MIN_SIMILARITY starts at 0.60, pending calibration against the eval fixtures.",
+      "valid_from": "2026-08-31T00:00:00Z",
+      "entities": ["abstain"]
+    },
+    {
+      "label": "floor-calibrated",
+      "content": "The abstention floor MIN_SIMILARITY in tools/abstain.rs is 0.62, calibrated strictly between the weakest relevant probe hit and the strongest abstain-case top hit.",
+      "valid_from": "2026-09-02T00:00:00Z",
+      "supersedes": ["floor-initial"],
+      "entities": ["abstain"]
+    },
+    {
+      "label": "gate-threshold",
+      "content": "The write gate refuses a claim whose cosine against a live row is 0.95 or above, and the related band for consolidate runs from 0.75 to 0.90.",
+      "entities": ["remember"]
+    },
+    {
+      "label": "chunk-size",
+      "content": "An episode is cut into chunks of about 1,500 characters, at a paragraph boundary first, a sentence if the paragraph is too long, and only then at a word.",
+      "entities": ["chunk"]
+    },
+    {
+      "label": "bm25-only",
+      "content": "With --embedder none the store runs BM25-only at dim 0: rows carry no vectors, the near-dup gate has nothing to measure with, and recall can never abstain.",
+      "kind": "lesson",
+      "entities": ["embedder"]
+    },
+    {
+      "label": "distractor-lunch",
+      "content": "The team orders dumplings for Wednesday lunch."
+    }
+  ],
+  "probes": [
+    {
+      "query": "under what condition does a memory search come back with nothing?",
+      "k": 5,
+      "relevant": ["abstain-floor"]
+    },
+    {
+      "query": "MIN_SIMILARITY abstain floor value",
+      "k": 5,
+      "relevant": ["floor-calibrated"]
+    },
+    {
+      "query": "how large is one slice of stored session text?",
+      "k": 5,
+      "relevant": ["chunk-size"]
+    },
+    {
+      "query": "what does the server do with a write that restates something it already holds?",
+      "k": 5,
+      "relevant": ["gate-threshold"]
+    }
+  ],
+  "abstain": [
+    {
+      "query": "what is the office wifi password?",
+      "k": 5
+    },
+    {
+      "query": "when is the quarterly sales review scheduled?",
+      "k": 5
+    }
+  ],
+  "timeline": [
+    {
+      "query": "abstention floor",
+      "as_of": "2026-09-01T00:00:00Z",
+      "expect_top": "floor-initial",
+      "superseded_by": "floor-calibrated"
+    },
+    {
+      "query": "abstention floor",
+      "expect_top": "floor-calibrated",
+      "absent": ["floor-initial"]
+    }
+  ],
+  "temporal": [],
+  "gate": [
+    {
+      "candidate": "A write is refused by the gate when its cosine against a live row reaches 0.95, and the consolidate related band is 0.75–0.90.",
+      "expect": "gated",
+      "original": "gate-threshold"
+    },
+    {
+      "candidate": "The store pins SurrealDB 3.2.4 with the surrealkv backend.",
+      "expect": "stored"
+    }
+  ],
+  "context": []
+}

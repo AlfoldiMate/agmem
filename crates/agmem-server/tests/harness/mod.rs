@@ -450,3 +450,18 @@ pub fn hit_contents(found: &Value) -> Vec<&str> {
         .map(|hit| hit["content"].as_str().expect("content"))
         .collect()
 }
+
+/// Backdate an episode's `created_at` by `days`; the engine owns the column,
+/// so no write path produces an old document.
+pub async fn age_episode(db: &Db, id: &str, days: i64) {
+    db.query(
+        "UPDATE type::record('episode', $id)
+         SET created_at = time::now() - duration::from_days($days)",
+    )
+    .bind(("id", id.to_owned()))
+    .bind(("days", days))
+    .await
+    .expect("age the episode")
+    .check()
+    .expect("statements");
+}

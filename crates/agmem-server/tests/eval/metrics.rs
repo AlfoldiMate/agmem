@@ -13,6 +13,7 @@ use agmem_embed::Embedder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::documents::Document;
 use crate::harness::{headings, hits};
 use crate::scenario::{self, GateExpect, Scenario};
 
@@ -40,13 +41,43 @@ pub struct ScenarioScore {
 /// hit the probes handed back — the precision denominator, without which a
 /// trim's cost is measured and its benefit is not; `mrr` is the mean
 /// reciprocal rank of each probe's first relevant hit, rounded to four
-/// decimals so the doc round-trips to the same f64.
+/// decimals so the doc round-trips to the same f64; `ndcg5` (issue #137)
+/// is the mean nDCG@5 over the page as returned, chunk hits included at
+/// gain 0, so anything that displaces a relevant claim from the top of the
+/// page costs here even when `found` is unmoved.
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Retrieval {
     pub found: u32,
     pub expected: u32,
     pub returned: u32,
     pub mrr: f64,
+    pub ndcg5: f64,
+}
+
+/// The cut-off nDCG is scored at.
+pub const NDCG_AT: usize = 5;
+
+/// The most a scenario's `ndcg5` may fall with the document corpus seeded
+/// (issue #137's own number; `docs/eval/documents.md`).
+pub const DOCUMENTS_BAR: f64 = 0.02;
+
+/// Normalised discounted cumulative gain at [`NDCG_AT`] for one page:
+/// binary gain, `log2(rank + 1)` discount, ideal DCG from as many relevant
+/// items as could have fit. A page with nothing to find scores 0.
+pub fn ndcg(ranked: &[&str], relevant: &HashSet<&str>) -> f64 {
+    if relevant.is_empty() {
+        return 0.0;
+    }
+    let discount = |rank: usize| 1.0 / ((rank + 2) as f64).log2();
+    let dcg: f64 = ranked
+        .iter()
+        .take(NDCG_AT)
+        .enumerate()
+        .filter(|(_, id)| relevant.contains(*id))
+        .map(|(rank, _)| discount(rank))
+        .sum();
+    let ideal: f64 = (0..relevant.len().min(NDCG_AT)).map(discount).sum();
+    dcg / ideal
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -126,12 +157,36 @@ fn hit_ids(found: &Value) -> Vec<&str> {
 
 /// recall@k and MRR over the probes, each on a fresh store.
 pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retrieval {
+    retrieval_with(scenario, embedder, &[]).await.retrieval
+}
+
+/// [`Retrieval`] plus what the document corpus did to the pages (issue
+/// #137): how many chunk hits reached the top five across the probes, and
+/// how many pages the occupancy cap reshaped. Both are zero by construction
+/// when no documents are seeded and the scenario carries no episodes.
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RetrievalWithDocuments {
+    #[serde(flatten)]
+    pub retrieval: Retrieval,
+    pub chunk_hits_top5: u32,
+    pub capped_pages: u32,
+}
+
+/// [`retrieval`] with `documents` stored ahead of every probe's seeds.
+pub async fn retrieval_with(
+    scenario: &Scenario,
+    embedder: Arc<dyn Embedder>,
+    documents: &[Document],
+) -> RetrievalWithDocuments {
     let mut found = 0;
     let mut expected = 0;
     let mut returned_total = 0;
     let mut reciprocal_sum = 0.0;
+    let mut ndcg_sum = 0.0;
+    let mut chunk_hits_top5 = 0;
+    let mut capped_pages = 0;
     for probe in &scenario.probes {
-        let seeded = scenario::seed(scenario, embedder.clone()).await;
+        let seeded = scenario::seed_with(scenario, embedder.clone(), documents).await;
         let answer = seeded
             .agmem
             .recall(json!({ "query": probe.query, "k": probe.k }))
@@ -148,19 +203,78 @@ pub async fn retrieval(scenario: &Scenario, embedder: Arc<dyn Embedder>) -> Retr
         if let Some(rank) = returned.iter().position(|id| relevant.contains(id)) {
             reciprocal_sum += 1.0 / (rank + 1) as f64;
         }
+        ndcg_sum += ndcg(&returned, &relevant);
+        chunk_hits_top5 += hits(&answer)
+            .iter()
+            .take(NDCG_AT)
+            .filter(|hit| hit["kind"].as_str() == Some("episode"))
+            .count() as u32;
+        capped_pages += u32::from(!answer["capped"].is_null());
         seeded.shutdown().await;
     }
     let probes = scenario.probes.len();
-    let mrr = if probes == 0 {
-        0.0
-    } else {
-        round4(reciprocal_sum / probes as f64)
+    let mean = |sum: f64| {
+        if probes == 0 {
+            0.0
+        } else {
+            round4(sum / probes as f64)
+        }
     };
-    Retrieval {
-        found,
-        expected,
-        returned: returned_total,
-        mrr,
+    RetrievalWithDocuments {
+        retrieval: Retrieval {
+            found,
+            expected,
+            returned: returned_total,
+            mrr: mean(reciprocal_sum),
+            ndcg5: mean(ndcg_sum),
+        },
+        chunk_hits_top5,
+        capped_pages,
+    }
+}
+
+/// The measurement `docs/eval/documents.md` records: per scenario, the
+/// retrieval numbers with the corpus seeded beside the plain run's `ndcg5`,
+/// and the drop between them, which is what the bar is on.
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct DocumentsReport {
+    pub documents: u32,
+    pub scenarios: BTreeMap<String, DocumentsScore>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct DocumentsScore {
+    /// `ndcg5` with nothing but the scenario in the store.
+    pub ndcg5_without: f64,
+    /// `ndcg5_without − ndcg5`, rounded; positive means documents cost.
+    pub ndcg5_drop: f64,
+    #[serde(flatten)]
+    pub with_documents: RetrievalWithDocuments,
+}
+
+/// Scores retrieval for every scenario twice — bare, and with the corpus —
+/// and reports the difference.
+pub async fn documents_report(
+    scenarios: &[Scenario],
+    embedder: Arc<dyn Embedder>,
+    documents: &[Document],
+) -> DocumentsReport {
+    let mut scores = BTreeMap::new();
+    for scenario in scenarios {
+        let without = retrieval(scenario, embedder.clone()).await;
+        let with_documents = retrieval_with(scenario, embedder.clone(), documents).await;
+        scores.insert(
+            scenario.name.clone(),
+            DocumentsScore {
+                ndcg5_without: without.ndcg5,
+                ndcg5_drop: round4(without.ndcg5 - with_documents.retrieval.ndcg5),
+                with_documents,
+            },
+        );
+    }
+    DocumentsReport {
+        documents: documents.len() as u32,
+        scenarios: scores,
     }
 }
 
@@ -472,4 +586,27 @@ fn cited_ids(block: &str) -> Vec<&str> {
         .step_by(2)
         .filter(|token| token.len() >= 16 && token.chars().all(char::is_alphanumeric))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Hand-computed: relevant at ranks 1 and 3 of a five-hit page with three
+    /// relevant ids in total. DCG = 1/log2(2) + 1/log2(4) = 1.5; ideal over
+    /// three = 1 + 1/log2(3) + 1/log2(4) = 2.1309…; ratio 0.7039.
+    #[test]
+    fn ndcg_scores_a_page_by_rank_and_ideal() {
+        let relevant: HashSet<&str> = ["a", "b", "c"].into_iter().collect();
+        let page = ["a", "x", "b", "y", "z"];
+        assert_eq!(round4(ndcg(&page, &relevant)), 0.7039);
+        // Everything relevant on top is perfect; a relevant hit past the
+        // cut-off earns nothing; an empty page earns nothing.
+        assert_eq!(ndcg(&["a", "b", "c"], &relevant), 1.0);
+        assert_eq!(ndcg(&["x", "y", "z", "w", "v", "a"], &relevant), 0.0);
+        assert_eq!(ndcg(&[], &relevant), 0.0);
+        // One relevant id at rank 2: 1/log2(3) over an ideal of 1.
+        let one: HashSet<&str> = ["a"].into_iter().collect();
+        assert_eq!(round4(ndcg(&["x", "a"], &one)), 0.6309);
+    }
 }

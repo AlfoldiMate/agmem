@@ -51,6 +51,7 @@ dependencies = [
 name = "agmem-embed"
 version = "0.2.1"
 dependencies = [
+ "agmem-core",
  "fastembed",
  "serde_json",
  "thiserror",

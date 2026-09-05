@@ -517,6 +517,15 @@ pub(crate) struct StatsRow {
     pub(crate) live_by_kind: Vec<KindCountRow>,
 }
 
+/// One title's version count, from [`crate::queries::read::churning_documents`].
+#[derive(SurrealValue)]
+pub(crate) struct ChurnRow {
+    pub(crate) title: String,
+    pub(crate) versions: i64,
+    pub(crate) first_at: Datetime,
+    pub(crate) latest_at: Datetime,
+}
+
 /// The row spelling of a space name.
 pub(crate) fn space_str(space: &SpaceName) -> String {
     space.as_str().to_owned()

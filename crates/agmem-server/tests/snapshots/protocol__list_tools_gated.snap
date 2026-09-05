@@ -1,5 +1,6 @@
 ---
 source: crates/agmem-server/tests/protocol.rs
+assertion_line: 108
 expression: "&gated"
 ---
 [
@@ -22,6 +23,51 @@ expression: "&gated"
     },
     "outputSchema": {
       "$defs": {
+        "ChurningDocument": {
+          "description": "A title with more versions than a plan should need (#137).",
+          "properties": {
+            "doc_kind": {
+              "$ref": "#/$defs/DocKind",
+              "description": "The current version's kind."
+            },
+            "first_at": {
+              "description": "When the first version was stored, RFC3339.",
+              "type": "string"
+            },
+            "latest_at": {
+              "description": "When the current version was stored, RFC3339.",
+              "type": "string"
+            },
+            "newest": {
+              "description": "The current version, as `episode:<id>` — what `inspect` takes; the\nolder versions are what `forget` with `purge: true` should take.",
+              "type": "string"
+            },
+            "space": {
+              "description": "The space holding them.",
+              "type": "string"
+            },
+            "title": {
+              "description": "The title every version shares.",
+              "type": "string"
+            },
+            "versions": {
+              "description": "How many documents are filed under the title.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "space",
+            "title",
+            "doc_kind",
+            "versions",
+            "newest",
+            "first_at",
+            "latest_at"
+          ],
+          "type": "object"
+        },
         "Cluster": {
           "description": "Live claims close enough to be one claim.",
           "properties": {
@@ -261,6 +307,12 @@ expression: "&gated"
         "OrphanDocument": {
           "description": "A document nothing live cites.",
           "properties": {
+            "age_days": {
+              "description": "How many days it has sat uncited (#137).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
             "chars": {
               "description": "How many characters it has.",
               "format": "uint",
@@ -294,7 +346,8 @@ expression: "&gated"
             "title",
             "doc_kind",
             "chars",
-            "created_at"
+            "created_at",
+            "age_days"
           ],
           "type": "object"
         },
@@ -421,6 +474,13 @@ expression: "&gated"
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "churning_documents": {
+          "description": "Titles rewritten more than `CHURN_VERSIONS` times — a plan that keeps\nbeing redone (#137), most rewritten first. Nothing here acts: read the\nnewest version, `remember` or `reflect` what the versions agree on\nciting it, then `forget` the older versions with `purge: true`.",
+          "items": {
+            "$ref": "#/$defs/ChurningDocument"
+          },
+          "type": "array"
+        },
         "contradictions": {
           "description": "Pairs of live claims about one subject that may disagree. Nothing here\njudges that they do — read both and decide, and expect to find some of\nthese in `near_duplicates` too: an embedding cannot tell a claim from\nits own negation, so the two lists overlap by design.",
           "items": {
@@ -443,7 +503,7 @@ expression: "&gated"
           ]
         },
         "orphan_documents": {
-          "description": "Documents no live claim cites, newest first (#134). Nothing removes\nthese on its own: one may be waiting to be read, or its claims were\nclosed. Distil what it still says and `remember` it citing the\ndocument, or `forget` it with `purge: true` if it has served.",
+          "description": "Documents no live claim cites, stored more than `ORPHAN_GRACE_DAYS`\nago, newest first (#134, #137). Nothing removes these on its own: one\nmay still be waiting to be read, or its claims were closed. Distil\nwhat it still says and `remember` it citing the document, or `forget`\nit with `purge: true` if it has served.",
           "items": {
             "$ref": "#/$defs/OrphanDocument"
           },
@@ -485,7 +545,8 @@ expression: "&gated"
         "contradictions",
         "stale_contexts",
         "over_full_tags",
-        "orphan_documents"
+        "orphan_documents",
+        "churning_documents"
       ],
       "type": "object"
     },

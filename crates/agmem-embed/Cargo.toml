@@ -22,4 +22,7 @@ tracing = { workspace = true }
 workspace = true
 
 [dev-dependencies]
+# The eval vector regenerator chunks fixture documents exactly as `remember`
+# does, so the recorded texts are the texts the store will ask for.
+agmem-core = { workspace = true }
 serde_json = { workspace = true }

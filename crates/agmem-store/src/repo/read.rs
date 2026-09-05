@@ -29,7 +29,7 @@ use crate::StoreError;
 use crate::db::Db;
 use crate::queries::read as queries;
 use crate::types::{
-    self, ChainRow, ChunkReadRow, DocumentHeaderRow, DocumentsRow, EpisodeDetailRow,
+    self, ChainRow, ChunkReadRow, ChurnRow, DocumentHeaderRow, DocumentsRow, EpisodeDetailRow,
     EpisodeReadRow, LiveVectorsRow, LocatedRow, MemoryReadRow, NeighbourRow, SearchRow, StatsRow,
 };
 
@@ -882,22 +882,86 @@ pub async fn document_headers(
         .collect()
 }
 
-/// The documents in `space` no live memory cites, newest first (#134).
+/// The documents in `space` no live memory cites and that were stored more
+/// than `grace_days` ago, newest first (#134, #137).
 ///
 /// # Errors
 /// [`StoreError::Db`] for anything the engine rejects, and
 /// [`StoreError::MalformedRow`] for a row the schema cannot have written.
-pub async fn orphan_documents(db: &Db, space: &SpaceName) -> Result<Vec<Episode>, StoreError> {
+pub async fn orphan_documents(
+    db: &Db,
+    space: &SpaceName,
+    grace_days: u32,
+) -> Result<Vec<Episode>, StoreError> {
     let script = queries::orphan_documents();
     let mut resp = checked(
         db.query(&script.text)
             .bind(("space", types::space_str(space)))
+            .bind(("grace_days", i64::from(grace_days)))
             .await?,
     )?;
     resp.take::<Vec<EpisodeReadRow>>(script.result_index)?
         .into_iter()
         .map(EpisodeReadRow::into_episode)
         .collect()
+}
+
+/// A title rewritten more often than a plan should be (#137).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentChurn {
+    /// The title every version shares.
+    pub title: String,
+    /// The current version's kind.
+    pub doc_kind: DocKind,
+    /// How many documents are filed under the title.
+    pub versions: u32,
+    /// The current version.
+    pub newest: EpisodeId,
+    /// When the first version was stored.
+    pub first_at: Timestamp,
+    /// When the current version was stored.
+    pub latest_at: Timestamp,
+}
+
+/// The titles in `space` with more than `max_versions` documents under
+/// them, most rewritten first (#137).
+///
+/// # Errors
+/// [`StoreError::Db`] for anything the engine rejects, and
+/// [`StoreError::MalformedRow`] for a row the schema cannot have written.
+pub async fn churning_documents(
+    db: &Db,
+    space: &SpaceName,
+    max_versions: u32,
+) -> Result<Vec<DocumentChurn>, StoreError> {
+    let script = queries::churning_documents();
+    let mut resp = checked(
+        db.query(&script.text)
+            .bind(("space", types::space_str(space)))
+            .bind(("max_versions", i64::from(max_versions)))
+            .await?,
+    )?;
+    let rows = resp.take::<Vec<ChurnRow>>(script.result_index)?;
+    let mut churn = Vec::with_capacity(rows.len());
+    for row in rows {
+        let versions = documents_by_title(db, space, &row.title).await?;
+        let Some(newest) = versions.into_iter().next() else {
+            // Grouped a moment ago and gone now: a purge raced the read.
+            continue;
+        };
+        churn.push(DocumentChurn {
+            title: row.title,
+            doc_kind: newest
+                .doc_kind
+                .ok_or(StoreError::UnexpectedResponse("a document without a kind"))?,
+            versions: u32::try_from(row.versions)
+                .map_err(|_| StoreError::UnexpectedResponse("a negative version count"))?,
+            newest: newest.id,
+            first_at: types::to_timestamp(&row.first_at),
+            latest_at: types::to_timestamp(&row.latest_at),
+        });
+    }
+    Ok(churn)
 }
 
 /// What each of `ids` names in `spaces`, in the order they were asked about.

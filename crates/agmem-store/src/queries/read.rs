@@ -623,11 +623,13 @@ pub(crate) fn document_headers() -> Script {
     )
 }
 
-/// The documents no live memory cites, newest first (#134, `consolidate`).
+/// The documents no live memory cites, stored more than `$grace_days` ago,
+/// newest first (#134, #137, `consolidate`).
 ///
 /// One pass over the space rather than one guard query per document: the set
 /// of everything cited is small and built once, and the documents outside it
-/// are the answer.
+/// are the answer. The grace keeps a document written this week off the
+/// list — it has not been ignored, it has not been read yet.
 pub(crate) fn orphan_documents() -> Script {
     let mut builder = Builder::plain();
     builder.push(
@@ -641,9 +643,33 @@ pub(crate) fn orphan_documents() -> Script {
     builder.finish(format!(
         "SELECT {EPISODE_FIELDS} FROM episode
          WHERE space = $space AND doc_kind IS NOT NONE
+             AND created_at < time::now() - duration::from_days($grace_days)
              AND id NOT IN array::union($cited, $derived)
          ORDER BY created_at DESC"
     ))
+}
+
+/// The titles in `$space` with more than `$max_versions` documents filed
+/// under them, most rewritten first (#137, `consolidate`).
+///
+/// Versions are a convention over the `ep_title` index — a later document
+/// under the same title is the newer version — so churn is a count by title.
+/// The threshold is applied on the grouped rows, which SurrealDB spells as an
+/// outer `SELECT` rather than `HAVING`. The newest version's id and kind are
+/// not reachable through `GROUP BY`; the caller fetches them per churning
+/// title through [`documents_by_title`], and churning titles are few.
+pub(crate) fn churning_documents() -> Script {
+    Builder::plain().finish(
+        "SELECT * FROM (
+             SELECT title, count() AS versions,
+                    time::min(created_at) AS first_at, time::max(created_at) AS latest_at
+             FROM episode
+             WHERE space = $space AND doc_kind IS NOT NONE AND title IS NOT NONE
+             GROUP BY title
+         ) WHERE versions > $max_versions
+         ORDER BY versions DESC, latest_at DESC"
+            .to_owned(),
+    )
 }
 
 #[cfg(test)]

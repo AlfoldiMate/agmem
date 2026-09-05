@@ -12,6 +12,8 @@
 //! | `contradictions` | live claims about one subject that may disagree |
 //! | `stale_contexts` | short-lived notes that reinforcement has outlived |
 //! | `over_full_tags` | tags holding more live lessons than the bound (issue #82) |
+//! | `orphan_documents` | documents nothing live cites, past a grace period (#134, #137) |
+//! | `churning_documents` | titles rewritten more than twice (#137) |
 //!
 //! Nothing here is a verdict, and nothing here writes. Every candidate carries
 //! its **content**, not just its id — the lesson issue #38 paid for, where
@@ -101,11 +103,18 @@ pub struct ConsolidateResult {
     /// lessons beats an unbounded pile of them.
     pub over_full_tags: Vec<OverFullTag>,
 
-    /// Documents no live claim cites, newest first (#134). Nothing removes
-    /// these on its own: one may be waiting to be read, or its claims were
-    /// closed. Distil what it still says and `remember` it citing the
-    /// document, or `forget` it with `purge: true` if it has served.
+    /// Documents no live claim cites, stored more than `ORPHAN_GRACE_DAYS`
+    /// ago, newest first (#134, #137). Nothing removes these on its own: one
+    /// may still be waiting to be read, or its claims were closed. Distil
+    /// what it still says and `remember` it citing the document, or `forget`
+    /// it with `purge: true` if it has served.
     pub orphan_documents: Vec<OrphanDocument>,
+
+    /// Titles rewritten more than `CHURN_VERSIONS` times — a plan that keeps
+    /// being redone (#137), most rewritten first. Nothing here acts: read the
+    /// newest version, `remember` or `reflect` what the versions agree on
+    /// citing it, then `forget` the older versions with `purge: true`.
+    pub churning_documents: Vec<ChurningDocument>,
 
     /// Present only when something limited the answer — no embedder, a
     /// space larger than one pass compares, or more findings than one
@@ -135,7 +144,44 @@ pub struct OrphanDocument {
 
     /// When it was stored, RFC3339.
     pub created_at: String,
+
+    /// How many days it has sat uncited (#137).
+    pub age_days: u32,
 }
+
+/// A title with more versions than a plan should need (#137).
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ChurningDocument {
+    /// The space holding them.
+    pub space: String,
+
+    /// The title every version shares.
+    pub title: String,
+
+    /// The current version's kind.
+    pub doc_kind: DocKind,
+
+    /// How many documents are filed under the title.
+    pub versions: u32,
+
+    /// The current version, as `episode:<id>` — what `inspect` takes; the
+    /// older versions are what `forget` with `purge: true` should take.
+    pub newest: String,
+
+    /// When the first version was stored, RFC3339.
+    pub first_at: String,
+
+    /// When the current version was stored, RFC3339.
+    pub latest_at: String,
+}
+
+/// How long a document may sit uncited before `orphan_documents` lists it
+/// (#137): a week-old plan has not been ignored, it has not been read yet.
+pub const ORPHAN_GRACE_DAYS: u32 = 30;
+
+/// The most versions a title may have before `churning_documents` lists it
+/// (#137): "rewritten more than twice" is four or more documents.
+pub const CHURN_VERSIONS: u32 = 3;
 
 /// How much of one space this pass actually looked at.
 #[derive(Debug, Serialize, JsonSchema)]
@@ -255,6 +301,7 @@ pub async fn run(
     let mut stale = Vec::new();
     let mut over_full = Vec::new();
     let mut orphans = Vec::new();
+    let mut churning = Vec::new();
     let mut truncated_any = false;
 
     for space in &spaces {
@@ -292,12 +339,14 @@ pub async fn run(
             .map_err(|error| store_error(&error))?;
         over_full.extend(over_full_tags(space, lessons));
 
+        let now = Timestamp::now();
         orphans.extend(
-            repo::orphan_documents(service.db(), space)
+            repo::orphan_documents(service.db(), space, ORPHAN_GRACE_DAYS)
                 .await
                 .map_err(|error| store_error(&error))?
                 .into_iter()
                 .filter_map(|document| {
+                    let age = now.duration_since(document.created_at);
                     Some(OrphanDocument {
                         space: space.to_string(),
                         episode: format!("episode:{}", document.id),
@@ -305,7 +354,23 @@ pub async fn run(
                         doc_kind: document.doc_kind?,
                         chars: document.content.chars().count(),
                         created_at: document.created_at.to_string(),
+                        age_days: u32::try_from(age.as_hours().div_euclid(24)).unwrap_or(0),
                     })
+                }),
+        );
+        churning.extend(
+            repo::churning_documents(service.db(), space, CHURN_VERSIONS)
+                .await
+                .map_err(|error| store_error(&error))?
+                .into_iter()
+                .map(|churn| ChurningDocument {
+                    space: space.to_string(),
+                    title: churn.title,
+                    doc_kind: churn.doc_kind,
+                    versions: churn.versions,
+                    newest: format!("episode:{}", churn.newest),
+                    first_at: churn.first_at.to_string(),
+                    latest_at: churn.latest_at.to_string(),
                 }),
         );
     }
@@ -334,6 +399,7 @@ pub async fn run(
         stale_contexts: stale,
         over_full_tags: over_full,
         orphan_documents: orphans,
+        churning_documents: churning,
         note: note(service, truncated_any, capped, tags_capped),
     })
 }

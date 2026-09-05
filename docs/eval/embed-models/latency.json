@@ -1,0 +1,101 @@
+[
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 597.0,
+    "measured_at": "2026-09-05T13:20Z",
+    "model": "embeddinggemma-300m-q",
+    "p50_ms": 72.6,
+    "p95_ms": 73.0,
+    "profile": "release",
+    "shape": "claim"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 597.0,
+    "measured_at": "2026-09-05T13:20Z",
+    "model": "embeddinggemma-300m-q",
+    "p50_ms": 962.0,
+    "p95_ms": 1055.0,
+    "profile": "release",
+    "shape": "claims-16"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 597.0,
+    "measured_at": "2026-09-05T13:32Z",
+    "model": "embeddinggemma-300m-q",
+    "p50_ms": 34018.3,
+    "p95_ms": 36016.5,
+    "profile": "release",
+    "shape": "document-60-chunks"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 644.0,
+    "measured_at": "2026-09-05T13:33Z",
+    "model": "arctic-embed-m-v2.0-int8",
+    "p50_ms": 17.0,
+    "p95_ms": 17.8,
+    "profile": "release",
+    "shape": "claim"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 644.0,
+    "measured_at": "2026-09-05T13:33Z",
+    "model": "arctic-embed-m-v2.0-int8",
+    "p50_ms": 201.9,
+    "p95_ms": 205.3,
+    "profile": "release",
+    "shape": "claims-16"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 644.0,
+    "measured_at": "2026-09-05T13:35Z",
+    "model": "arctic-embed-m-v2.0-int8",
+    "p50_ms": 6111.9,
+    "p95_ms": 6298.3,
+    "profile": "release",
+    "shape": "document-60-chunks"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 64.0,
+    "measured_at": "2026-09-05T13:35Z",
+    "model": "bge-small-en-v1.5-q",
+    "p50_ms": 15.7,
+    "p95_ms": 16.4,
+    "profile": "release",
+    "shape": "claim"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 64.0,
+    "measured_at": "2026-09-05T13:35Z",
+    "model": "bge-small-en-v1.5-q",
+    "p50_ms": 127.8,
+    "p95_ms": 128.4,
+    "profile": "release",
+    "shape": "claims-16"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 64.0,
+    "measured_at": "2026-09-05T13:37Z",
+    "model": "bge-small-en-v1.5-q",
+    "p50_ms": 3893.1,
+    "p95_ms": 3923.6,
+    "profile": "release",
+    "shape": "document-60-chunks"
+  }
+]

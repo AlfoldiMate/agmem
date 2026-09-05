@@ -45,6 +45,25 @@
 /// out.
 pub(super) const MIN_SIMILARITY: f64 = 0.62;
 
+/// The floor in force: [`MIN_SIMILARITY`], or — only when built with the
+/// `eval-knobs` feature — whatever `AGMEM_ABSTENTION_FLOOR` says. The #133
+/// candidate probe scores embedders on other cosine scales and must not be
+/// cut on BGE's; a release build carries no knob (docs/eval/embed-models.md).
+fn floor() -> f64 {
+    #[cfg(feature = "eval-knobs")]
+    {
+        static FLOOR: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        *FLOOR.get_or_init(|| {
+            std::env::var("AGMEM_ABSTENTION_FLOOR")
+                .ok()
+                .map(|raw| raw.parse().expect("AGMEM_ABSTENTION_FLOOR is a float"))
+                .unwrap_or(MIN_SIMILARITY)
+        })
+    }
+    #[cfg(not(feature = "eval-knobs"))]
+    MIN_SIMILARITY
+}
+
 /// The smallest drop in `rrf_normalized` the knee will cut at.
 ///
 /// A floor, not the criterion: min–max normalisation stretches every pool
@@ -105,7 +124,7 @@ pub(super) fn apply<T>(
     // thrown away with the page), and only when the top row itself was
     // measured (an unmeasured top is a text-arm match standing on its own
     // evidence).
-    if signals(top).0.is_some() && best_similarity.is_some_and(|best| best < MIN_SIMILARITY) {
+    if signals(top).0.is_some() && best_similarity.is_some_and(|best| best < floor()) {
         page.clear();
         return Some(Verdict {
             kept: 0,
@@ -147,7 +166,7 @@ pub(super) fn apply<T>(
     // same rule the floor applies: absence of a measurement is not evidence.
     let mut index = 0;
     page.retain(|row| {
-        let expendable = signals(row).0.is_some_and(|sim| sim < MIN_SIMILARITY);
+        let expendable = signals(row).0.is_some_and(|sim| sim < floor());
         let keep = index <= knee || protected(row) || !expendable;
         index += 1;
         keep

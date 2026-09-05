@@ -11,12 +11,24 @@ repository.workspace = true
 # The cross-encoder rerank probe (issue #81): measurement surface only —
 # nothing in the server links it.
 rerank = []
+# The #133 embedding-candidate probe: measurement surface only — nothing in
+# the server links it. Loads the candidates behind `Embedder` with their own
+# prefixes and pooling so the numbers come off the production ORT path.
+candidates = ["dep:ndarray", "dep:serde_json", "dep:ort", "dep:tokenizers"]
 
 [dependencies]
 fastembed = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# fastembed's own ndarray, for the attention mask the last-token pooling reads.
+ndarray = { version = "0.17.2", default-features = false, optional = true }
+serde_json = { workspace = true, optional = true }
+# fastembed's own ort and tokenizers, for the one export it cannot drive
+# itself (Qwen3 wants `position_ids`); the pins match fastembed's so one
+# ONNX Runtime is linked.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["ndarray", "std"], optional = true }
+tokenizers = { version = "0.22.2", default-features = false, features = ["onig"], optional = true }
 
 [lints]
 workspace = true

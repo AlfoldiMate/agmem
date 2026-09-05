@@ -41,6 +41,13 @@ const REGENERATE_EVAL: &str =
 /// Set this to grow the protocol recording from the real model.
 const RECORD_ENV: &str = "AGMEM_RECORD_VECTORS";
 
+/// A directory holding `vectors.json` and `documents-vectors.json` recorded
+/// with another model (the #133 candidates, `docs/eval/embed-models.md`).
+/// When set, the committed recordings are not read at all and the protocol
+/// recording is neither consulted nor grown: its texts belong to BGE, and a
+/// candidate has no vector for any of them.
+const VECTORS_DIR_ENV: &str = "AGMEM_EVAL_VECTORS_DIR";
+
 /// The protocol recording, relative to the crate root; read and, under
 /// [`RECORD_ENV`], rewritten at runtime.
 const PROTOCOL_FIXTURE: &str = "tests/fixtures/protocol/vectors.json";
@@ -88,12 +95,26 @@ impl Kind {
 fn eval() -> &'static Recording {
     static EVAL: OnceLock<Recording> = OnceLock::new();
     EVAL.get_or_init(|| {
-        let mut eval: Recording =
-            serde_json::from_str(include_str!("../fixtures/eval/vectors.json"))
-                .expect("fixtures/eval/vectors.json parses");
-        let documents: Recording =
-            serde_json::from_str(include_str!("../fixtures/eval/documents-vectors.json"))
-                .expect("fixtures/eval/documents-vectors.json parses");
+        let (mut eval, documents): (Recording, Recording) = match std::env::var_os(VECTORS_DIR_ENV)
+        {
+            Some(dir) => {
+                let dir = PathBuf::from(dir);
+                let read = |name: &str| -> Recording {
+                    let path = dir.join(name);
+                    let raw = std::fs::read_to_string(&path)
+                        .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
+                    serde_json::from_str(&raw)
+                        .unwrap_or_else(|err| panic!("{} parses: {err}", path.display()))
+                };
+                (read("vectors.json"), read("documents-vectors.json"))
+            }
+            None => (
+                serde_json::from_str(include_str!("../fixtures/eval/vectors.json"))
+                    .expect("fixtures/eval/vectors.json parses"),
+                serde_json::from_str(include_str!("../fixtures/eval/documents-vectors.json"))
+                    .expect("fixtures/eval/documents-vectors.json parses"),
+            ),
+        };
         assert_eq!(
             (&documents.model, documents.dim),
             (&eval.model, eval.dim),
@@ -115,6 +136,14 @@ fn protocol() -> &'static Mutex<Recording> {
     static PROTOCOL: OnceLock<Mutex<Recording>> = OnceLock::new();
     PROTOCOL.get_or_init(|| {
         let recording = match std::fs::read_to_string(protocol_path()) {
+            // Another model's recordings: the protocol file is BGE's, so it
+            // stays unread, and `replay` panics on any text the override lacks.
+            _ if std::env::var_os(VECTORS_DIR_ENV).is_some() => Recording {
+                model: eval().model.clone(),
+                dim: eval().dim,
+                passages: BTreeMap::new(),
+                queries: BTreeMap::new(),
+            },
             Ok(raw) => serde_json::from_str(&raw).expect("fixtures/protocol/vectors.json parses"),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Recording {
                 model: eval().model.clone(),

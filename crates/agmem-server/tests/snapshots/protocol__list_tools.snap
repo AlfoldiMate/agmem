@@ -1,5 +1,6 @@
 ---
 source: crates/agmem-server/tests/protocol.rs
+assertion_line: 75
 expression: "&tools.tools"
 ---
 [
@@ -959,7 +960,7 @@ expression: "&tools.tools"
     "outputSchema": {
       "$defs": {
         "Capped": {
-          "description": "What the occupancy cap moved out of the page (issue #76).\n\nA page one source dominates reads exactly like a page many sources agree\non, so the cut is admitted here the way `truncated` admits `k`'s.",
+          "description": "What the occupancy caps moved out of the page (issues #76, #137).\n\nA page one source dominates reads exactly like a page many sources agree\non, so the cut is admitted here the way `truncated` admits `k`'s. Two\ncaps share the report: per source, and on verbatim text as a whole.",
           "properties": {
             "cap": {
               "description": "The most hits of this page any single source may hold.",
@@ -968,7 +969,7 @@ expression: "&tools.tools"
               "type": "integer"
             },
             "displaced": {
-              "description": "How many over-quota hits left the page for lower-ranked ones from\nother sources.",
+              "description": "How many over-quota hits left the page for lower-ranked ones from\nother sources, both caps together.",
               "format": "uint",
               "minimum": 0,
               "type": "integer"
@@ -978,17 +979,31 @@ expression: "&tools.tools"
               "type": "string"
             },
             "sources": {
-              "description": "The sources that were over quota — the same `episode:<id>` or\n`external:<origin>` strings the hits carry, ready for `inspect`.",
+              "description": "The sources that were over quota — the same `episode:<id>` or\n`external:<origin>` strings the hits carry, ready for `inspect`.\nEmpty when only the verbatim cap fired.",
               "items": {
                 "type": "string"
               },
               "type": "array"
+            },
+            "verbatim_cap": {
+              "description": "The most slots of this page verbatim text may hold.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "verbatim_displaced": {
+              "description": "How many verbatim slices left the page because slices of episodes,\nall together, may hold only `verbatim_cap` of its slots (issue #137).",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": [
             "cap",
             "displaced",
             "sources",
+            "verbatim_displaced",
+            "verbatim_cap",
             "note"
           ],
           "type": "object"

@@ -33,6 +33,21 @@ pub(super) fn cap(k: usize) -> usize {
     k.div_ceil(2).max(2)
 }
 
+/// How many slots of a page verbatim text — every chunk of every episode,
+/// together — may hold (issue #137, `docs/eval/documents.md`).
+///
+/// The per-source cap gives every document its own quota, so a store of
+/// twenty plans can fill a page with slices of twenty different plans, each
+/// under quota, and push the claims distilled from them off it entirely.
+/// Measured on the recorded eval with a real 18-document corpus: three of
+/// seven scenarios lost a labelled-relevant claim from the page; this cap
+/// alone brought every one back. One slot rather than zero because a slice
+/// is how a caller finds the document to `inspect`.
+pub(super) const VERBATIM_CAP: usize = 1;
+
+/// The one key every verbatim slice occupies under for [`VERBATIM_CAP`].
+pub(super) const VERBATIM_KEY: &str = "verbatim";
+
 /// What a re-slice pushed out of the page, for the answer to admit.
 pub(super) struct Resliced {
     /// How many rows left the top `k`.

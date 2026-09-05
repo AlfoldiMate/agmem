@@ -470,7 +470,9 @@ Input schemas (sketch; exact schemars structs are a phase-1 task):
 //     over_full_tags:  [{ space, tag, live, keep,        // fullest first (#82)
 //                         members: [MemoryView] }],      // strongest first
 //     orphan_documents: [{ space, episode: "episode:<id>", title, doc_kind,
-//                          chars, created_at }],  // documents no live memory cites (#134)
+//                          chars, created_at, age_days }],  // uncited past a 30-day grace (#134, #137)
+//     churning_documents: [{ space, title, doc_kind, versions, newest: "episode:<id>",
+//                            first_at, latest_at }],  // titles with 4+ versions (#137)
 //     note? }                          // present only when something limited it
 // Every candidate is a whole `MemoryView`, content included: the #38 finding
 // is that an id and a number are not something an agent can decide on.

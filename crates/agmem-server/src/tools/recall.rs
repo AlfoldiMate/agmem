@@ -142,43 +142,88 @@ pub struct Dated {
     pub note: String,
 }
 
-/// What the occupancy cap moved out of the page (issue #76).
+/// What the occupancy caps moved out of the page (issues #76, #137).
 ///
 /// A page one source dominates reads exactly like a page many sources agree
-/// on, so the cut is admitted here the way `truncated` admits `k`'s.
+/// on, so the cut is admitted here the way `truncated` admits `k`'s. Two
+/// caps share the report: per source, and on verbatim text as a whole.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct Capped {
     /// The most hits of this page any single source may hold.
     pub cap: usize,
 
     /// How many over-quota hits left the page for lower-ranked ones from
-    /// other sources.
+    /// other sources, both caps together.
     pub displaced: usize,
 
     /// The sources that were over quota — the same `episode:<id>` or
     /// `external:<origin>` strings the hits carry, ready for `inspect`.
+    /// Empty when only the verbatim cap fired.
     pub sources: Vec<String>,
+
+    /// How many verbatim slices left the page because slices of episodes,
+    /// all together, may hold only `verbatim_cap` of its slots (issue #137).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub verbatim_displaced: usize,
+
+    /// The most slots of this page verbatim text may hold.
+    pub verbatim_cap: usize,
 
     /// The same thing in words.
     pub note: String,
 }
 
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip signature")]
+fn is_zero(count: &usize) -> bool {
+    *count == 0
+}
+
 impl Capped {
-    fn new(cap: usize, resliced: occupancy::Resliced) -> Self {
-        let sources = resliced.sources.join(", ");
-        let note = format!(
-            "{displaced} strong hit(s) from {sources} were moved off this page: no single \
-             source may hold more than {cap} of its slots, so the surplus yielded to the \
-             next-ranked hits from elsewhere. Raise `k`, or `inspect` the source, to see \
-             what was deferred.",
-            displaced = resliced.displaced,
-        );
-        Self {
-            cap,
-            displaced: resliced.displaced,
-            sources: resliced.sources,
-            note,
+    /// `None` when neither cap changed the page.
+    fn new(
+        cap: usize,
+        by_source: Option<occupancy::Resliced>,
+        verbatim: Option<occupancy::Resliced>,
+    ) -> Option<Self> {
+        if by_source.is_none() && verbatim.is_none() {
+            return None;
         }
+        let mut note = String::new();
+        let mut displaced = 0;
+        let mut sources = Vec::new();
+        if let Some(resliced) = by_source {
+            displaced += resliced.displaced;
+            note.push_str(&format!(
+                "{displaced} strong hit(s) from {} were moved off this page: no single \
+                 source may hold more than {cap} of its slots, so the surplus yielded to \
+                 the next-ranked hits from elsewhere.",
+                resliced.sources.join(", "),
+                displaced = resliced.displaced,
+            ));
+            sources = resliced.sources;
+        }
+        let verbatim_displaced = verbatim.as_ref().map_or(0, |resliced| resliced.displaced);
+        if verbatim_displaced > 0 {
+            displaced += verbatim_displaced;
+            if !note.is_empty() {
+                note.push(' ');
+            }
+            note.push_str(&format!(
+                "{verbatim_displaced} verbatim slice(s) were moved off this page: slices \
+                 of episodes, all together, may hold at most {} of its slots, so the \
+                 distilled claims beside them ranked instead.",
+                occupancy::VERBATIM_CAP
+            ));
+        }
+        note.push_str(" Raise `k`, or `inspect` the source, to see what was deferred.");
+        Some(Self {
+            cap,
+            displaced,
+            sources,
+            verbatim_displaced,
+            verbatim_cap: occupancy::VERBATIM_CAP,
+            note,
+        })
     }
 }
 
@@ -590,14 +635,30 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     //     row back over quota, which is bounded (one row, one source) where
     //     capping last would re-create the miss the hop exists to fix.
     let page_cap = occupancy::cap(k);
-    let capped = occupancy::apply(&mut ranked, k, page_cap, |(hit, _)| match hit {
+    let by_source = occupancy::apply(&mut ranked, k, page_cap, |(hit, _)| match hit {
         StoreHit::Memory(memory) => match &memory.source {
             agmem_core::Source::Agent => None,
             source => Some(provenance(source)),
         },
         StoreHit::Chunk(chunk) => Some(format!("episode:{}", chunk.episode)),
-    })
-    .map(|resliced| Capped::new(page_cap, resliced));
+    });
+
+    // 2b'. Verbatim text, all of it together, may hold one slot of a page
+    //      (issue #137, `docs/eval/documents.md`): a store of long plans
+    //      out-votes its own distilled claims on retrieval score alone, and
+    //      the per-source cap above cannot see it — twenty documents get
+    //      twenty quotas. Measured: this pass alone put every labelled claim
+    //      the corpus had pushed off the page back on it.
+    let verbatim = occupancy::apply(
+        &mut ranked,
+        k,
+        occupancy::VERBATIM_CAP,
+        |(hit, _)| match hit {
+            StoreHit::Memory(_) => None,
+            StoreHit::Chunk(_) => Some(occupancy::VERBATIM_KEY.to_owned()),
+        },
+    );
+    let capped = Capped::new(page_cap, by_source, verbatim);
 
     // 2c. `take(k)` cuts at exactly the depth the hop arm's weakness leaves
     //     its rows at, and the row was fetched precisely to be seen — so a

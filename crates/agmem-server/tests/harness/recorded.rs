@@ -88,8 +88,9 @@ impl Kind {
 fn eval() -> &'static Recording {
     static EVAL: OnceLock<Recording> = OnceLock::new();
     EVAL.get_or_init(|| {
-        let mut eval: Recording = serde_json::from_str(include_str!("../fixtures/eval/vectors.json"))
-            .expect("fixtures/eval/vectors.json parses");
+        let mut eval: Recording =
+            serde_json::from_str(include_str!("../fixtures/eval/vectors.json"))
+                .expect("fixtures/eval/vectors.json parses");
         let documents: Recording =
             serde_json::from_str(include_str!("../fixtures/eval/documents-vectors.json"))
                 .expect("fixtures/eval/documents-vectors.json parses");

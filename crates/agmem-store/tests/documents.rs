@@ -332,7 +332,7 @@ async fn citers_and_orphans_read_through_both_columns() {
         .expect("episode");
     assert_eq!(detail.derived.len(), 1);
 
-    let orphans = repo::orphan_documents(&db, &space())
+    let orphans = repo::orphan_documents(&db, &space(), 0)
         .await
         .expect("orphans");
     assert_eq!(
@@ -354,7 +354,7 @@ async fn citers_and_orphans_read_through_both_columns() {
     )
     .await
     .expect("forget");
-    let orphans = repo::orphan_documents(&db, &space())
+    let orphans = repo::orphan_documents(&db, &space(), 0)
         .await
         .expect("orphans");
     assert_eq!(orphans.len(), 2);
@@ -364,5 +364,105 @@ async fn citers_and_orphans_read_through_both_columns() {
             .expect("citers")
             .is_empty(),
         "a closed memory no longer holds the document"
+    );
+}
+
+/// Backdate a document's `created_at` by `days`; the engine owns the column,
+/// so no write path produces an old document.
+async fn backdate(db: &Db, id: &agmem_core::EpisodeId, days: i64) {
+    db.query(
+        "UPDATE type::record('episode', $id)
+         SET created_at = time::now() - duration::from_days($days)",
+    )
+    .bind(("id", id.to_string()))
+    .bind(("days", days))
+    .await
+    .expect("backdate")
+    .check()
+    .expect("statements");
+}
+
+#[tokio::test]
+async fn orphans_older_than_the_grace_are_listed_and_younger_ones_are_not() {
+    let db = store().await;
+    let old = put(
+        &db,
+        document("plan-old", DocKind::Plan, "old", &[]),
+        Vec::new(),
+    )
+    .await;
+    let _young = put(
+        &db,
+        document("plan-young", DocKind::Plan, "young", &[]),
+        Vec::new(),
+    )
+    .await;
+    backdate(&db, &old, 31).await;
+
+    let orphans = repo::orphan_documents(&db, &space(), 30)
+        .await
+        .expect("orphans");
+    assert_eq!(
+        orphans.iter().map(|doc| doc.id.clone()).collect::<Vec<_>>(),
+        [old],
+        "the one-day-old document has not been ignored, only not read yet"
+    );
+    assert_eq!(
+        repo::orphan_documents(&db, &space(), 0)
+            .await
+            .expect("orphans")
+            .len(),
+        2,
+        "with no grace both are orphans"
+    );
+}
+
+#[tokio::test]
+async fn churn_counts_versions_by_title_and_names_the_newest() {
+    let db = store().await;
+    let mut newest = None;
+    for n in 0..4 {
+        let id = put(
+            &db,
+            document("plan-churn", DocKind::Plan, &format!("version {n}"), &[]),
+            Vec::new(),
+        )
+        .await;
+        backdate(&db, &id, 10 - n).await;
+        newest = Some(id);
+    }
+    for n in 0..2 {
+        put(
+            &db,
+            document("plan-steady", DocKind::Review, &format!("take {n}"), &[]),
+            Vec::new(),
+        )
+        .await;
+    }
+    put(&db, NewEpisode::new("anonymous text"), Vec::new()).await;
+
+    let churn = repo::churning_documents(&db, &space(), 3)
+        .await
+        .expect("churn");
+    assert_eq!(churn.len(), 1, "{churn:?}");
+    let row = &churn[0];
+    assert_eq!(row.title, "plan-churn");
+    assert_eq!(row.doc_kind, DocKind::Plan);
+    assert_eq!(row.versions, 4);
+    assert_eq!(Some(&row.newest), newest.as_ref());
+    assert!(row.first_at < row.latest_at, "{row:?}");
+    let span = row.latest_at.duration_since(row.first_at);
+    assert!(
+        (2..=4).contains(&span.as_hours().div_euclid(24)),
+        "first and latest are the extremes, not two arbitrary versions: {row:?}"
+    );
+
+    assert!(
+        repo::churning_documents(&db, &space(), 1)
+            .await
+            .expect("churn")
+            .iter()
+            .any(|row| row.title == "plan-steady"),
+        "a lower threshold lists the two-version title too"
     );
 }

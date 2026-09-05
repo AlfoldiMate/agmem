@@ -250,7 +250,10 @@ fn regenerate_eval_vectors() {
             document_chunks.insert(chunk, Vec::new());
         }
     }
-    assert!(!document_chunks.is_empty(), "the manifest lists no documents");
+    assert!(
+        !document_chunks.is_empty(),
+        "the manifest lists no documents"
+    );
 
     let cache = std::env::temp_dir().join("agmem-model-cache");
     let embedder = FastembedBackend::new(Some(cache)).expect("load model");

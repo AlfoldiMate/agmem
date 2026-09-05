@@ -444,7 +444,10 @@ agents read. A number with no wording attached cannot be compared to anything.
 `doc:<space>/<title>` and `docs` refs with the window on `inspect`; the
 citation guard and `cascade` on `forget`; `orphan_documents` as a fifth
 list on `consolidate`. `remember`'s description is unchanged — the new
-episode fields describe themselves in the parameter schema.
+episode fields describe themselves in the parameter schema. #137 later
+added a 30-day grace to `orphan_documents` and a sixth list,
+`churning_documents`, without touching the description: the result shape
+grew, the wording did not, so no batch was owed.
 
 One `--isolated` batch, 3 runs, every scenario, against the release build
 of this branch:

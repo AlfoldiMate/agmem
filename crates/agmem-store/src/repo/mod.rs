@@ -11,12 +11,12 @@ pub mod reindex;
 mod write;
 
 pub use read::{
-    Candidate, DEFAULT_POOL, DocumentFilter, DocumentHeader, DocumentSummary, Embedded,
-    EpisodeDetail, Filters, Hit, Liveness, Lookup, MAX_POOL, Neighbour, RRF_K, Search, SpaceStats,
-    StaleContexts, count_matching, direct_lookup, document_citers, document_headers, documents,
-    documents_by_title, episode, episode_of_chunk, history_chain, live_vectors, locate,
-    nearest_live, orphan_documents, prune_horizon_secs, reinforce, search_hybrid, spaces,
-    stale_contexts, stats,
+    Candidate, DEFAULT_POOL, DocumentChurn, DocumentFilter, DocumentHeader, DocumentSummary,
+    Embedded, EpisodeDetail, Filters, Hit, Liveness, Lookup, MAX_POOL, Neighbour, RRF_K, Search,
+    SpaceStats, StaleContexts, churning_documents, count_matching, direct_lookup, document_citers,
+    document_headers, documents, documents_by_title, episode, episode_of_chunk, history_chain,
+    live_vectors, locate, nearest_live, orphan_documents, prune_horizon_secs, reinforce,
+    search_hybrid, spaces, stale_contexts, stats,
 };
 pub use write::{
     AlreadyClosed, Batch, BatchOutcome, Forget, Forgotten, NewChunk, NewEpisode, NewMemory,

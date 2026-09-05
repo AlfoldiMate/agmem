@@ -40,8 +40,12 @@ a failure:
   was scaffolding, close it with `agmem forget <id>`.
 - **over_full_tags** — merge the way a duplicate group merges: one `remember`
   with the wording worth keeping and the absorbed lessons' ids in `supersedes`.
-- **orphan_documents** — distil what one still says and `remember` it citing
-  the document, or, once the user confirms, `agmem doc forget <id> --purge`.
+- **orphan_documents** — uncited for over a month: distil what one still
+  says and `remember` it citing the document, or, once the user confirms,
+  `agmem doc forget <id> --purge`.
+- **churning_documents** — a title with four or more versions: read the
+  newest, `remember`/`reflect` what the versions agree on citing it, then,
+  once the user confirms, purge the older versions.
 
 Merges and corrections go through MCP `remember`/`reflect` with `supersedes`;
 only closing and purging shell out. Report what you merged, corrected, and

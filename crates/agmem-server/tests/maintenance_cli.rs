@@ -14,6 +14,61 @@ use agmem_server::config::{Cli, CliCommand, ForgetArgs};
 use clap::Parser as _;
 use serde_json::Value;
 
+/// Backdate a document by `days` between two agmem processes:
+/// `orphan_documents` keeps a 30-day grace (#137), and `created_at` is the
+/// engine's column. The embedded store releases its lock only when the
+/// process that opened it exits, so this re-runs the test binary with
+/// [`backdate_helper`] selected and the work described in an env var.
+fn backdate(data: &tempfile::TempDir, id: &str, days: i64) {
+    let status = Command::new(std::env::current_exe().expect("test binary"))
+        .args(["--exact", "backdate_helper", "--nocapture"])
+        .env(
+            BACKDATE_ENV,
+            format!("{}|{id}|{days}", data.path().join("agmem.db").display()),
+        )
+        .status()
+        .expect("spawn the helper");
+    assert!(status.success(), "the backdate helper failed");
+}
+
+/// `<db path>|<episode id>|<days>` for [`backdate_helper`].
+const BACKDATE_ENV: &str = "AGMEM_TEST_BACKDATE";
+
+/// Not a test: the child process [`backdate`] spawns. A no-op in the
+/// ordinary run, where the env var is unset.
+#[test]
+fn backdate_helper() {
+    let Some(spec) = std::env::var_os(BACKDATE_ENV) else {
+        return;
+    };
+    let spec = spec.to_string_lossy();
+    let mut parts = spec.splitn(3, '|');
+    let (path, id, days) = (
+        parts.next().expect("path").to_owned(),
+        parts.next().expect("id").to_owned(),
+        parts.next().expect("days").parse::<i64>().expect("days"),
+    );
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime")
+        .block_on(async {
+            let db = agmem_store::db::connect(&format!("surrealkv://{path}"))
+                .await
+                .expect("open the store");
+            db.query(
+                "UPDATE type::record('episode', $id)
+                 SET created_at = time::now() - duration::from_days($days)",
+            )
+            .bind(("id", id))
+            .bind(("days", days))
+            .await
+            .expect("backdate")
+            .check()
+            .expect("statements");
+        });
+}
+
 /// What one `agmem --no-daemon … <tail>` process printed and how it ended:
 /// `Ok(stdout)` on exit 0, else `Err(stderr)`.
 fn run(data: &tempfile::TempDir, tail: &[&str], stdin: &str) -> Result<String, String> {
@@ -58,6 +113,7 @@ fn orphan(data: &tempfile::TempDir, title: &str) -> String {
 fn consolidate_lists_the_orphan_and_forget_purges_it() {
     let data = tempfile::tempdir().expect("tempdir");
     let id = orphan(&data, "plan-x");
+    backdate(&data, &id, 31);
 
     let report = run(&data, &["consolidate"], "").expect("consolidate");
     let report: Value = serde_json::from_str(&report).expect("the tool's JSON");

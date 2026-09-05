@@ -3,7 +3,7 @@
   "name": "agmem",
   "displayName": "agmem memory",
   "description": "Persistent cross-session memory for Claude Code: the agmem MCP server, a briefing injected at every session start, checkpoint and tidy commands, and hooks that log what memory was used so the store can learn what helped.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": { "name": "Mate Alfoldi" },
   "homepage": "https://github.com/AlfoldiMate/agmem",
   "repository": "https://github.com/AlfoldiMate/agmem",

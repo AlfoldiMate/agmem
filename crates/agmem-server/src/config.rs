@@ -56,6 +56,12 @@ pub struct Cli {
     #[arg(long, env = "AGMEM_EMBEDDER", value_enum, default_value_t = EmbedderKind::Fastembed)]
     pub embedder: EmbedderKind,
 
+    /// Where ONNX Runtime runs the model (#139). `auto` picks CoreML on a
+    /// macOS build made with `--features coreml` and the CPU everywhere
+    /// else; `coreml` insists and fails when it is not there.
+    #[arg(long, env = "AGMEM_ACCELERATOR", value_enum, default_value_t = AcceleratorKind::Auto)]
+    pub accelerator: AcceleratorKind,
+
     /// Which tools the MCP session serves. `core` (the default) leaves out
     /// the maintenance pair, `consolidate` and `forget`, which the shell
     /// serves as `agmem consolidate` and `agmem forget` (#150); `all` lists
@@ -380,6 +386,36 @@ impl EmbedderKind {
     }
 }
 
+/// Execution-provider selector (#139): the clap face of
+/// [`agmem_embed::Accelerator`], so `--help` lists the spellings and a
+/// spawned daemon is started with the same one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum AcceleratorKind {
+    /// CoreML where the build and the machine have it, else the CPU.
+    #[default]
+    Auto,
+    /// The CPU provider only — the portable default.
+    Cpu,
+    /// The CoreML provider; refuses to start when it is not available.
+    Coreml,
+}
+
+impl AcceleratorKind {
+    /// The embed crate's view of the same choice.
+    pub fn into_embed(self) -> agmem_embed::Accelerator {
+        match self {
+            Self::Auto => agmem_embed::Accelerator::Auto,
+            Self::Cpu => agmem_embed::Accelerator::Cpu,
+            Self::Coreml => agmem_embed::Accelerator::CoreMl,
+        }
+    }
+
+    /// The spelling `--accelerator` takes, for a spawned daemon's argv.
+    pub fn as_str(self) -> &'static str {
+        self.into_embed().as_str()
+    }
+}
+
 /// Which tools a session serves over MCP (#150).
 ///
 /// Every tool costs an agent context on every turn, and the maintenance pair
@@ -496,6 +532,9 @@ pub struct Config {
     pub db_pass: Option<String>,
     pub space: SpaceName,
     pub embedder: EmbedderKind,
+    /// Where the model runs (#139); process-local like `embedder`, so it
+    /// rides the spawn argv and not the handshake.
+    pub accelerator: AcceleratorKind,
     /// Which tools this session lists and serves — [`ToolGroup::Core`]
     /// unless `AGMEM_TOOLS=all`. Travels the daemon handshake like
     /// `tool_desc`, and the one-shots force `All` for their own session.
@@ -651,6 +690,7 @@ impl Cli {
             db_pass: self.db_pass,
             space,
             embedder: self.embedder,
+            accelerator: self.accelerator,
             tools: self.tools,
             pool: self.pool,
             max_k: self.max_k,

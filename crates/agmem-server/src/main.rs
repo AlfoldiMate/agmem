@@ -92,6 +92,7 @@ async fn in_process(cfg: config::Config) -> anyhow::Result<()> {
         schema,
         embedder = embedder.model_id(),
         dim = embedder.dim(),
+        accelerator = embedder.accelerator(),
         pruned,
         "store ready"
     );

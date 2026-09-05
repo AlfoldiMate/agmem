@@ -15,6 +15,12 @@
 //! through `ort` directly: its export takes a `position_ids` input fastembed
 //! never feeds, and it wants last-token pooling fastembed cannot express, so
 //! this module tokenises, runs the session and pools by hand.
+//!
+//! The fp32 siblings of the three encoder candidates exist for #139: Core
+//! ML has no kernel for the dynamic-quantisation ops (`MatMulInteger`,
+//! `DynamicQuantizeLinear`), so a quantised graph on the CoreML provider is
+//! a CPU graph with extra partition boundaries, and only the fp32 exports
+//! can measure what the accelerator does.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -29,6 +35,7 @@ use ort::session::builder::GraphOptimizationLevel;
 use ort::value::Value;
 use tokenizers::{PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 
+use crate::accelerator::Active;
 use crate::{EmbedError, Embedder};
 
 /// The environment variable that names the candidate a test run measures.
@@ -61,15 +68,24 @@ pub enum Candidate {
     ArcticMV2Int8,
     /// Qwen3-Embedding-0.6B, int8, last-token pooled.
     Qwen3Embedding06BInt8,
+    /// The control's fp32 export (#139: the accelerator measurement).
+    BgeSmallF32,
+    /// EmbeddingGemma-300M, fp32 (#139).
+    Gemma300MF32,
+    /// snowflake-arctic-embed-m-v2.0, fp32, CLS pooled (#139).
+    ArcticMV2F32,
 }
 
 impl Candidate {
     /// Every candidate, control first.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 7] = [
         Self::BgeSmallQ,
         Self::Gemma300MQ,
         Self::ArcticMV2Int8,
         Self::Qwen3Embedding06BInt8,
+        Self::BgeSmallF32,
+        Self::Gemma300MF32,
+        Self::ArcticMV2F32,
     ];
 
     /// The id a recording, a latency row and `AGMEM_CANDIDATE` spell.
@@ -80,6 +96,9 @@ impl Candidate {
             Self::Gemma300MQ => "embeddinggemma-300m-q",
             Self::ArcticMV2Int8 => "arctic-embed-m-v2.0-int8",
             Self::Qwen3Embedding06BInt8 => "qwen3-embedding-0.6b-int8",
+            Self::BgeSmallF32 => "bge-small-en-v1.5",
+            Self::Gemma300MF32 => "embeddinggemma-300m",
+            Self::ArcticMV2F32 => "arctic-embed-m-v2.0",
         }
     }
 
@@ -107,8 +126,8 @@ impl Candidate {
     #[must_use]
     pub fn dim(self) -> usize {
         match self {
-            Self::BgeSmallQ => crate::fastembed::DIM,
-            Self::Gemma300MQ | Self::ArcticMV2Int8 => 768,
+            Self::BgeSmallQ | Self::BgeSmallF32 => crate::fastembed::DIM,
+            Self::Gemma300MQ | Self::Gemma300MF32 | Self::ArcticMV2Int8 | Self::ArcticMV2F32 => 768,
             Self::Qwen3Embedding06BInt8 => 1024,
         }
     }
@@ -116,17 +135,19 @@ impl Candidate {
     /// What stored text is marked with, per the model's card.
     fn passage_prefix(self) -> &'static str {
         match self {
-            Self::BgeSmallQ => "passage: ",
-            Self::Gemma300MQ => "title: none | text: ",
-            Self::ArcticMV2Int8 | Self::Qwen3Embedding06BInt8 => "",
+            Self::BgeSmallQ | Self::BgeSmallF32 => "passage: ",
+            Self::Gemma300MQ | Self::Gemma300MF32 => "title: none | text: ",
+            Self::ArcticMV2Int8 | Self::ArcticMV2F32 | Self::Qwen3Embedding06BInt8 => "",
         }
     }
 
     /// What the search side is marked with, per the model's card.
     fn query_prefix(self) -> &'static str {
         match self {
-            Self::BgeSmallQ | Self::ArcticMV2Int8 => "query: ",
-            Self::Gemma300MQ => "task: search result | query: ",
+            Self::BgeSmallQ | Self::BgeSmallF32 | Self::ArcticMV2Int8 | Self::ArcticMV2F32 => {
+                "query: "
+            }
+            Self::Gemma300MQ | Self::Gemma300MF32 => "task: search result | query: ",
             Self::Qwen3Embedding06BInt8 => {
                 "Instruct: Given a web search query, retrieve relevant passages that answer \
                  the query\nQuery: "
@@ -139,11 +160,14 @@ impl Candidate {
     #[must_use]
     pub fn user_defined(self) -> Option<(&'static str, &'static str)> {
         match self {
-            Self::BgeSmallQ | Self::Gemma300MQ => None,
+            Self::BgeSmallQ | Self::Gemma300MQ | Self::BgeSmallF32 | Self::Gemma300MF32 => None,
             Self::ArcticMV2Int8 => Some((
                 "Snowflake/snowflake-arctic-embed-m-v2.0",
                 "onnx/model_int8.onnx",
             )),
+            Self::ArcticMV2F32 => {
+                Some(("Snowflake/snowflake-arctic-embed-m-v2.0", "onnx/model.onnx"))
+            }
             Self::Qwen3Embedding06BInt8 => Some((
                 "onnx-community/Qwen3-Embedding-0.6B-ONNX",
                 "onnx/model_int8.onnx",
@@ -225,45 +249,68 @@ impl CandidateBackend {
     /// fastembed; user-defined ones read the files the fetch script put
     /// there and fail naming the missing one.
     ///
+    /// `accelerator` is the execution provider every engine registers, so a
+    /// row measured under `coreml` ran on it whichever path loads the model.
+    ///
     /// # Errors
     /// [`EmbedError::Backend`] when a file is missing or the session will
     /// not build.
-    pub fn load(candidate: Candidate, cache_dir: &Path) -> Result<Self, EmbedError> {
+    pub fn load(
+        candidate: Candidate,
+        cache_dir: &Path,
+        accelerator: Active,
+    ) -> Result<Self, EmbedError> {
         let failed = |message: String| EmbedError::Backend {
             backend: candidate.id(),
             message,
         };
+        let providers = accelerator.execution_providers(Some(cache_dir));
         let engine = match candidate {
-            Candidate::BgeSmallQ | Candidate::Gemma300MQ => {
+            Candidate::BgeSmallQ
+            | Candidate::Gemma300MQ
+            | Candidate::BgeSmallF32
+            | Candidate::Gemma300MF32 => {
                 let builtin = match candidate {
                     Candidate::BgeSmallQ => EmbeddingModel::BGESmallENV15Q,
+                    Candidate::BgeSmallF32 => EmbeddingModel::BGESmallENV15,
+                    Candidate::Gemma300MF32 => EmbeddingModel::EmbeddingGemma300M,
                     _ => EmbeddingModel::EmbeddingGemma300MQ,
                 };
                 let options = TextInitOptions::new(builtin)
                     .with_cache_dir(cache_dir.to_path_buf())
-                    .with_show_download_progress(false);
+                    .with_show_download_progress(false)
+                    .with_execution_providers(providers);
                 let model = TextEmbedding::try_new(options).map_err(|e| failed(e.to_string()))?;
                 Engine::Fastembed(Mutex::new(model))
             }
-            Candidate::ArcticMV2Int8 => {
+            Candidate::ArcticMV2Int8 | Candidate::ArcticMV2F32 => {
                 let files = Files::read(candidate, cache_dir)?;
                 let tokenizer_files = files.tokenizer_files();
+                let quantization = match candidate {
+                    Candidate::ArcticMV2Int8 => QuantizationMode::Static,
+                    _ => QuantizationMode::None,
+                };
                 let model = UserDefinedEmbeddingModel::new(files.onnx, tokenizer_files)
-                    .with_quantization(QuantizationMode::Static)
+                    .with_quantization(quantization)
                     .with_pooling(Pooling::Cls);
-                let options = InitOptionsUserDefined::new().with_max_length(MAX_TOKENS);
+                let options = InitOptionsUserDefined::new()
+                    .with_max_length(MAX_TOKENS)
+                    .with_execution_providers(providers);
                 let model = TextEmbedding::try_new_from_user_defined(model, options)
                     .map_err(|e| failed(e.to_string()))?;
                 Engine::Fastembed(Mutex::new(model))
             }
             Candidate::Qwen3Embedding06BInt8 => {
                 let files = Files::read(candidate, cache_dir)?;
-                Engine::Direct(Mutex::new(Direct::load(files, QWEN3_EOS).map_err(failed)?))
+                Engine::Direct(Mutex::new(
+                    Direct::load(files, QWEN3_EOS, &providers).map_err(failed)?,
+                ))
             }
         };
         tracing::info!(
             model = candidate.id(),
             dim = candidate.dim(),
+            accelerator = accelerator.as_str(),
             "loaded candidate"
         );
         Ok(Self { candidate, engine })
@@ -398,7 +445,11 @@ struct Direct {
 }
 
 impl Direct {
-    fn load(files: Files, eos: &'static str) -> Result<Self, String> {
+    fn load(
+        files: Files,
+        eos: &'static str,
+        providers: &[ort::ep::ExecutionProviderDispatch],
+    ) -> Result<Self, String> {
         let mut tokenizer = Tokenizer::from_bytes(&files.tokenizer).map_err(|e| e.to_string())?;
         let pad_id = tokenizer
             .token_to_id(eos)
@@ -420,6 +471,8 @@ impl Direct {
         let session = Session::builder()
             .map_err(|e| e.to_string())?
             .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| e.to_string())?
+            .with_execution_providers(providers)
             .map_err(|e| e.to_string())?
             .commit_from_memory(&files.onnx)
             .map_err(|e| e.to_string())?;

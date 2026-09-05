@@ -97,5 +97,82 @@
     "p95_ms": 3923.6,
     "profile": "release",
     "shape": "document-60-chunks"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 23774.0,
+    "measured_at": "2026-09-05T22:09Z",
+    "model": "bge-small-en-v1.5",
+    "p50_ms": 11.9,
+    "p95_ms": 14.4,
+    "profile": "release",
+    "shape": "claim"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 23774.0,
+    "measured_at": "2026-09-05T22:09Z",
+    "model": "bge-small-en-v1.5",
+    "p50_ms": 136.0,
+    "p95_ms": 141.4,
+    "profile": "release",
+    "shape": "claims-16"
+  },
+  {
+    "accelerator": "cpu",
+    "chip": "Apple M1 Pro",
+    "load_ms": 23774.0,
+    "measured_at": "2026-09-05T22:11Z",
+    "model": "bge-small-en-v1.5",
+    "p50_ms": 4850.4,
+    "p95_ms": 5307.6,
+    "profile": "release",
+    "shape": "document-60-chunks"
+  },
+  {
+    "model": "bge-small-en-v1.5-q",
+    "accelerator": "coreml",
+    "shape": "claim",
+    "p50_ms": 25.3,
+    "p95_ms": 26.6,
+    "load_ms": 3587.0,
+    "chip": "Apple M1 Pro",
+    "profile": "release",
+    "measured_at": "2026-09-06T00:00"
+  },
+  {
+    "model": "bge-small-en-v1.5-q",
+    "accelerator": "coreml",
+    "shape": "claims-16",
+    "p50_ms": 175.5,
+    "p95_ms": 182.0,
+    "load_ms": 3587.0,
+    "chip": "Apple M1 Pro",
+    "profile": "release",
+    "measured_at": "2026-09-06T00:00"
+  },
+  {
+    "model": "bge-small-en-v1.5",
+    "accelerator": "coreml",
+    "shape": "claim",
+    "p50_ms": 22.0,
+    "p95_ms": 24.2,
+    "load_ms": 5923.0,
+    "chip": "Apple M1 Pro",
+    "profile": "release",
+    "measured_at": "2026-09-06T00:00"
+  },
+  {
+    "model": "bge-small-en-v1.5",
+    "accelerator": "coreml",
+    "shape": "claims-16",
+    "p50_ms": 306.6,
+    "p95_ms": 313.5,
+    "load_ms": 5923.0,
+    "chip": "Apple M1 Pro",
+    "profile": "release",
+    "measured_at": "2026-09-06T00:00"
   }
 ]

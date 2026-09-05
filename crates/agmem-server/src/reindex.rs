@@ -63,9 +63,10 @@ pub async fn run(cfg: &Config) -> anyhow::Result<()> {
     // anything is cleared, so a missing model costs nothing.
     let embedder = crate::embedder::build(cfg)?;
     eprintln!(
-        "  ok    embedder             {} ({}d)",
+        "  ok    embedder             {} ({}d, {})",
         embedder.model_id(),
-        embedder.dim()
+        embedder.dim(),
+        embedder.accelerator()
     );
 
     let report = execute(&db, embedder).await?;

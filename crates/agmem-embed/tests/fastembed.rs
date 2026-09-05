@@ -21,7 +21,8 @@ fn related_sentences_land_closer_than_unrelated_ones() {
     // A cache under the temp dir, not `./.fastembed_cache` in whatever
     // directory the test runner happened to start in.
     let cache = std::env::temp_dir().join("agmem-model-cache");
-    let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+    let embedder =
+        FastembedBackend::new(Some(cache), agmem_embed::Accelerator::Cpu).expect("load model");
     assert_eq!(embedder.dim(), DIM);
 
     let passages = vec![
@@ -73,7 +74,8 @@ fn regenerate_knn_fixture() {
     }
 
     let cache = std::env::temp_dir().join("agmem-model-cache");
-    let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+    let embedder =
+        FastembedBackend::new(Some(cache), agmem_embed::Accelerator::Cpu).expect("load model");
 
     let rows = [
         "The user formats Python with black.",
@@ -268,7 +270,8 @@ fn regenerate_eval_vectors() {
             Some((embedder, id)) => (embedder, eval_dir.join("candidates").join(&id), id),
             None => {
                 let cache = std::env::temp_dir().join("agmem-model-cache");
-                let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+                let embedder = FastembedBackend::new(Some(cache), agmem_embed::Accelerator::Cpu)
+                    .expect("load model");
                 (
                     Box::new(embedder),
                     eval_dir.clone(),
@@ -307,11 +310,66 @@ fn regenerate_eval_vectors() {
 fn candidate_recorder() -> Option<(Box<dyn Embedder>, String)> {
     use agmem_embed::candidates::{Candidate, CandidateBackend, cache_dir};
     let candidate = Candidate::from_env()?;
-    let backend = CandidateBackend::load(candidate, &cache_dir()).expect("load candidate");
+    let backend = CandidateBackend::load(candidate, &cache_dir(), agmem_embed::Active::Cpu)
+        .expect("load candidate");
     Some((Box::new(backend), candidate.id().to_owned()))
 }
 
 #[cfg(not(feature = "candidates"))]
 fn candidate_recorder() -> Option<(Box<dyn Embedder>, String)> {
     None
+}
+
+/// The #139 drift check: the accelerated session must reproduce the CPU
+/// vectors closely enough that no threshold moves. Every fixture text —
+/// passages and queries alike — is embedded on both providers, and the
+/// smallest cosine between the pairs has to clear the bar in
+/// `docs/eval/coreml-ep.md`.
+#[cfg(feature = "coreml")]
+#[test]
+#[ignore = "runs the real model on the CoreML execution provider"]
+fn coreml_vectors_match_cpu() {
+    use agmem_embed::Accelerator;
+
+    const BAR: f32 = 0.999;
+
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../agmem-server/tests/fixtures/eval/vectors.json");
+    let recording: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixture).expect("read vectors.json"))
+            .expect("vectors.json parses");
+    let texts = |section: &str| -> Vec<String> {
+        recording[section]
+            .as_object()
+            .expect(section)
+            .keys()
+            .cloned()
+            .collect()
+    };
+    let passages = texts("passages");
+    let queries = texts("queries");
+    assert!(!passages.is_empty() && !queries.is_empty(), "empty fixture");
+
+    let cache = std::env::temp_dir().join("agmem-model-cache");
+    let cpu = FastembedBackend::new(Some(cache.clone()), Accelerator::Cpu).expect("load on cpu");
+    let coreml = FastembedBackend::new(Some(cache), Accelerator::CoreMl).expect("load on coreml");
+    assert_eq!(coreml.accelerator(), "coreml");
+
+    let mut cosines: Vec<f32> = Vec::with_capacity(passages.len() + queries.len());
+    let a = cpu.embed_passages(&passages).expect("cpu passages");
+    let b = coreml.embed_passages(&passages).expect("coreml passages");
+    cosines.extend(a.iter().zip(&b).map(|(x, y)| cosine(x, y)));
+    for query in &queries {
+        let x = cpu.embed_query(query).expect("cpu query");
+        let y = coreml.embed_query(query).expect("coreml query");
+        cosines.push(cosine(&x, &y));
+    }
+
+    let min = cosines.iter().copied().fold(f32::INFINITY, f32::min);
+    let mean = cosines.iter().sum::<f32>() / cosines.len() as f32;
+    eprintln!(
+        "coreml vs cpu over {} texts: min cosine {min:.6}, mean {mean:.6}",
+        cosines.len()
+    );
+    assert!(min >= BAR, "min cosine {min:.6} is under the {BAR} bar");
 }

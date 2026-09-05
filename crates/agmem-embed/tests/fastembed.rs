@@ -156,6 +156,8 @@ fn regenerate_eval_vectors() {
     /// One recording file: passages and queries keyed by text, sorted.
     fn write_recording(
         path: &std::path::Path,
+        model: &str,
+        dim: usize,
         passages: &BTreeMap<String, Vec<f32>>,
         queries: &BTreeMap<String, Vec<f32>>,
     ) {
@@ -169,17 +171,19 @@ fn regenerate_eval_vectors() {
         let passage_entries: Vec<String> = passages.iter().map(entry).collect();
         let query_entries: Vec<String> = queries.iter().map(entry).collect();
         let document = format!(
-            "{{\n  \"model\": \"BGE-small-en-v1.5-q\",\n  \"dim\": {},\n  \
+            "{{\n  \"model\": {},\n  \"dim\": {},\n  \
              \"passages\": {{\n{}\n  }},\n  \"queries\": {{\n{}\n  }}\n}}\n",
-            DIM,
+            serde_json::to_string(model).expect("encode model"),
+            dim,
             passage_entries.join(",\n"),
             query_entries.join(",\n")
         );
+        std::fs::create_dir_all(path.parent().expect("fixture dir")).expect("create fixture dir");
         std::fs::write(path, document).expect("write fixture");
     }
 
     /// Embeds every key of `passages` in place, in one batch.
-    fn fill_passages(embedder: &FastembedBackend, passages: &mut BTreeMap<String, Vec<f32>>) {
+    fn fill_passages(embedder: &dyn Embedder, passages: &mut BTreeMap<String, Vec<f32>>) {
         let texts: Vec<String> = passages.keys().cloned().collect();
         let vectors = embedder.embed_passages(&texts).expect("embed passages");
         for (text, vector) in texts.iter().zip(vectors) {
@@ -255,19 +259,59 @@ fn regenerate_eval_vectors() {
         "the manifest lists no documents"
     );
 
-    let cache = std::env::temp_dir().join("agmem-model-cache");
-    let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+    // The shipped model writes the committed fixtures; under the `candidates`
+    // feature, `AGMEM_CANDIDATE` records the same texts with a #133 candidate
+    // into a gitignored sibling directory the eval reads through
+    // `AGMEM_EVAL_VECTORS_DIR` (docs/eval/embed-models.md).
+    let (embedder, out_dir, model): (Box<dyn Embedder>, std::path::PathBuf, String) =
+        match candidate_recorder() {
+            Some((embedder, id)) => (embedder, eval_dir.join("candidates").join(&id), id),
+            None => {
+                let cache = std::env::temp_dir().join("agmem-model-cache");
+                let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+                (
+                    Box::new(embedder),
+                    eval_dir.clone(),
+                    "BGE-small-en-v1.5-q".to_owned(),
+                )
+            }
+        };
+    let dim = embedder.dim();
 
-    fill_passages(&embedder, &mut passages);
+    fill_passages(embedder.as_ref(), &mut passages);
     for (text, slot) in &mut queries {
         *slot = embedder.embed_query(text).expect("embed query");
     }
-    write_recording(&eval_dir.join("vectors.json"), &passages, &queries);
-
-    fill_passages(&embedder, &mut document_chunks);
     write_recording(
-        &eval_dir.join("documents-vectors.json"),
+        &out_dir.join("vectors.json"),
+        &model,
+        dim,
+        &passages,
+        &queries,
+    );
+
+    fill_passages(embedder.as_ref(), &mut document_chunks);
+    write_recording(
+        &out_dir.join("documents-vectors.json"),
+        &model,
+        dim,
         &document_chunks,
         &BTreeMap::new(),
     );
+    eprintln!("recorded {model} ({dim}d) into {}", out_dir.display());
+}
+
+/// The #133 candidate `AGMEM_CANDIDATE` names, loaded, with its id; `None`
+/// when unset or when the feature is off.
+#[cfg(feature = "candidates")]
+fn candidate_recorder() -> Option<(Box<dyn Embedder>, String)> {
+    use agmem_embed::candidates::{Candidate, CandidateBackend, cache_dir};
+    let candidate = Candidate::from_env()?;
+    let backend = CandidateBackend::load(candidate, &cache_dir()).expect("load candidate");
+    Some((Box::new(backend), candidate.id().to_owned()))
+}
+
+#[cfg(not(feature = "candidates"))]
+fn candidate_recorder() -> Option<(Box<dyn Embedder>, String)> {
+    None
 }

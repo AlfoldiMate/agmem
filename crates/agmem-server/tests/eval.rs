@@ -25,7 +25,7 @@ mod scenario;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use agmem_embed::NoopEmbedder;
+use agmem_embed::{Embedder as _, NoopEmbedder};
 use harness::recorded::RecordedEmbedder;
 
 fn eval_doc_path(name: &str) -> PathBuf {
@@ -291,4 +291,39 @@ async fn record_documents() {
     let report = metrics::documents_report(&scenarios, Arc::new(RecordedEmbedder), &corpus).await;
     let block = serde_json::to_string_pretty(&report).expect("serialize");
     record_block(&eval_doc_path("documents.md"), DOCUMENTS_MARKER, &block);
+}
+
+/// The #133 candidate probe's retrieval column (docs/eval/embed-models.md):
+/// the full scorecard, plus the mean `ndcg5` over scenarios, for whatever
+/// recordings `AGMEM_EVAL_VECTORS_DIR` points at. Run twice per candidate —
+/// with `AGMEM_ABSTENTION_FLOOR=0` for pure ranking, and at the candidate's
+/// re-derived floor — under `--features eval-knobs`; without the directory
+/// set it scores the committed BGE recordings, which is the control.
+#[tokio::test]
+#[ignore = "diagnostic: prints the scorecard for the recordings AGMEM_EVAL_VECTORS_DIR names"]
+async fn candidate_scorecard() {
+    let scenarios = scenario::all();
+    let scored = metrics::scorecard(&scenarios, Arc::new(RecordedEmbedder)).await;
+    let ndcg: Vec<f64> = scored
+        .scenarios
+        .values()
+        .map(|score| score.retrieval.ndcg5)
+        .collect();
+    let mean = ndcg.iter().sum::<f64>() / ndcg.len() as f64;
+    let found: u32 = scored.scenarios.values().map(|s| s.retrieval.found).sum();
+    let expected: u32 = scored
+        .scenarios
+        .values()
+        .map(|s| s.retrieval.expected)
+        .sum();
+    eprintln!(
+        "{}",
+        serde_json::to_string_pretty(&scored).expect("serialize")
+    );
+    eprintln!(
+        "SUMMARY model={} dim={} floor={} ndcg5_mean={mean:.4} found={found}/{expected}",
+        RecordedEmbedder.model_id(),
+        RecordedEmbedder.dim(),
+        std::env::var("AGMEM_ABSTENTION_FLOOR").unwrap_or_else(|_| "default".to_owned()),
+    );
 }

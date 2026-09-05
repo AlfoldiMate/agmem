@@ -6,11 +6,17 @@
 pairs above the paraphrase noise that fills `consolidate`'s contradictions
 list? The bar was written before this ran: docs/eval/pair-rank.md.
 
-    uv run scripts/pair-rank-probe.py DUMP
+    uv run scripts/pair-rank-probe.py DUMP [--vectors FILE]
 
 DUMP is a JSON array of memory rows from a *copy* of the store, as the doc
 shows (the same dump nli-gate-probe.py takes, plus created_at, tags and
 writer). numpy only: the point of the probe is that no model is involved.
+
+`--vectors FILE` (issue #133) swaps every row's `embedding` for the one FILE
+maps its id to — a candidate model's, written by `embed_dump` in
+`crates/agmem-embed/tests/candidates.rs` — *after* the labelled sets are
+fixed on the dump's own vectors, so the sets stay the shipped ones and only
+the `cosine (control)` numbers move: they become the candidate's AUC.
 
 Every feature reads three fields — content, entities, created_at — through
 `View`, which refuses anything else. The labels (invalid_reason,
@@ -286,6 +292,8 @@ def time_matched(pos, wide_neg, rng):
 
 def main():
     rows = json.load(open(sys.argv[1]))
+    vectors_path = sys.argv[sys.argv.index("--vectors") + 1] if "--vectors" in sys.argv else None
+    suffix = f"-{vectors_path.rsplit('/', 1)[-1].removesuffix('-dump-vectors.json')}" if vectors_path else ""
     by_id = {r["id"]: r for r in rows}
     now = datetime.now(timezone.utc)
     rng = np.random.default_rng(53)
@@ -306,6 +314,17 @@ def main():
     neg_t54 = [(a, b) for a, b, _ in cands_t54[:LIST_CAP]]
     neg_now = [(a, b) for a, b, _ in cands_now[:LIST_CAP]]
 
+    # The sets are fixed; from here on the cosine feature reads the candidate.
+    if vectors_path:
+        swapped = json.load(open(vectors_path))
+        missing = [r["id"] for r in rows if r.get("embedding") and r["id"] not in swapped]
+        if missing:
+            sys.exit(f"{vectors_path} lacks vectors for {len(missing)} embedded rows, e.g. {missing[0]}")
+        for r in rows:
+            if r["id"] in swapped:
+                r["embedding"] = swapped[r["id"]]
+        print(f"cosine feature reads {vectors_path} ({len(swapped[rows[0]['id']]) if rows[0]['id'] in swapped else '?'}d)")
+
     # Document frequency over the whole space in the dump, live or not: the
     # positives include closed rows, and one pool for both sides keeps the
     # rarity of an entity from depending on which set a pair came from.
@@ -322,7 +341,7 @@ def main():
     top_df = sorted(df.items(), key=lambda kv: -kv[1])[:5]
     print("entity DF, top 5: " + ", ".join(f"{e}={n}" for e, n in top_df))
 
-    report = {"run_at": now.isoformat(), "as_of": T54.isoformat(), "hub_only_share": hub_share_now, "sets": []}
+    report = {"run_at": now.isoformat(), "as_of": T54.isoformat(), "hub_only_share": hub_share_now, "vectors": vectors_path, "sets": []}
     score_set("T54", pos_t54, neg_t54, df, pool_size, rng, report)
     current = score_set("current", pos_all, neg_now, df, pool_size, rng, report)
 
@@ -344,16 +363,16 @@ def main():
         evicted = sum((a["id"], b["id"]) not in old_ids for a, b, _ in new_top)
         report["evicted_from_cosine_top20"] = evicted
         print(f"\nblend order evicts {evicted} of cosine's top {LIST_CAP}")
-        with open("pair-rank-top20.json", "w") as out:
+        with open(f"pair-rank-top20{suffix}.json", "w") as out:
             json.dump(
                 [{"a": a["content"], "b": b["content"], "cosine": s, "label": None} for a, b, s in new_top],
                 out, indent=1, ensure_ascii=False,
             )
-        print("reordered top 20 written to pair-rank-top20.json — hand-label `label` as true/false")
+        print(f"reordered top 20 written to pair-rank-top20{suffix}.json — hand-label `label` as true/false")
 
-    with open("pair-rank-scores.json", "w") as out:
+    with open(f"pair-rank-scores{suffix}.json", "w") as out:
         json.dump(report, out, indent=1)
-    print("report written to pair-rank-scores.json")
+    print(f"report written to pair-rank-scores{suffix}.json")
 
 
 if __name__ == "__main__":

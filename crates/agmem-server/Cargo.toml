@@ -12,6 +12,12 @@ homepage.workspace = true
 name = "agmem"
 path = "src/main.rs"
 
+[features]
+# Runtime knobs for the eval harness only (issue #133): the abstention floor
+# from the environment, so a candidate embedder is scored on its own cosine
+# scale. Never on in a release build.
+eval-knobs = []
+
 [dependencies]
 # `schema` puts core's enums, and their variant docs, into the tool schemas
 # agents read.

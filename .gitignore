@@ -14,5 +14,10 @@ target/
 # local embedding model cache
 .fastembed_cache/
 
+# #133 candidate recordings: ~3 MB per candidate, regenerated on demand
+crates/agmem-server/tests/fixtures/eval/candidates/
+# #133 per-candidate run logs; the numbers that matter go in embed-models.md
+docs/eval/embed-models/*/
+
 # surreal sql shell history, dropped wherever the CLI is run
 history.txt

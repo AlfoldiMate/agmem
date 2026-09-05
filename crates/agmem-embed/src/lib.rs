@@ -13,6 +13,8 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "candidates")]
+pub mod candidates;
 pub mod fastembed;
 pub mod noop;
 #[cfg(feature = "rerank")]

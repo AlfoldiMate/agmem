@@ -17,6 +17,10 @@ path = "src/main.rs"
 # from the environment, so a candidate embedder is scored on its own cosine
 # scale. Never on in a release build.
 eval-knobs = []
+# macOS acceleration through ONNX Runtime's CoreML execution provider
+# (issue #139): `--accelerator auto|coreml` can then resolve to it. Off by
+# default; the CPU path is what every platform ships.
+coreml = ["agmem-embed/coreml"]
 
 [dependencies]
 # `schema` puts core's enums, and their variant docs, into the tool schemas

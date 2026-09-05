@@ -389,6 +389,8 @@ fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<Child> {
         .arg(&cfg.db_url)
         .arg("--embedder")
         .arg(cfg.embedder.as_str())
+        .arg("--accelerator")
+        .arg(cfg.accelerator.as_str())
         .arg("--idle-timeout")
         .arg(cfg.idle_timeout.to_string())
         .arg("--log")

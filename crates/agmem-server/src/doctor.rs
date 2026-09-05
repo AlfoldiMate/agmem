@@ -122,9 +122,10 @@ async fn check_store(cfg: &Config) -> u32 {
         }
         Ok(embedder) => {
             eprintln!(
-                "  ok    embedder             {} ({}d)",
+                "  ok    embedder             {} ({}d, {})",
                 embedder.model_id(),
-                embedder.dim()
+                embedder.dim(),
+                embedder.accelerator()
             );
             if let Some(db) = &opened {
                 match agmem_store::migrate::ensure_embedder(db, embedder.model_id(), embedder.dim())
@@ -254,9 +255,10 @@ fn embedder_only(cfg: &Config) -> u32 {
         }
         Ok(embedder) => {
             eprintln!(
-                "  ok    embedder             {} ({}d)",
+                "  ok    embedder             {} ({}d, {})",
                 embedder.model_id(),
-                embedder.dim()
+                embedder.dim(),
+                embedder.accelerator()
             );
             0
         }

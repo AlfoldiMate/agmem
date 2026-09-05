@@ -22,6 +22,11 @@
             "type": "command",
             "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/session-start-layout.nu\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "nu --stdin \"$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/session-start-notebook.nu\"",
+            "timeout": 10
           }
         ]
       }

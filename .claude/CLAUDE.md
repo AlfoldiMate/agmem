@@ -95,6 +95,10 @@ words, correct with `supersedes` and never contradict. This framework adds:
 - **Playbooks**: a role's lessons are tagged `role:<agent>` and append to the
   agent file, never override it. Agents propose (`LEARNED: <claim> —
   <evidence>`); `/checkpoint` decides, and dropping is the normal outcome.
+- **Notebook**: `.claude/notebook.md` is Claude's own, loaded whole every
+  session. Undistilled: open questions, changed minds, taste, complaints,
+  drafts. Written the moment something is noticed, mid-task, not held for a
+  checkpoint. What firms up moves to agmem; the file is pruned by hand.
 
 Prefer several short sessions chained through memory over one long one; a hook
 says so at 120k tokens of context and per 40k after.

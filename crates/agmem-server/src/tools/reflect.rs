@@ -197,6 +197,7 @@ pub async fn run(
             .first()
             .and_then(|list| list.first())
             .map(|neighbour| dedup::novelty(neighbour.similarity));
+        let bands = service.embedder().thresholds();
         for neighbour in neighbours.into_iter().flatten() {
             // A summary reads like its evidence by construction — it carries
             // its children's words — so a cited neighbour is what it stands
@@ -208,7 +209,7 @@ pub async fn run(
             if kind == Kind::Summary && cited.contains(&Derivation::Memory(neighbour.id.clone())) {
                 continue;
             }
-            if dedup::is_near_duplicate(neighbour.similarity) {
+            if bands.is_near_duplicate(neighbour.similarity) {
                 let note = uncited(service, &space, &neighbour.id).await;
                 return Ok(ReflectResult {
                     id: neighbour.id.to_string(),
@@ -221,7 +222,7 @@ pub async fn run(
                     note,
                 });
             }
-            if dedup::is_correction_candidate(neighbour.similarity) {
+            if bands.is_correction_candidate(neighbour.similarity) {
                 related.push(Related {
                     id: neighbour.id.to_string(),
                     content: neighbour.content,

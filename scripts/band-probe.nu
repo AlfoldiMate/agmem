@@ -34,7 +34,7 @@ const PAIRS = [
 def main [
     --binary: string = "target/release/agmem" # the agmem to measure
     --out: string = "docs/eval/bands"         # where the table lands
-    --model-cache: string = ""                # FASTEMBED_CACHE_DIR
+    --model-cache: string = ""                # AGMEM_MODEL_DIR
 ] {
     let binary = ($binary | path expand)
     if not ($binary | path exists) {
@@ -105,7 +105,7 @@ def call [binary: string, data: string, cache: string, name: string, args: recor
     )
     let spoken = (
         $wire
-        | with-env {AGMEM_DATA: $data, AGMEM_SPACE: "bands", FASTEMBED_CACHE_DIR: $cache} {
+        | with-env {AGMEM_DATA: $data, AGMEM_SPACE: "bands", AGMEM_MODEL_DIR: $cache} {
             ^$binary --no-daemon | complete
         }
     )

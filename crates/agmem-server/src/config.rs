@@ -53,12 +53,16 @@ pub struct Cli {
     pub space: Option<SpaceName>,
 
     /// Embedding backend.
-    #[arg(long, env = "AGMEM_EMBEDDER", value_enum, default_value_t = EmbedderKind::Fastembed)]
+    #[arg(long, env = "AGMEM_EMBEDDER", value_enum, default_value_t = EmbedderKind::Llama)]
     pub embedder: EmbedderKind,
 
-    /// Where ONNX Runtime runs the model (#139). `auto` picks CoreML on a
-    /// macOS build made with `--features coreml` and the CPU everywhere
-    /// else; `coreml` insists and fails when it is not there.
+    /// Embedding model. Changing it on a store that holds vectors is a
+    /// migration (`--reindex`); a mismatch refuses to start.
+    #[arg(long, env = "AGMEM_MODEL", value_enum, default_value_t = ModelKind::Embeddinggemma300m)]
+    pub model: ModelKind,
+
+    /// Where the model runs. `auto` picks Metal on Apple Silicon and the CPU
+    /// everywhere else; `metal` insists and fails on a build without it.
     #[arg(long, env = "AGMEM_ACCELERATOR", value_enum, default_value_t = AcceleratorKind::Auto)]
     pub accelerator: AcceleratorKind,
 
@@ -366,8 +370,11 @@ pub struct ContextArgs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum EmbedderKind {
-    /// fastembed/ONNX local model (default).
-    Fastembed,
+    /// A GGUF model on llama.cpp, in this process (default). An API-backed
+    /// backend (issue #120) would be a second variant here and one more arm
+    /// in `embedder::build`; the model it runs is `--model`'s choice either
+    /// way.
+    Llama,
     /// No embeddings at all. Not a supported deployment: agmem is BM25 plus a
     /// local model, always. Hidden from `--help`; it exists so the subprocess
     /// tests can start the real binary where CI forbids a model download.
@@ -380,24 +387,57 @@ impl EmbedderKind {
     /// handshake and what a freshly spawned daemon is started with.
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Fastembed => "fastembed",
+            Self::Llama => "llama",
             Self::None => "none",
         }
     }
 }
 
-/// Execution-provider selector (#139): the clap face of
-/// [`agmem_embed::Accelerator`], so `--help` lists the spellings and a
-/// spawned daemon is started with the same one.
+/// Model selector: the clap face of [`agmem_embed::Model`], so `--help`
+/// lists the spellings and a spawned daemon is started with the same one.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ModelKind {
+    /// EmbeddingGemma-300M, 768d, ~314 MB (default): the better model on
+    /// every measured column (`docs/eval/embed-models.md`).
+    #[default]
+    #[value(name = "embeddinggemma-300m")]
+    Embeddinggemma300m,
+    /// bge-small-en-v1.5, 384d, ~36 MB: the light option, a fifth of Gemma's
+    /// CPU latency.
+    #[value(name = "bge-small-en-v1.5")]
+    BgeSmallEnV15,
+}
+
+impl ModelKind {
+    /// The embed crate's view of the same choice.
+    pub fn into_embed(self) -> agmem_embed::Model {
+        match self {
+            Self::Embeddinggemma300m => agmem_embed::Model::Gemma300M,
+            Self::BgeSmallEnV15 => agmem_embed::Model::BgeSmall,
+        }
+    }
+
+    /// The spelling `--model` takes, for a spawned daemon's argv.
+    pub fn as_str(self) -> &'static str {
+        self.into_embed().as_str()
+    }
+}
+
+/// Accelerator selector: the clap face of [`agmem_embed::Accelerator`], so
+/// `--help` lists the spellings and a spawned daemon is started with the
+/// same one.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
 pub enum AcceleratorKind {
-    /// CoreML where the build and the machine have it, else the CPU.
+    /// Metal on Apple Silicon, else the CPU.
     #[default]
     Auto,
-    /// The CPU provider only — the portable default.
+    /// The CPU only — the portable choice, and the opt-out on a Mac.
     Cpu,
-    /// The CoreML provider; refuses to start when it is not available.
-    Coreml,
+    /// llama.cpp's Metal backend; refuses to start on a build without it.
+    Metal,
 }
 
 impl AcceleratorKind {
@@ -406,7 +446,7 @@ impl AcceleratorKind {
         match self {
             Self::Auto => agmem_embed::Accelerator::Auto,
             Self::Cpu => agmem_embed::Accelerator::Cpu,
-            Self::Coreml => agmem_embed::Accelerator::CoreMl,
+            Self::Metal => agmem_embed::Accelerator::Metal,
         }
     }
 
@@ -532,8 +572,11 @@ pub struct Config {
     pub db_pass: Option<String>,
     pub space: SpaceName,
     pub embedder: EmbedderKind,
-    /// Where the model runs (#139); process-local like `embedder`, so it
-    /// rides the spawn argv and not the handshake.
+    /// Which model; checked across the daemon handshake like `embedder`,
+    /// since two models are two vector spaces.
+    pub model: ModelKind,
+    /// Where the model runs; process-local like `embedder`, so it rides the
+    /// spawn argv and not the handshake.
     pub accelerator: AcceleratorKind,
     /// Which tools this session lists and serves — [`ToolGroup::Core`]
     /// unless `AGMEM_TOOLS=all`. Travels the daemon handshake like
@@ -690,6 +733,7 @@ impl Cli {
             db_pass: self.db_pass,
             space,
             embedder: self.embedder,
+            model: self.model,
             accelerator: self.accelerator,
             tools: self.tools,
             pool: self.pool,

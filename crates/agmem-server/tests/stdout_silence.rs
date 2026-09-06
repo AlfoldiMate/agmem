@@ -34,7 +34,7 @@ fn started(args: &[&str]) -> String {
 
 #[test]
 fn in_process_startup_and_logging_write_nothing_to_stdout() {
-    // `--embedder none`, because CI poisons `FASTEMBED_CACHE_DIR` on purpose
+    // `--embedder none`, because CI poisons `AGMEM_MODEL_DIR` on purpose
     // (design §7, issue #2): a test that loads the real model where the cache
     // does not exist is a test that *downloads* one, and it fails instead —
     // which is what kept this suite red from #11 onwards. The loader itself is

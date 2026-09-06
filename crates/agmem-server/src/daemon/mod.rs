@@ -33,7 +33,7 @@ use agmem_core::SpaceName;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Config, EmbedderKind, ToolDescriptions, ToolGroup};
+use crate::config::{Config, EmbedderKind, ModelKind, ToolDescriptions, ToolGroup};
 
 /// The socket the daemon listens on, inside the data dir.
 pub const SOCKET_FILE: &str = "agmem.sock";
@@ -127,6 +127,11 @@ pub struct Handshake {
     pub db_url: String,
     /// The embedding backend it expects.
     pub embedder: EmbedderKind,
+    /// The model it expects. Absent on the wire from a release before it,
+    /// which reads as the default model — a daemon that old is a release
+    /// mismatch anyway, refused above on `release`.
+    #[serde(default)]
+    pub model: ModelKind,
     /// The project asking — what `space` defaults to for this connection.
     pub space: SpaceName,
     /// Candidate pool for this connection's recalls.
@@ -150,6 +155,7 @@ impl Handshake {
             release: RELEASE.to_owned(),
             db_url: cfg.db_url.clone(),
             embedder: cfg.embedder,
+            model: cfg.model,
             space: cfg.space.clone(),
             pool: cfg.pool,
             max_k: cfg.max_k,
@@ -241,6 +247,18 @@ impl Handshake {
                      --embedder.",
                     self.embedder.as_str(),
                     asked.embedder.as_str()
+                ),
+            });
+        }
+        if asked.model != self.model {
+            return Err(Refusal {
+                retire: false,
+                message: format!(
+                    "the running daemon embeds with {} and this session asked for {}. \
+                     Vectors from two models cannot be compared; stop the daemon or match \
+                     --model.",
+                    self.model.as_str(),
+                    asked.model.as_str()
                 ),
             });
         }

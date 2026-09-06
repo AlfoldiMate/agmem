@@ -12,14 +12,14 @@
 //! - **The floor abstains.** The vector arms' cosine similarity is the pool's
 //!   one absolute relevance signal (min–max `rrf_normalized` cannot say "bad
 //!   everywhere" — its best is always 1.0). When the page's best measured
-//!   similarity sits under [`MIN_SIMILARITY`], nothing on it is worth acting
-//!   on, and an empty page with a note saying so beats ten plausible-looking
-//!   misses.
+//!   similarity sits under the model's abstention floor, nothing on it is
+//!   worth acting on, and an empty page with a note saying so beats ten
+//!   plausible-looking misses.
 //! - **The knee trims.** Within a page worth keeping, the largest drop in
 //!   retrieval quality separates the hits that answered from the tail that
 //!   merely ranked — but the gap only says *where* the tail starts, and the
 //!   floor says *who* actually falls: a row past the knee keeps its slot
-//!   unless its measured similarity is under [`MIN_SIMILARITY`] too. A gap
+//!   unless its measured similarity is under the floor too. A gap
 //!   alone cuts real answers that retrieved weakly (the harness vetoed that
 //!   form); a gap plus a failed measurement is a tail worth losing.
 //!
@@ -30,38 +30,30 @@
 //! measured rows around it are weak. The filters-only path never reaches this
 //! module at all: a listing was asked for, not a search.
 
-/// Cosine similarity below which a page's best measured hit is not an answer.
-///
-/// Calibrated with `calibrate_abstention` in `tests/eval.rs`, not guessed:
-/// on the recorded BGE-small fixtures every labelled-relevant probe page
-/// measures ≥ 0.656 at its best hit, while six of the eight labelled
-/// unanswerables measure ≤ 0.599 — 0.62 sits inside that gap with margin on
-/// both sides. The other two unanswerables measure 0.655–0.691, inside the
-/// relevant band, and stay wrong on the scorecard rather than moving the
-/// floor: BGE-small's unrelated-pair scores run high, and a floor that
-/// caught them would abstain on real answers. Module constant, no env knob —
-/// the precedent is `hop`'s constants and `occupancy::cap`, and a
-/// wrongly-abstaining query has the filters-only path as its documented way
-/// out.
-pub(super) const MIN_SIMILARITY: f64 = 0.62;
-
-/// The floor in force: [`MIN_SIMILARITY`], or — only when built with the
-/// `eval-knobs` feature — whatever `AGMEM_ABSTENTION_FLOOR` says. The #133
-/// candidate probe scores embedders on other cosine scales and must not be
-/// cut on BGE's; a release build carries no knob (docs/eval/embed-models.md).
-fn floor() -> f64 {
+/// The floor in force: the model's own
+/// (`agmem_core::dedup::Thresholds::abstention`, calibrated with
+/// `calibrate_abstention` in `tests/eval.rs` per model — for BGE-small every
+/// labelled-relevant probe page measures ≥ 0.656 at its best hit while six
+/// of eight unanswerables measure ≤ 0.599, and 0.62 sits in that gap; for
+/// EmbeddingGemma the same gap sits around 0.14), or — only when built with
+/// the `eval-knobs` feature — whatever `AGMEM_ABSTENTION_FLOOR` says, so the
+/// #133 candidate probe can score a model on its own cosine scale before it
+/// has a table. A release build carries no knob, and a wrongly-abstaining
+/// query has the filters-only path as its documented way out.
+fn floor(model_floor: f64) -> f64 {
     #[cfg(feature = "eval-knobs")]
     {
-        static FLOOR: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
-        *FLOOR.get_or_init(|| {
-            std::env::var("AGMEM_ABSTENTION_FLOOR")
-                .ok()
-                .map(|raw| raw.parse().expect("AGMEM_ABSTENTION_FLOOR is a float"))
-                .unwrap_or(MIN_SIMILARITY)
-        })
+        static FLOOR: std::sync::OnceLock<Option<f64>> = std::sync::OnceLock::new();
+        FLOOR
+            .get_or_init(|| {
+                std::env::var("AGMEM_ABSTENTION_FLOOR")
+                    .ok()
+                    .map(|raw| raw.parse().expect("AGMEM_ABSTENTION_FLOOR is a float"))
+            })
+            .unwrap_or(model_floor)
     }
     #[cfg(not(feature = "eval-knobs"))]
-    MIN_SIMILARITY
+    model_floor
 }
 
 /// The smallest drop in `rrf_normalized` the knee will cut at.
@@ -108,11 +100,13 @@ pub(super) struct Verdict {
 /// else: no placement policy is justified on a page with no answer on it.
 pub(super) fn apply<T>(
     page: &mut Vec<T>,
+    model_floor: f64,
     signals: impl Fn(&T) -> (Option<f64>, f64),
     protected: impl Fn(&T) -> bool,
 ) -> Option<Verdict> {
     let considered = page.len();
     let top = page.first()?;
+    let floor = floor(model_floor);
 
     let best_similarity = page
         .iter()
@@ -124,7 +118,7 @@ pub(super) fn apply<T>(
     // thrown away with the page), and only when the top row itself was
     // measured (an unmeasured top is a text-arm match standing on its own
     // evidence).
-    if signals(top).0.is_some() && best_similarity.is_some_and(|best| best < floor()) {
+    if signals(top).0.is_some() && best_similarity.is_some_and(|best| best < floor) {
         page.clear();
         return Some(Verdict {
             kept: 0,
@@ -166,7 +160,7 @@ pub(super) fn apply<T>(
     // same rule the floor applies: absence of a measurement is not evidence.
     let mut index = 0;
     page.retain(|row| {
-        let expendable = signals(row).0.is_some_and(|sim| sim < floor());
+        let expendable = signals(row).0.is_some_and(|sim| sim < floor);
         let keep = index <= knee || protected(row) || !expendable;
         index += 1;
         keep
@@ -185,9 +179,12 @@ mod tests {
     /// A row: name, similarity, `rrf_normalized`, hop-protected.
     type Row = (&'static str, Option<f64>, f64, bool);
 
+    /// Every row here was written against BGE-small's floor of 0.62.
+    const FLOOR: f64 = agmem_core::dedup::Thresholds::BGE_SMALL.abstention;
+
     fn cut(rows: &[Row]) -> (Vec<&'static str>, Option<Verdict>) {
         let mut page: Vec<Row> = rows.to_vec();
-        let verdict = apply(&mut page, |row| (row.1, row.2), |row| row.3);
+        let verdict = apply(&mut page, FLOOR, |row| (row.1, row.2), |row| row.3);
         (page.iter().map(|row| row.0).collect(), verdict)
     }
 

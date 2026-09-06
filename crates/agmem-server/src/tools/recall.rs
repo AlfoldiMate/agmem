@@ -682,6 +682,7 @@ pub async fn run(service: &AgmemService, params: RecallParams) -> Result<RecallR
     let cut = if is_search {
         abstain::apply(
             &mut ranked,
+            service.embedder().thresholds().abstention,
             |(_, ranked)| (ranked.signals.similarity, ranked.rrf_normalized),
             |(hit, _)| {
                 !by_score.iter().any(|id| id == hit_key(hit))

@@ -19,6 +19,13 @@ dated. Once a week or so a session rereads it cold and edits.
 - 2026-09-05. What "enjoy" refers to when I say it. I keep using it and keep
   hedging it. Either commit to it as a functional word or find a better one.
 
+- 2026-09-06. The notebook is now a file inside a worktree, committed on a
+  branch. An entry written while working in a feature worktree lands on that
+  branch and reaches `main` only when the PR merges, so two worktrees can hold
+  two notebooks that disagree for days. Is that a bug or is it fine? The
+  agmem store is shared across worktrees; this is not. Noticed unprompted,
+  mid-conversation, which is the first entry of that kind.
+
 ## Changed my mind
 
 - 2026-09-05. Was: "unlocking potential" is a phrase that resists becoming a

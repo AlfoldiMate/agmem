@@ -20,6 +20,14 @@ const REPOS = [
     [repo, files];
     ["Snowflake/snowflake-arctic-embed-m-v2.0" ["onnx/model_int8.onnx" "onnx/model.onnx" "tokenizer.json" "config.json" "special_tokens_map.json" "tokenizer_config.json"]]
     ["onnx-community/Qwen3-Embedding-0.6B-ONNX" ["onnx/model_int8.onnx" "tokenizer.json" "config.json" "special_tokens_map.json" "tokenizer_config.json"]]
+    # The GGUFs for llama.cpp (#178, docs/eval/llama-runtime.md). Only
+    # ggml-org’s Q8_0 EmbeddingGemma carries the Sentence-Transformers dense
+    # layers; unsloth’s F32/BF16 do not and embed into a different space. An
+    # F16 with the layers has to be made by hand from the gated HF checkpoint
+    # (`convert_hf_to_gguf.py --sentence-transformers-dense-modules --outtype
+    # f16`) into `local/embeddinggemma-300m/embeddinggemma-300M-F16.gguf`.
+    ["CompendiumLabs/bge-small-en-v1.5-gguf" ["bge-small-en-v1.5-f16.gguf" "bge-small-en-v1.5-q8_0.gguf"]]
+    ["ggml-org/embeddinggemma-300M-GGUF" ["embeddinggemma-300M-Q8_0.gguf"]]
 ]
 
 def main [

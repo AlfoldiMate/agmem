@@ -74,11 +74,25 @@ pub enum Candidate {
     Gemma300MF32,
     /// snowflake-arctic-embed-m-v2.0, fp32, CLS pooled (#139).
     ArcticMV2F32,
+    /// The control as a GGUF on llama.cpp, F16 (#178).
+    #[cfg(feature = "llama")]
+    BgeSmallGgufF16,
+    /// The control as a GGUF on llama.cpp, Q8_0 (#178).
+    #[cfg(feature = "llama")]
+    BgeSmallGgufQ8,
+    /// EmbeddingGemma-300M as a GGUF on llama.cpp, F16, mean pooled (#178).
+    #[cfg(feature = "llama")]
+    Gemma300MGgufF16,
+    /// EmbeddingGemma-300M as a GGUF on llama.cpp, Q8_0 (#178).
+    #[cfg(feature = "llama")]
+    Gemma300MGgufQ8,
+    // arctic-embed-m-v2.0 has no llama.cpp row: its gte "NewModel"
+    // architecture is not one llama.cpp loads (docs/eval/llama-runtime.md).
 }
 
 impl Candidate {
     /// Every candidate, control first.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: &'static [Self] = &[
         Self::BgeSmallQ,
         Self::Gemma300MQ,
         Self::ArcticMV2Int8,
@@ -86,6 +100,14 @@ impl Candidate {
         Self::BgeSmallF32,
         Self::Gemma300MF32,
         Self::ArcticMV2F32,
+        #[cfg(feature = "llama")]
+        Self::BgeSmallGgufF16,
+        #[cfg(feature = "llama")]
+        Self::BgeSmallGgufQ8,
+        #[cfg(feature = "llama")]
+        Self::Gemma300MGgufF16,
+        #[cfg(feature = "llama")]
+        Self::Gemma300MGgufQ8,
     ];
 
     /// The id a recording, a latency row and `AGMEM_CANDIDATE` spell.
@@ -99,13 +121,66 @@ impl Candidate {
             Self::BgeSmallF32 => "bge-small-en-v1.5",
             Self::Gemma300MF32 => "embeddinggemma-300m",
             Self::ArcticMV2F32 => "arctic-embed-m-v2.0",
+            #[cfg(feature = "llama")]
+            Self::BgeSmallGgufF16 => "bge-small-en-v1.5-gguf-f16",
+            #[cfg(feature = "llama")]
+            Self::BgeSmallGgufQ8 => "bge-small-en-v1.5-gguf-q8_0",
+            #[cfg(feature = "llama")]
+            Self::Gemma300MGgufF16 => "embeddinggemma-300m-gguf-f16",
+            #[cfg(feature = "llama")]
+            Self::Gemma300MGgufQ8 => "embeddinggemma-300m-gguf-q8_0",
         }
     }
 
     /// The candidate an id names.
     #[must_use]
     pub fn parse(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|candidate| candidate.id() == id)
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|candidate| candidate.id() == id)
+    }
+
+    /// The GGUF a llama.cpp candidate loads: the Hugging Face repo (or
+    /// `local/<model>` for a file converted by hand — the fetch script says
+    /// how) and the file inside it; `None` on ORT.
+    #[must_use]
+    pub fn gguf(self) -> Option<(&'static str, &'static str)> {
+        match self {
+            #[cfg(feature = "llama")]
+            Self::BgeSmallGgufF16 => Some((
+                "CompendiumLabs/bge-small-en-v1.5-gguf",
+                "bge-small-en-v1.5-f16.gguf",
+            )),
+            #[cfg(feature = "llama")]
+            Self::BgeSmallGgufQ8 => Some((
+                "CompendiumLabs/bge-small-en-v1.5-gguf",
+                "bge-small-en-v1.5-q8_0.gguf",
+            )),
+            #[cfg(feature = "llama")]
+            Self::Gemma300MGgufF16 => {
+                Some(("local/embeddinggemma-300m", "embeddinggemma-300M-F16.gguf"))
+            }
+            #[cfg(feature = "llama")]
+            Self::Gemma300MGgufQ8 => Some((
+                "ggml-org/embeddinggemma-300M-GGUF",
+                "embeddinggemma-300M-Q8_0.gguf",
+            )),
+            _ => None,
+        }
+    }
+
+    /// The ORT candidate a GGUF one is compared with for drift (bar item 2
+    /// of `docs/eval/llama-runtime.md`): the fp32 export of the same model.
+    #[must_use]
+    pub fn ort_twin(self) -> Option<Self> {
+        match self {
+            #[cfg(feature = "llama")]
+            Self::BgeSmallGgufF16 | Self::BgeSmallGgufQ8 => Some(Self::BgeSmallF32),
+            #[cfg(feature = "llama")]
+            Self::Gemma300MGgufF16 | Self::Gemma300MGgufQ8 => Some(Self::Gemma300MF32),
+            _ => None,
+        }
     }
 
     /// The candidate [`CANDIDATE_ENV`] names, if it is set.
@@ -125,24 +200,39 @@ impl Candidate {
     /// Full vector width, before any MRL truncation.
     #[must_use]
     pub fn dim(self) -> usize {
+        // A GGUF candidate answers through its ORT twin so both runtimes
+        // share width and prefixes and the drift check compares like with like.
+        if let Some(twin) = self.ort_twin() {
+            return twin.dim();
+        }
         match self {
             Self::BgeSmallQ | Self::BgeSmallF32 => crate::fastembed::DIM,
             Self::Gemma300MQ | Self::Gemma300MF32 | Self::ArcticMV2Int8 | Self::ArcticMV2F32 => 768,
             Self::Qwen3Embedding06BInt8 => 1024,
+            #[cfg(feature = "llama")]
+            _ => unreachable!("every GGUF candidate has an ORT twin"),
         }
     }
 
     /// What stored text is marked with, per the model's card.
     fn passage_prefix(self) -> &'static str {
+        if let Some(twin) = self.ort_twin() {
+            return twin.passage_prefix();
+        }
         match self {
             Self::BgeSmallQ | Self::BgeSmallF32 => "passage: ",
             Self::Gemma300MQ | Self::Gemma300MF32 => "title: none | text: ",
             Self::ArcticMV2Int8 | Self::ArcticMV2F32 | Self::Qwen3Embedding06BInt8 => "",
+            #[cfg(feature = "llama")]
+            _ => unreachable!("every GGUF candidate has an ORT twin"),
         }
     }
 
     /// What the search side is marked with, per the model's card.
     fn query_prefix(self) -> &'static str {
+        if let Some(twin) = self.ort_twin() {
+            return twin.query_prefix();
+        }
         match self {
             Self::BgeSmallQ | Self::BgeSmallF32 | Self::ArcticMV2Int8 | Self::ArcticMV2F32 => {
                 "query: "
@@ -152,15 +242,32 @@ impl Candidate {
                 "Instruct: Given a web search query, retrieve relevant passages that answer \
                  the query\nQuery: "
             }
+            #[cfg(feature = "llama")]
+            _ => unreachable!("every GGUF candidate has an ORT twin"),
+        }
+    }
+
+    /// How llama.cpp pools a GGUF candidate: the same as the ORT export.
+    #[cfg(feature = "llama")]
+    fn pooling(self) -> crate::llama::Pooling {
+        match self {
+            Self::Gemma300MGgufF16 | Self::Gemma300MGgufQ8 => crate::llama::Pooling::Mean,
+            _ => crate::llama::Pooling::Cls,
         }
     }
 
     /// The Hugging Face repo a user-defined candidate's files come from,
-    /// and the ONNX file inside it; `None` for fastembed's built-ins.
+    /// and the ONNX file inside it; `None` for fastembed's built-ins and
+    /// for the GGUF candidates, whose file [`Candidate::gguf`] names.
     #[must_use]
     pub fn user_defined(self) -> Option<(&'static str, &'static str)> {
         match self {
             Self::BgeSmallQ | Self::Gemma300MQ | Self::BgeSmallF32 | Self::Gemma300MF32 => None,
+            #[cfg(feature = "llama")]
+            Self::BgeSmallGgufF16
+            | Self::BgeSmallGgufQ8
+            | Self::Gemma300MGgufF16
+            | Self::Gemma300MGgufQ8 => None,
             Self::ArcticMV2Int8 => Some((
                 "Snowflake/snowflake-arctic-embed-m-v2.0",
                 "onnx/model_int8.onnx",
@@ -186,10 +293,12 @@ impl Candidate {
         files
     }
 
-    /// Where a user-defined candidate's files live under the model cache.
+    /// Where a user-defined or GGUF candidate's files live under the model
+    /// cache.
     #[must_use]
     pub fn dir(self, cache_dir: &Path) -> Option<PathBuf> {
         self.user_defined()
+            .or_else(|| self.gguf())
             .map(|(repo, _)| cache_dir.join("candidates").join(repo))
     }
 }
@@ -220,12 +329,16 @@ enum Engine {
     Fastembed(Mutex<TextEmbedding>),
     /// An `ort` session driven here, for an export fastembed cannot feed.
     Direct(Mutex<Direct>),
+    /// llama.cpp on its own thread, for a GGUF (#178).
+    #[cfg(feature = "llama")]
+    Llama(crate::llama::LlamaEmbedder),
 }
 
 /// One loaded candidate.
 pub struct CandidateBackend {
     candidate: Candidate,
     engine: Engine,
+    accelerator: Active,
 }
 
 impl std::fmt::Debug for CandidateBackend {
@@ -238,8 +351,11 @@ impl std::fmt::Debug for CandidateBackend {
                 &match self.engine {
                     Engine::Fastembed(_) => "fastembed",
                     Engine::Direct(_) => "ort",
+                    #[cfg(feature = "llama")]
+                    Engine::Llama(_) => "llama.cpp",
                 },
             )
+            .field("accelerator", &self.accelerator.as_str())
             .finish()
     }
 }
@@ -264,6 +380,47 @@ impl CandidateBackend {
             backend: candidate.id(),
             message,
         };
+        // A row must have run where it says: no ORT export on Metal, and no
+        // GGUF on an ONNX Runtime provider.
+        if candidate.gguf().is_none() && accelerator == Active::Metal {
+            return Err(failed(
+                "metal is llama.cpp's; only a `-gguf-` candidate runs there".to_owned(),
+            ));
+        }
+        #[cfg(feature = "llama")]
+        if let Some((repo, file)) = candidate.gguf() {
+            if accelerator == Active::CoreMl {
+                return Err(failed(
+                    "coreml is an ONNX Runtime provider; a GGUF runs on cpu or metal".to_owned(),
+                ));
+            }
+            let path = cache_dir.join("candidates").join(repo).join(file);
+            if !path.is_file() {
+                return Err(failed(format!(
+                    "read {}: not found; run scripts/embed-candidates-fetch.nu",
+                    path.display()
+                )));
+            }
+            let embedder = crate::llama::LlamaEmbedder::load(
+                candidate.id(),
+                &path,
+                candidate.pooling(),
+                candidate.dim(),
+                accelerator,
+            )
+            .map_err(failed)?;
+            tracing::info!(
+                model = candidate.id(),
+                dim = candidate.dim(),
+                accelerator = accelerator.as_str(),
+                "loaded candidate"
+            );
+            return Ok(Self {
+                candidate,
+                engine: Engine::Llama(embedder),
+                accelerator,
+            });
+        }
         let providers = accelerator.execution_providers(Some(cache_dir));
         let engine = match candidate {
             Candidate::BgeSmallQ
@@ -306,6 +463,11 @@ impl CandidateBackend {
                     Direct::load(files, QWEN3_EOS, &providers).map_err(failed)?,
                 ))
             }
+            #[cfg(feature = "llama")]
+            Candidate::BgeSmallGgufF16
+            | Candidate::BgeSmallGgufQ8
+            | Candidate::Gemma300MGgufF16
+            | Candidate::Gemma300MGgufQ8 => unreachable!("GGUF candidates returned above"),
         };
         tracing::info!(
             model = candidate.id(),
@@ -313,7 +475,11 @@ impl CandidateBackend {
             accelerator = accelerator.as_str(),
             "loaded candidate"
         );
-        Ok(Self { candidate, engine })
+        Ok(Self {
+            candidate,
+            engine,
+            accelerator,
+        })
     }
 
     /// The candidate this backend runs.
@@ -343,6 +509,8 @@ impl CandidateBackend {
                 let mut direct = direct.lock().map_err(|_| poisoned())?;
                 direct.embed(&texts).map_err(failed)?
             }
+            #[cfg(feature = "llama")]
+            Engine::Llama(embedder) => embedder.embed(&texts).map_err(failed)?,
         };
 
         let dim = self.candidate.dim();
@@ -363,6 +531,10 @@ impl Embedder for CandidateBackend {
 
     fn model_id(&self) -> &str {
         self.candidate.id()
+    }
+
+    fn accelerator(&self) -> &str {
+        self.accelerator.as_str()
     }
 
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
@@ -638,7 +810,7 @@ mod tests {
 
     #[test]
     fn every_id_round_trips() {
-        for candidate in Candidate::ALL {
+        for candidate in Candidate::ALL.iter().copied() {
             assert_eq!(Candidate::parse(candidate.id()), Some(candidate));
         }
         assert_eq!(Candidate::parse("nope"), None);

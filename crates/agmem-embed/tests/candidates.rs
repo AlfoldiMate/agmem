@@ -51,12 +51,14 @@ fn candidate() -> Candidate {
         .unwrap_or_else(|| panic!("{CANDIDATE_ENV} names the candidate to measure"))
 }
 
-/// The execution provider `AGMEM_ACCELERATOR` names (`auto|cpu|coreml`),
+/// The execution provider `AGMEM_ACCELERATOR` names (`auto|cpu|coreml|metal`),
 /// settled; `cpu` when unset, so an old invocation measures what it did.
 fn accelerator() -> Active {
     let spelling = std::env::var("AGMEM_ACCELERATOR").unwrap_or_else(|_| "cpu".to_owned());
     Accelerator::parse(&spelling)
-        .unwrap_or_else(|| panic!("AGMEM_ACCELERATOR={spelling:?}: one of auto, cpu, coreml"))
+        .unwrap_or_else(|| {
+            panic!("AGMEM_ACCELERATOR={spelling:?}: one of auto, cpu, coreml, metal")
+        })
         .resolve()
         .expect("resolve the accelerator")
 }
@@ -185,8 +187,9 @@ fn chip() -> String {
 #[ignore = "times the candidate AGMEM_CANDIDATE names on this machine"]
 fn latency() {
     let candidate = candidate();
-    let accelerator = accelerator().as_str();
     let (backend, load_ms) = load(candidate);
+    // What the backend reports, not what was asked for: a row says where it ran.
+    let accelerator = backend.accelerator().to_owned();
 
     let claims: Vec<String> = (0..16)
         .map(|i| format!("{CLAIM} Variant {i} of the same claim, so no two batch rows are equal."))

@@ -13,6 +13,7 @@
 
 use std::sync::Arc;
 
+pub mod accelerator;
 #[cfg(feature = "candidates")]
 pub mod candidates;
 pub mod fastembed;
@@ -20,6 +21,7 @@ pub mod noop;
 #[cfg(feature = "rerank")]
 pub mod rerank;
 
+pub use accelerator::{Accelerator, Active};
 pub use noop::NoopEmbedder;
 
 /// Turns text into vectors, one backend at a time.
@@ -37,6 +39,14 @@ pub trait Embedder: Send + Sync + 'static {
     /// Stable model identifier, recorded in `meta` so a later run cannot
     /// silently mix vector spaces.
     fn model_id(&self) -> &str;
+
+    /// The execution provider the model runs on — `cpu` unless a backend
+    /// registered another (`docs/design.md` §4; issue #139). Printed by
+    /// `doctor` and the startup log; never stored, since the vectors are
+    /// the same modulo accelerator drift the fixtures check.
+    fn accelerator(&self) -> &str {
+        "cpu"
+    }
 
     /// Embed documents for storage, in input order.
     ///

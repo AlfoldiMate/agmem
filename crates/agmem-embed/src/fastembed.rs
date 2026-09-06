@@ -10,6 +10,7 @@ use std::sync::Mutex;
 
 use fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};
 
+use crate::accelerator::{Accelerator, Active};
 use crate::{EmbedError, Embedder};
 
 /// What the store records in `meta.embedder_model`.
@@ -32,6 +33,8 @@ pub struct FastembedBackend {
     /// Embedding is CPU-bound anyway; parallelism belongs in the batch, not
     /// in the number of loaded models.
     model: Mutex<TextEmbedding>,
+    /// Where the session runs, settled from the configuration at load.
+    accelerator: Active,
 }
 
 /// `TextEmbedding` is not `Debug`, and a loaded session has nothing worth
@@ -41,6 +44,7 @@ impl std::fmt::Debug for FastembedBackend {
         f.debug_struct("FastembedBackend")
             .field("model", &MODEL_ID)
             .field("dim", &DIM)
+            .field("accelerator", &self.accelerator.as_str())
             .finish()
     }
 }
@@ -54,21 +58,42 @@ impl FastembedBackend {
     /// either the crate would cache into `./.fastembed_cache`, relative to
     /// whatever directory the agent happened to launch the server from.
     ///
+    /// `accelerator` names the execution provider; `auto` settles here, once,
+    /// so what this backend reports is what its session runs on.
+    ///
     /// # Errors
-    /// [`EmbedError::Backend`] when the model cannot be fetched or loaded.
-    pub fn new(fallback_cache_dir: Option<PathBuf>) -> Result<Self, EmbedError> {
+    /// [`EmbedError::Backend`] when the model cannot be fetched or loaded, or
+    /// CoreML was asked for by name and is not there.
+    pub fn new(
+        fallback_cache_dir: Option<PathBuf>,
+        accelerator: Accelerator,
+    ) -> Result<Self, EmbedError> {
+        let active = accelerator.resolve()?;
         // Download progress bars are not ours to print: stdout is the MCP wire.
         let mut options = TextInitOptions::new(MODEL).with_show_download_progress(false);
-        if std::env::var_os("FASTEMBED_CACHE_DIR").is_none()
-            && let Some(dir) = fallback_cache_dir
+        let cache_dir = match std::env::var_os("FASTEMBED_CACHE_DIR") {
+            Some(dir) => Some(PathBuf::from(dir)),
+            None => fallback_cache_dir,
+        };
+        if let Some(dir) = &cache_dir {
+            options = options.with_cache_dir(dir.clone());
+        }
+        #[cfg(feature = "coreml")]
         {
-            options = options.with_cache_dir(dir);
+            options =
+                options.with_execution_providers(active.execution_providers(cache_dir.as_deref()));
         }
 
-        tracing::info!(model = MODEL_ID, dim = DIM, "loading embedding model");
+        tracing::info!(
+            model = MODEL_ID,
+            dim = DIM,
+            accelerator = active.as_str(),
+            "loading embedding model"
+        );
         let model = TextEmbedding::try_new(options).map_err(failed)?;
         Ok(Self {
             model: Mutex::new(model),
+            accelerator: active,
         })
     }
 
@@ -104,6 +129,10 @@ impl Embedder for FastembedBackend {
 
     fn model_id(&self) -> &str {
         MODEL_ID
+    }
+
+    fn accelerator(&self) -> &str {
+        self.accelerator.as_str()
     }
 
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {

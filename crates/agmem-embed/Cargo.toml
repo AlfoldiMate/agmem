@@ -15,6 +15,11 @@ rerank = []
 # the server links it. Loads the candidates behind `Embedder` with their own
 # prefixes and pooling so the numbers come off the production ORT path.
 candidates = ["dep:ndarray", "dep:serde_json", "dep:ort", "dep:tokenizers"]
+# The CoreML execution provider on macOS (issue #139). ONNX Runtime as pyke
+# ships it for aarch64-apple-darwin already carries the provider; this turns
+# on ort's Rust surface for it and lets `Accelerator::CoreMl` resolve. Off
+# by default: the CPU path is the portable one.
+coreml = ["dep:ort", "ort/coreml"]
 
 [dependencies]
 fastembed = { workspace = true }

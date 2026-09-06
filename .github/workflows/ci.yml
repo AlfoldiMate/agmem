@@ -40,3 +40,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The CoreML feature (#139) must keep compiling; the model itself never
+      # runs here (#119), and `--accelerator cpu` is what the tests use.
+      - if: runner.os == 'macOS'
+        run: cargo clippy -p agmem-server -p agmem-embed --features coreml --all-targets -- -D warnings

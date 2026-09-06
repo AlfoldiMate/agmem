@@ -13,11 +13,12 @@
 #     nu scripts/embed-candidates-fetch.nu --cache /tmp/agmem-model-cache
 #
 # Idempotent: a file already present with a non-zero size is skipped. About
-# 950 MB in total. Set HF_TOKEN for a gated repo.
+# 2.2 GB in total — arctic's fp32 `onnx/model.onnx` (#139, the CoreML
+# measurement) is the largest. Set HF_TOKEN for a gated repo.
 
 const REPOS = [
     [repo, files];
-    ["Snowflake/snowflake-arctic-embed-m-v2.0" ["onnx/model_int8.onnx" "tokenizer.json" "config.json" "special_tokens_map.json" "tokenizer_config.json"]]
+    ["Snowflake/snowflake-arctic-embed-m-v2.0" ["onnx/model_int8.onnx" "onnx/model.onnx" "tokenizer.json" "config.json" "special_tokens_map.json" "tokenizer_config.json"]]
     ["onnx-community/Qwen3-Embedding-0.6B-ONNX" ["onnx/model_int8.onnx" "tokenizer.json" "config.json" "special_tokens_map.json" "tokenizer_config.json"]]
 ]
 

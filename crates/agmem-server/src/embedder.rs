@@ -15,6 +15,7 @@ pub fn build(cfg: &Config) -> anyhow::Result<Arc<dyn Embedder>> {
     match cfg.embedder {
         EmbedderKind::Fastembed => Ok(Arc::new(agmem_embed::fastembed::FastembedBackend::new(
             Some(model_cache_dir(cfg)),
+            cfg.accelerator.into_embed(),
         )?)),
         EmbedderKind::None => Ok(Arc::new(NoopEmbedder)),
     }

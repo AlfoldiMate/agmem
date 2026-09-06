@@ -96,6 +96,7 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
         schema,
         embedder = embedder.model_id(),
         dim = embedder.dim(),
+        accelerator = embedder.accelerator(),
         pruned,
         checks = checks.len(),
         socket = %path.display(),

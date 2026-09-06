@@ -168,8 +168,11 @@ fn live() -> Option<&'static agmem_embed::fastembed::FastembedBackend> {
     LIVE.get_or_init(|| {
         std::env::var_os(RECORD_ENV)?;
         let cache = std::env::temp_dir().join("agmem-model-cache");
-        let backend = agmem_embed::fastembed::FastembedBackend::new(Some(cache))
-            .expect("load the real model");
+        let backend = agmem_embed::fastembed::FastembedBackend::new(
+            Some(cache),
+            agmem_embed::Accelerator::Cpu,
+        )
+        .expect("load the real model");
         // The eval recording spells the id as the backend did when it was
         // made; the vectors, not the letter case, are the contract.
         assert_eq!(

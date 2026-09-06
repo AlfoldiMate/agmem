@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use agmem_embed::Embedder;
 use agmem_embed::candidates::{CANDIDATE_ENV, Candidate, CandidateBackend, cache_dir};
+use agmem_embed::{Accelerator, Active, Embedder};
 
 /// The store dump the separation sets are read from.
 const DUMP_ENV: &str = "AGMEM_DUMP";
@@ -51,9 +51,20 @@ fn candidate() -> Candidate {
         .unwrap_or_else(|| panic!("{CANDIDATE_ENV} names the candidate to measure"))
 }
 
+/// The execution provider `AGMEM_ACCELERATOR` names (`auto|cpu|coreml`),
+/// settled; `cpu` when unset, so an old invocation measures what it did.
+fn accelerator() -> Active {
+    let spelling = std::env::var("AGMEM_ACCELERATOR").unwrap_or_else(|_| "cpu".to_owned());
+    Accelerator::parse(&spelling)
+        .unwrap_or_else(|| panic!("AGMEM_ACCELERATOR={spelling:?}: one of auto, cpu, coreml"))
+        .resolve()
+        .expect("resolve the accelerator")
+}
+
 fn load(candidate: Candidate) -> (CandidateBackend, f64) {
     let started = Instant::now();
-    let backend = CandidateBackend::load(candidate, &cache_dir()).expect("load candidate");
+    let backend =
+        CandidateBackend::load(candidate, &cache_dir(), accelerator()).expect("load candidate");
     let load_ms = started.elapsed().as_secs_f64() * 1e3;
     eprintln!("{} loaded in {load_ms:.0} ms", candidate.id());
     (backend, load_ms)
@@ -174,7 +185,7 @@ fn chip() -> String {
 #[ignore = "times the candidate AGMEM_CANDIDATE names on this machine"]
 fn latency() {
     let candidate = candidate();
-    let accelerator = std::env::var("AGMEM_ACCELERATOR").unwrap_or_else(|_| "cpu".to_owned());
+    let accelerator = accelerator().as_str();
     let (backend, load_ms) = load(candidate);
 
     let claims: Vec<String> = (0..16)

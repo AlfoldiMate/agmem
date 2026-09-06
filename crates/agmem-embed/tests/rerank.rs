@@ -143,7 +143,8 @@ fn record_rerank_scores() {
         );
     }
     let embedder =
-        agmem_embed::fastembed::FastembedBackend::new(Some(cache)).expect("load the embedder");
+        agmem_embed::fastembed::FastembedBackend::new(Some(cache), agmem_embed::Accelerator::Cpu)
+            .expect("load the embedder");
     let embeds: Vec<f64> = (0..5)
         .map(|_| {
             let start = Instant::now();

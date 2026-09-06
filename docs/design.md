@@ -1192,6 +1192,7 @@ rather than details:
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
 | `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only supported backend (`none` is a hidden test-only value) |
+| `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | ONNX Runtime execution provider: `cpu`, or `coreml` on a macOS build with `--features coreml` (#139, measured and dropped — `docs/eval/coreml-ep.md`; the feature is off in releases, so `auto` is the CPU everywhere) |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session serves: `core` removes `consolidate` and `forget` from the router (neither listed nor callable), `all` serves every tool. Travels the daemon handshake per session; one-shots ask for `all` on their own (#150) |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |

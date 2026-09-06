@@ -379,7 +379,8 @@ async fn a_store_on_disk_reads_the_same_cold() {
 #[ignore = "loads the real embedding model"]
 async fn a_cold_vector_arm_reads_as_a_warm_one_does() {
     let cache = std::env::temp_dir().join("agmem-model-cache");
-    let embedder = FastembedBackend::new(Some(cache)).expect("load model");
+    let embedder =
+        FastembedBackend::new(Some(cache), agmem_embed::Accelerator::Cpu).expect("load model");
     let directory = tempfile::tempdir().expect("tempdir");
 
     let mut faults: Vec<String> = Vec::new();

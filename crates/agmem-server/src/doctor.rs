@@ -122,16 +122,12 @@ async fn check_store(cfg: &Config) -> u32 {
         }
         Ok(embedder) => {
             eprintln!(
-                "  ok    embedder             {} ({}d, {})",
-                embedder.model_id(),
-                embedder.dim(),
-                embedder.accelerator()
+                "  ok    embedder             {}",
+                describe(embedder.as_ref())
             );
             if let Some(db) = &opened {
-                match agmem_store::migrate::ensure_embedder(db, embedder.model_id(), embedder.dim())
-                    .await
-                {
-                    Ok(()) => eprintln!("  ok    embedder vs store    same model and width"),
+                match embedder_vs_store(db, embedder.as_ref()).await {
+                    Ok(detail) => eprintln!("  ok    embedder vs store    {detail}"),
                     Err(err) => {
                         failures += 1;
                         eprintln!("  FAIL  embedder vs store    {err}");
@@ -148,15 +144,66 @@ async fn check_store(cfg: &Config) -> u32 {
     failures
 }
 
+/// `<id> (<dim>d, <accelerator>, rev <short>)` — the embedder line.
+fn describe(embedder: &dyn Embedder) -> String {
+    format!(
+        "{} ({}d, {}{})",
+        embedder.model_id(),
+        embedder.dim(),
+        embedder.accelerator(),
+        embedder
+            .revision()
+            .map(|rev| format!(", rev {}", agmem_store::error::short_revision(rev)))
+            .unwrap_or_default()
+    )
+}
+
+/// Whether the store's recorded vector space is the configured model's, and
+/// what the next start will do about it if not (issue #138).
+///
+/// Never a failure on its own: the configured model wins, so a store that
+/// holds another model's vectors is not broken, it is scheduled — the next
+/// start moves it and re-embeds in the background. Only the engine refusing
+/// to answer is a FAIL.
+async fn embedder_vs_store(db: &Db, embedder: &dyn Embedder) -> Result<String, String> {
+    let stored = agmem_store::migrate::stored_embedder(db)
+        .await
+        .map_err(|err| err.to_string())?;
+    Ok(match stored {
+        None => format!(
+            "nothing recorded yet; the first start records {}",
+            embedder.model_id()
+        ),
+        Some(stored)
+            if stored.matches(embedder.model_id(), embedder.dim(), embedder.revision()) =>
+        {
+            "agrees".to_owned()
+        }
+        Some(stored) => format!(
+            "store holds {} ({}d{}); the next start moves it to {} ({}d) and re-embeds every \
+             row in the background — or run `agmem reindex` now",
+            stored.model,
+            stored.dim,
+            stored
+                .revision
+                .as_deref()
+                .map(|rev| format!(", rev {}", agmem_store::error::short_revision(rev)))
+                .unwrap_or_default(),
+            embedder.model_id(),
+            embedder.dim()
+        ),
+    })
+}
+
 /// Rows the vector half of retrieval cannot reach.
 ///
-/// A `--reindex` killed between its reset and the end of its embed loop
-/// leaves exactly this: rows with no vector, under a `meta` that already
-/// names the new model — so the guard above is satisfied and a vector recall
-/// silently misses them. Nothing else notices, which is why this is a check
-/// and not a log line. Rows written in BM25-only mode look identical and have
-/// the same remedy, so the message names it rather than guessing which
-/// happened.
+/// A re-embed interrupted between its reset and the end of its loop leaves
+/// exactly this: rows with no vector, under a `meta` that already names the
+/// new model — so the guard above is satisfied and a vector recall silently
+/// misses them. Rows written in BM25-only mode look identical. Neither is a
+/// failure since #138: the next start finishes them in the background, and
+/// every tool result says so until then. The line still names the count,
+/// because it is the one number that says whether recall is whole.
 async fn check_vector_coverage(db: &Db) -> u32 {
     match vector_coverage(db).await {
         Ok(detail) => {
@@ -174,9 +221,9 @@ async fn check_vector_coverage(db: &Db) -> u32 {
 async fn vector_coverage(db: &Db) -> Result<String, String> {
     match agmem_store::repo::reindex::pending_count(db).await {
         Ok(0) => Ok("every row carries a vector".to_owned()),
-        Ok(pending) => Err(format!(
-            "{pending} row(s) carry no vector, so a vector recall cannot reach them; run \
-             `agmem --reindex`"
+        Ok(pending) => Ok(format!(
+            "{pending} row(s) still to embed; the next start finishes them in the background, \
+             or run `agmem reindex` now"
         )),
         Err(err) => Err(err.to_string()),
     }
@@ -255,10 +302,8 @@ fn embedder_only(cfg: &Config) -> u32 {
         }
         Ok(embedder) => {
             eprintln!(
-                "  ok    embedder             {} ({}d, {})",
-                embedder.model_id(),
-                embedder.dim(),
-                embedder.accelerator()
+                "  ok    embedder             {}",
+                describe(embedder.as_ref())
             );
             0
         }

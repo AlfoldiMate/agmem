@@ -28,9 +28,9 @@ use rmcp::model::{CallToolResult, ContentBlock};
 use serde_json::{Value, json};
 
 use crate::config::{Config, ConsolidateArgs, ContextArgs, ForgetArgs, ToolGroup};
+use crate::lock;
 use crate::service::AgmemService;
 use crate::tools::context::{self, ContextParams};
-use crate::{embedder, lock};
 
 /// Print the context block for `cfg` and exit — the whole subcommand.
 ///
@@ -96,19 +96,26 @@ pub(crate) async fn daemon_session(
 pub(crate) async fn open_direct(
     cfg: &Config,
 ) -> anyhow::Result<(AgmemService, Option<lock::DataDirLock>)> {
-    let lock = if cfg.db_is_remote() {
-        None
-    } else {
-        Some(lock::acquire(&cfg.data_dir)?)
-    };
-    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
-    agmem_store::migrate::ensure(&db).await?;
-    let embedder = embedder::build(cfg)?;
-    agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
-    let pruned = crate::startup::prune(&db).await;
-    agmem_store::repo::ensure_space(&db, &cfg.space).await?;
-    tracing::debug!(pruned, "store opened for a one-shot");
-    Ok((AgmemService::new(db, embedder, Arc::new(cfg.clone())), lock))
+    let crate::startup::Opened {
+        db,
+        embedder,
+        vectors,
+        pruned,
+        lock,
+        ..
+    } = crate::startup::open(cfg).await?;
+    // A one-shot answers and exits; rows it finds pending stay pending, for
+    // the next daemon (or `agmem reindex`) to finish. Its answer still says
+    // how many there are.
+    tracing::debug!(
+        pruned,
+        pending = vectors.pending(),
+        "store opened for a one-shot"
+    );
+    Ok((
+        AgmemService::new(db, embedder, Arc::new(cfg.clone()), vectors),
+        lock,
+    ))
 }
 
 /// Ask a shared daemon, as a real MCP client on the session socket.

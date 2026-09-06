@@ -19,9 +19,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use agmem_server::daemon;
 use agmem_server::service::{self, AgmemService};
-use agmem_server::{
-    config, doc, doctor, embedder, hook, lock, oneshot, reindex, startup, telemetry,
-};
+use agmem_server::{config, doc, doctor, hook, oneshot, reindex, startup, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -41,14 +39,15 @@ async fn main() -> anyhow::Result<()> {
 
     // Before the daemon branch: reindexing rewrites every vector in the
     // store, which is the one thing that must not be handed to a process
-    // already serving sessions from it.
+    // already serving sessions from it. `--reindex` is the old spelling.
     if cfg.reindex {
-        return reindex::run(&cfg).await;
+        return reindex::run(&cfg, config::ReindexArgs::default()).await;
     }
 
     // One-shot subcommands print their answer and exit. They route through
     // the daemon the way a session would (or open the store where a session
-    // would), so they never contend with a running daemon for the store.
+    // would), so they never contend with a running daemon for the store —
+    // except `reindex`, which refuses to run while one is up.
     match cfg.command.clone() {
         Some(config::CliCommand::Context(args)) => return oneshot::context(cfg, args).await,
         Some(config::CliCommand::Hook(args)) => return hook::run(cfg, args.event).await,
@@ -57,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
             return oneshot::consolidate(cfg, args).await;
         }
         Some(config::CliCommand::Forget(args)) => return oneshot::forget(cfg, args).await,
+        Some(config::CliCommand::Reindex(args)) => return reindex::run(&cfg, args).await,
         None => {}
     }
 
@@ -74,33 +74,37 @@ async fn main() -> anyhow::Result<()> {
 /// Own the store and serve one session over stdio — agmem's original shape,
 /// still what runs behind `--no-daemon` and behind a remote engine.
 async fn in_process(cfg: config::Config) -> anyhow::Result<()> {
-    // Embedded engines require the single-writer lock for the whole process
-    // lifetime (design §5.1 step 3); remote engines skip it.
-    let lock = if cfg.db_is_remote() {
-        None
-    } else {
-        Some(lock::acquire(&cfg.data_dir)?)
-    };
-
-    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
-    let schema = agmem_store::migrate::ensure(&db).await?;
-    let embedder = embedder::build(&cfg)?;
-    agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
-    let pruned = startup::prune(&db).await;
-    agmem_store::repo::ensure_space(&db, &cfg.space).await?;
+    let startup::Opened {
+        db,
+        embedder,
+        vectors,
+        schema,
+        pruned,
+        lock,
+    } = startup::open(&cfg).await?;
     tracing::info!(
         schema,
         embedder = embedder.model_id(),
         dim = embedder.dim(),
         accelerator = embedder.accelerator(),
         pruned,
+        pending = vectors.pending(),
         "store ready"
     );
+    // This process holds the store, so this process finishes its vectors
+    // (issue #138); the session it serves sees the count go down.
+    if vectors.pending() > 0 {
+        tokio::spawn(reindex::drain(
+            db.clone(),
+            Arc::clone(&embedder),
+            vectors.clone(),
+        ));
+    }
 
     // From here stdout belongs to the transport (design §5.1 step 8). The
     // lock is held until this returns, which is what keeps a second agmem off
     // an embedded store for as long as this one is serving.
-    service::serve_stdio(AgmemService::new(db, embedder, Arc::new(cfg))).await?;
+    service::serve_stdio(AgmemService::new(db, embedder, Arc::new(cfg), vectors)).await?;
     drop(lock);
     Ok(())
 }

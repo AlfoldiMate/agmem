@@ -334,7 +334,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine. `mem://` for scratch, `ws://host` to share |
 | `--space` / `AGMEM_SPACE` | derived from cwd | This instance's space |
 | `--embedder` / `AGMEM_EMBEDDER` | `llama` | The local llama.cpp runtime, the only backend |
-| `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | Or `bge-small-en-v1.5`, the light option. Changing it on a store with vectors needs `--reindex` |
+| `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | Or `bge-small-en-v1.5`, the light option. The configured model wins: a store holding another model's vectors is moved on open and re-embedded in the background |
 | `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | `metal` on Apple silicon, `cpu` anywhere, or to opt out |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
@@ -345,7 +345,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in wording | Replace one tool's description, per server, no rebuild |
 | `AGMEM_MODEL_DIR` | `<data>/models` | Where the model weights live |
 | `--doctor` | | Self-check, then exit. Counts documents per space |
-| `--reindex` | | Re-embed every row under the configured embedder. The one way to change models |
+| `reindex` subcommand | | Re-embed every row now, with no session attached; `--model` picks the target for this run. Refuses while a daemon serves the store |
 
 A tool description is most of what decides whether an agent reaches for
 memory. `AGMEM_TOOL_DESC_RECALL` and friends replace one outright, and
@@ -369,10 +369,15 @@ effect of the built-in wording and the harness that measures it.
   Hugging Face into `<data dir>/models`. Behind a proxy, copy that directory
   from a machine that has it, or point `AGMEM_MODEL_DIR` at one that does.
   `--model bge-small-en-v1.5` is 36 MB.
-- **A different model.** A store written with one model refuses to open under
-  a different one; `--reindex` converts it. Stores from before v0.3 were
-  embedded with bge on ONNX Runtime and need `--reindex` once. There is no
-  model-less mode: recall is BM25 *and* vectors.
+- **A different model.** The configured model wins. A store written with
+  another model — every store from before v0.3, which holds bge on ONNX
+  Runtime — is moved on the next start: vectors cleared, indexes resized,
+  and the rows re-embedded in the background while the store already
+  serves. Until the last row is done, every tool result ends with a line
+  saying how many are left; recall sees them through BM25 meanwhile. To do
+  it in one sitting instead, `agmem reindex` (with `--model` to pick the
+  target) — it needs the store to itself, so end the sessions first. There
+  is no model-less mode: recall is BM25 *and* vectors.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 

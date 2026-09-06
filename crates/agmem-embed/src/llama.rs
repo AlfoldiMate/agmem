@@ -213,6 +213,10 @@ impl Embedder for LlamaEmbedder {
         self.spec.id
     }
 
+    fn revision(&self) -> Option<&str> {
+        Some(self.spec.revision())
+    }
+
     fn thresholds(&self) -> Thresholds {
         self.spec.thresholds
     }

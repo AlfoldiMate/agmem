@@ -56,8 +56,9 @@ pub struct Cli {
     #[arg(long, env = "AGMEM_EMBEDDER", value_enum, default_value_t = EmbedderKind::Llama)]
     pub embedder: EmbedderKind,
 
-    /// Embedding model. Changing it on a store that holds vectors is a
-    /// migration (`--reindex`); a mismatch refuses to start.
+    /// Embedding model. The configured model wins: a store holding another
+    /// model's vectors is moved on open and re-embedded in the background
+    /// (issue #138); `agmem reindex` does the same in one sitting.
     #[arg(long, env = "AGMEM_MODEL", value_enum, default_value_t = ModelKind::Embeddinggemma300m)]
     pub model: ModelKind,
 
@@ -99,11 +100,11 @@ pub struct Cli {
     #[arg(long)]
     pub doctor: bool,
 
-    /// Re-embed the store with the configured backend and exit — the
-    /// sanctioned way to change embedding model or width. No env var: a
-    /// maintenance pass that rewrites every vector should not be switchable
-    /// by a stray export.
-    #[arg(long)]
+    /// The spelling `agmem reindex` replaced (v0.3.1). Kept one release so
+    /// a script or a doctor line from before still runs; hidden so nobody
+    /// learns it. No env var: a maintenance pass that rewrites every vector
+    /// should not be switchable by a stray export.
+    #[arg(long, hide = true)]
     pub reindex: bool,
 
     /// Open the store in this process instead of through the shared daemon.
@@ -167,6 +168,23 @@ pub enum CliCommand {
     /// `forget` tool from the shell; by-query forgetting stays on MCP, where
     /// a dry run can be held against the call that follows it.
     Forget(ForgetArgs),
+
+    /// Re-embed every row under the configured model — or under `--model`
+    /// for this run — and exit. What the server does in the background
+    /// after a model change, done now, in one sitting, with no session
+    /// attached. Needs the store to itself: refuses while a daemon serves.
+    Reindex(ReindexArgs),
+}
+
+/// What `agmem reindex` takes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Args)]
+pub struct ReindexArgs {
+    /// The model to move the store to, for this run. Without it the
+    /// configured model (`--model` / `AGMEM_MODEL`) is the target, which
+    /// makes a bare `agmem reindex` the way to finish an interrupted
+    /// background re-embed.
+    #[arg(long, value_enum)]
+    pub model: Option<ModelKind>,
 }
 
 /// What `agmem consolidate` passes to `consolidate`.

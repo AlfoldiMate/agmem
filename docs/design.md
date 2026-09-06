@@ -86,7 +86,7 @@ Key properties:
 | Background workers: elaboration, consolidation, decay sweeps | **No background jobs.** Decay is computed at read time; pruning runs lazily at startup; consolidation is agent-invoked (phase 3) |
 | decision/retrieval/response trace graph | Provenance (`source`) on every record + supersession chains; `inspect` walks them. Full trace tables deferred |
 | Grants, principals, key attenuation, delegation | Local trust model: space isolation + destructive-op flags. No auth in v1 |
-| REST + Management API + SDKs + CLI/TUI | **None.** MCP tools only; the CLI is `--doctor`, `--reindex`, and the one-shots that mirror a tool (`agmem context`, `agmem doc …`, `agmem hook …`) |
+| REST + Management API + SDKs + CLI/TUI | **None.** MCP tools only; the CLI is `--doctor`, `agmem reindex`, and the one-shots that mirror a tool (`agmem context`, `agmem doc …`, `agmem hook …`) |
 
 ---
 
@@ -257,9 +257,11 @@ Notes:
   it needs the query-side embedding anyway.
 - Dimension 384 is what v1 baked in; a first run with a wider model (the
   default is now 768) redefines the indexes before recording its pair. The
-  dimension is recorded in `meta`; switching models requires an explicit
-  `agmem --reindex`
-  maintenance pass — startup refuses a model/dim mismatch with a clear
+  dimension is recorded in `meta` with the model id and its pinned
+  revision (#138); startup moves a store whose recorded space differs from
+  the configured model and re-embeds it in the background, and
+  `agmem reindex` does the same in one sitting — see §5.5. The store crate's
+  guard still refuses a mismatch with a clear
   error rather than silently mixing spaces.
 - `writer` (v6) is the attribution `source` never was: `source` says where
   the content came from, `writer` says which client and session put it in the
@@ -707,7 +709,7 @@ agmem/
 │       │   ├── startup.rs        # steps 4–9 of §5.1, shared by every route
 │       │   ├── lock.rs           # the single-writer advisory lock
 │       │   ├── doctor.rs         # --doctor self-check
-│       │   ├── reindex.rs        # --reindex re-embedding pass
+│       │   ├── reindex.rs        # the re-embedding pass: background drain + `agmem reindex`
 │       │   ├── oneshot.rs        # `agmem context`: one briefing, no server;
 │       │   │                     #   the daemon/direct routes `doc` shares
 │       │   ├── doc.rs            # `agmem doc put/get/list/forget` (#135)
@@ -830,7 +832,8 @@ main()
  6. migrate::ensure()     — idempotent DEFINEs, meta.schema_version gate
  7. embedder init (async — model may download on very first run)
       meta.embedder_model/dim  vs  configured backend
-      └─ mismatch → hard error naming the `reindex` remedy (no silent mixing)
+      └─ mismatch → the configured model wins (#138): move the store, drain in
+         the background, a notice on every tool result until done
  8. repo::prune_expired() — lazy TTL close of decayed `fast` records, every
       space at once, and never fatal: the schema and the embedder are up, so a
       failed sweep is logged and the session is served anyway
@@ -1119,7 +1122,7 @@ points, keeping the process count at one:
 | Decay sweep (importance × rate daily) | Computed in the scoring formula at read time — nothing to run |
 | TTL expiry of context-category | `repo::prune_expired` closes decayed `fast` records at every start |
 | Consolidation / elaboration | `consolidate` returns *candidates* — near-dup clusters, contradiction pairs, stale contexts; the **agent** decides merges via `remember(supersedes)` or `forget`. The LLM stays client-side (issue #25) |
-| Reindex / re-embed | Explicit maintenance op (`agmem --reindex`), required for embedder change: clears every vector, redefines both HNSW indexes at the new width, then re-embeds — the rows still without a vector are what an interrupted pass resumes from |
+| Reindex / re-embed | Automatic on a model change (#138): startup clears every vector, redefines both HNSW indexes at the new width, records the new space, then a background task in the process holding the store re-embeds while it serves, with a notice on every tool result until done; `agmem reindex [--model]` is the same pass in one sitting. The rows still without a vector are what an interrupted pass resumes from |
 | fsck duplicate audit | Folded into `inspect stats` + `consolidate` candidates |
 
 The prune is one `UPDATE`, and the decay curve is not repeated in it. The
@@ -1198,7 +1201,7 @@ rather than details:
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
 | `--embedder` / `AGMEM_EMBEDDER` | `llama` | The local llama.cpp runtime, the only supported backend (`none` is a hidden test-only value). An API-backed backend (#120) would be a second variant |
-| `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | `embeddinggemma-300m` (768d, Q8_0, the measured winner — `docs/eval/embed-models.md`, `docs/eval/llama-runtime.md`) or `bge-small-en-v1.5` (384d, Q8_0, light). The model carries its own thresholds (`dedup::Thresholds`); checked across the daemon handshake; changing it on a store with vectors is `--reindex` (#138) |
+| `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | `embeddinggemma-300m` (768d, Q8_0, the measured winner — `docs/eval/embed-models.md`, `docs/eval/llama-runtime.md`) or `bge-small-en-v1.5` (384d, Q8_0, light). The model carries its own thresholds (`dedup::Thresholds`); checked across the daemon handshake; changing it on a store with vectors moves the store on the next start and re-embeds in the background, or `agmem reindex --model` now (#138) |
 | `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | `metal` on an Apple-silicon build (compiled in by target, not by feature), `cpu` everywhere else and as the opt-out. CoreML on ONNX Runtime was measured and dropped (#139, `docs/eval/coreml-ep.md`) before ONNX Runtime itself was replaced |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session serves: `core` removes `consolidate` and `forget` from the router (neither listed nor callable), `all` serves every tool. Travels the daemon handshake per session; one-shots ask for `all` on their own (#150) |
@@ -1208,7 +1211,7 @@ rather than details:
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it until reboot |
 | `--daemon-serve` | — | Be the daemon. Started automatically; hidden from `--help` |
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip, vector coverage; prints report, exits |
-| `--reindex` | — | Re-embed every row under the configured backend and record its model/dim pair — the one sanctioned way to change embedders; exits |
+| `reindex` subcommand | — | Re-embed every row now, under the configured model or `--model`; refuses while a daemon serves the store; exits. `--reindex` is the hidden pre-v0.3.1 spelling |
 | `context` subcommand | — | Print one session-start briefing to stdout and exit (`--query`, `--space`, `--budget-chars`) — the shell-hook surface, no MCP served |
 | `hook <event>` subcommand | — | The Claude Code plugin's hooks, reading the hook JSON on stdin: `session-start` (aimed briefing, one-sentence footer, branch tag with its document count, post-compaction recall list), `post-tool-use` (recall/write log, once-per-session seam nudges), `stop` (recalled-but-wrote-nothing nudge); no MCP served |
 

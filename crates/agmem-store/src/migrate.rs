@@ -14,6 +14,7 @@ const BOOTSTRAP: &str = "DEFINE TABLE IF NOT EXISTS meta SCHEMAFULL;
      DEFINE FIELD IF NOT EXISTS schema_version ON meta TYPE int;
      DEFINE FIELD IF NOT EXISTS embedder_model ON meta TYPE option<string>;
      DEFINE FIELD IF NOT EXISTS embedder_dim ON meta TYPE option<int>;
+     DEFINE FIELD IF NOT EXISTS embedder_revision ON meta TYPE option<string>;
      DEFINE FIELD IF NOT EXISTS created_at ON meta TYPE datetime DEFAULT time::now();";
 
 /// Ordered migration batches; index + 1 is the schema version they produce.
@@ -35,12 +36,51 @@ pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
 /// Embedding width the v1 schema defines its HNSW indexes with (design §2.2).
 ///
 /// What a store starts at, not what it is stuck at: the dimension is baked
-/// into the index definitions, so changing embedder families means rebuilding
-/// them and re-embedding every row, which is what `agmem --reindex` does and
-/// the only way it is allowed to happen. Startup compares the configured
-/// backend against `meta:main.embedder_dim` — the pair the store recorded —
-/// rather than against this constant.
+/// into the index definitions, so changing models means rebuilding them and
+/// re-embedding every row — which the server does on open when the store's
+/// recorded space differs from the configured model (issue #138), and
+/// `agmem reindex` does on demand. Startup compares the configured backend
+/// against what `meta:main` recorded, never against this constant.
 pub const EMBEDDING_DIM: usize = 384;
+
+/// The vector space a store's rows were built in, as `meta:main` records it.
+///
+/// `revision` is `None` for a store written before agmem recorded one
+/// (pre-v0.3) or by a backend whose weights have no such identity (test
+/// doubles); [`Self::matches`] says how that reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredEmbedder {
+    /// `meta.embedder_model`.
+    pub model: String,
+    /// `meta.embedder_dim`.
+    pub dim: i64,
+    /// `meta.embedder_revision`.
+    pub revision: Option<String>,
+}
+
+impl StoredEmbedder {
+    /// Whether a backend reporting `model_id`/`dim`/`revision` embeds into
+    /// this space.
+    ///
+    /// The id and the width must agree. The revision is compared only when
+    /// both sides carry one: a store that never recorded a revision is not a
+    /// mismatch — it predates the field, and the first run that knows the
+    /// revision backfills it — and a backend without one claims nothing.
+    #[must_use]
+    pub fn matches(&self, model_id: &str, dim: usize, revision: Option<&str>) -> bool {
+        self.model == model_id
+            && self.dim == width(dim)
+            && match (self.revision.as_deref(), revision) {
+                (Some(stored), Some(configured)) => stored == configured,
+                _ => true,
+            }
+    }
+}
+
+/// A width as `meta` stores it.
+fn width(dim: usize) -> i64 {
+    i64::try_from(dim).unwrap_or(i64::MAX)
+}
 
 /// Read the applied schema version (0 = fresh store).
 ///
@@ -58,7 +98,9 @@ pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
 ///
 /// The HNSW indexes carry one dimension and the vectors one geometry, so two
 /// models in one store means silently wrong neighbours. First run writes the
-/// pair into `meta`; later runs must match it.
+/// space into `meta`; later runs must match it ([`StoredEmbedder::matches`]).
+/// This is the guard; moving a store that does not match is the server's
+/// decision, made in its startup with [`set_embedder`] (issue #138).
 ///
 /// A dimensionless backend (`--embedder none`) claims no vector space: it is
 /// neither recorded nor checked, so BM25-only mode opens any store and only
@@ -69,6 +111,10 @@ pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
 /// no pair has never held a vector (every run that could write one records
 /// its pair here first), so the indexes are empty and the switch is free.
 ///
+/// A store that matches on id and width but never recorded a revision gets
+/// this run's revision written in: it predates the field, and the vectors it
+/// holds are the ones this pin produces until a later pin says otherwise.
+///
 /// Two first runs on one shared store — `ws://`, where no advisory lock
 /// serialises processes — can both find the pair absent (issue #72). The
 /// write is conditional on it still being absent, so the engine lets exactly
@@ -77,71 +123,72 @@ pub async fn current_version(db: &Db) -> Result<u32, StoreError> {
 ///
 /// # Errors
 /// [`StoreError::EmbedderMismatch`] when the store was embedded with another
-/// model or width, or when a concurrent first run recorded its pair first.
-pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), StoreError> {
+/// model, width or revision, or when a concurrent first run recorded its
+/// pair first.
+pub async fn ensure_embedder(
+    db: &Db,
+    model_id: &str,
+    dim: usize,
+    revision: Option<&str>,
+) -> Result<(), StoreError> {
     if dim == 0 {
         return Ok(());
     }
-    let width = i64::try_from(dim).unwrap_or(i64::MAX);
+    let mismatch = |stored: StoredEmbedder| StoreError::EmbedderMismatch {
+        stored_model: stored.model,
+        stored_dim: stored.dim,
+        stored_revision: stored.revision,
+        configured_model: model_id.to_owned(),
+        configured_dim: width(dim),
+        configured_revision: revision.map(str::to_owned),
+    };
 
-    let mut resp = db
-        .query(
-            "SELECT VALUE embedder_model FROM meta:main;
-             SELECT VALUE embedder_dim FROM meta:main;",
-        )
-        .await?
-        .check()?;
-    let stored_model: Option<String> = resp
-        .take::<Vec<Option<String>>>(0)?
-        .into_iter()
-        .flatten()
-        .next();
-    let stored_dim: Option<i64> = resp
-        .take::<Vec<Option<i64>>>(1)?
-        .into_iter()
-        .flatten()
-        .next();
-
-    match (stored_model, stored_dim) {
-        (Some(model), Some(stored)) if model != model_id || stored != width => {
-            Err(StoreError::EmbedderMismatch {
-                stored_model: model,
-                stored_dim: stored,
-                configured_model: model_id.to_owned(),
-                configured_dim: width,
-            })
+    match stored_embedder(db).await? {
+        Some(stored) if !stored.matches(model_id, dim, revision) => Err(mismatch(stored)),
+        Some(stored) => {
+            if let (None, Some(revision)) = (&stored.revision, revision) {
+                tracing::info!(
+                    model = model_id,
+                    revision,
+                    "recording store embedder revision"
+                );
+                db.query(
+                    "UPDATE meta:main SET embedder_revision = $revision
+                     WHERE embedder_revision IS NONE",
+                )
+                .bind(("revision", revision.to_owned()))
+                .await?
+                .check()?;
+            }
+            Ok(())
         }
-        (Some(_), Some(_)) => Ok(()),
-        _ => {
+        None => {
             // No pair recorded means no run could have written a vector yet,
             // so the HNSW indexes still stand empty at the width the schema
             // baked in — adopt this backend's width now, while it costs
-            // nothing. From here on, only `--reindex` may move it.
+            // nothing.
             if dim != EMBEDDING_DIM {
                 crate::repo::reindex::reset_vectors(db, dim).await?;
             }
-            tracing::info!(model = model_id, dim, "recording store embedder");
+            tracing::info!(model = model_id, dim, revision, "recording store embedder");
             // Conditional on the pair still being absent: a check in Rust and
             // an unconditional write is two statements, and another first run
             // fits between them (issue #72). One guarded statement is the
             // only write the engine applies atomically, so exactly one pair
             // lands — the re-read below is what tells a loser it lost.
             db.query(
-                "UPDATE meta:main SET embedder_model = $model, embedder_dim = $dim
+                "UPDATE meta:main SET embedder_model = $model, embedder_dim = $dim,
+                     embedder_revision = $revision
                  WHERE embedder_model IS NONE AND embedder_dim IS NONE",
             )
             .bind(("model", model_id.to_owned()))
-            .bind(("dim", width))
+            .bind(("dim", width(dim)))
+            .bind(("revision", revision.map(str::to_owned)))
             .await?
             .check()?;
             match stored_embedder(db).await? {
-                Some((model, stored)) if model == model_id && stored == width => Ok(()),
-                Some((stored_model, stored_dim)) => Err(StoreError::EmbedderMismatch {
-                    stored_model,
-                    stored_dim,
-                    configured_model: model_id.to_owned(),
-                    configured_dim: width,
-                }),
+                Some(stored) if stored.matches(model_id, dim, revision) => Ok(()),
+                Some(stored) => Err(mismatch(stored)),
                 // `ensure` ran before this, so `meta:main` exists and one of
                 // the writers above matched it; an absent pair here is the
                 // engine misbehaving, not a caller error.
@@ -153,19 +200,20 @@ pub async fn ensure_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), 
     }
 }
 
-/// The model and width this store's vectors were built with, if a run has
-/// ever recorded one.
+/// The vector space this store's rows were built in, if a run has ever
+/// recorded one.
 ///
 /// `None` for a store only ever opened in BM25-only mode: a dimensionless
 /// backend claims no vector space, so it writes nothing here.
 ///
 /// # Errors
 /// [`StoreError::Db`] for anything the engine rejects.
-pub async fn stored_embedder(db: &Db) -> Result<Option<(String, i64)>, StoreError> {
+pub async fn stored_embedder(db: &Db) -> Result<Option<StoredEmbedder>, StoreError> {
     let mut resp = db
         .query(
             "SELECT VALUE embedder_model FROM meta:main;
-             SELECT VALUE embedder_dim FROM meta:main;",
+             SELECT VALUE embedder_dim FROM meta:main;
+             SELECT VALUE embedder_revision FROM meta:main;",
         )
         .await?
         .check()?;
@@ -179,27 +227,46 @@ pub async fn stored_embedder(db: &Db) -> Result<Option<(String, i64)>, StoreErro
         .into_iter()
         .flatten()
         .next();
-    Ok(model.zip(dim))
+    let revision: Option<String> = resp
+        .take::<Vec<Option<String>>>(2)?
+        .into_iter()
+        .flatten()
+        .next();
+    Ok(model.zip(dim).map(|(model, dim)| StoredEmbedder {
+        model,
+        dim,
+        revision,
+    }))
 }
 
-/// Record `model_id`/`dim` as the store's vector space, replacing whatever
-/// was there.
+/// Record `model_id`/`dim`/`revision` as the store's vector space, replacing
+/// whatever was there.
 ///
-/// [`ensure_embedder`] only ever writes the pair when it is absent — it is a
-/// guard, and a guard that overwrites what it guards is not one. `--reindex`
-/// is the sanctioned way to change the pair, and this is where it says so.
-/// Writing it *before* the re-embedding loop is deliberate: the rows without
-/// vectors are the resume marker, so a run interrupted halfway must not come
-/// back to a store that thinks it still belongs to the old model.
+/// [`ensure_embedder`] only ever writes the space when it is absent — it is a
+/// guard, and a guard that overwrites what it guards is not one. Moving a
+/// store is a re-embed (the server's startup on a mismatch, or
+/// `agmem reindex`), and this is where it says so. Writing it *before* the
+/// re-embedding loop is deliberate: the rows without vectors are the resume
+/// marker, so a run interrupted halfway must not come back to a store that
+/// thinks it still belongs to the old model.
 ///
 /// # Errors
 /// [`StoreError::Db`] for anything the engine rejects.
-pub async fn set_embedder(db: &Db, model_id: &str, dim: usize) -> Result<(), StoreError> {
-    db.query("UPSERT meta:main SET embedder_model = $model, embedder_dim = $dim")
-        .bind(("model", model_id.to_owned()))
-        .bind(("dim", i64::try_from(dim).unwrap_or(i64::MAX)))
-        .await?
-        .check()?;
+pub async fn set_embedder(
+    db: &Db,
+    model_id: &str,
+    dim: usize,
+    revision: Option<&str>,
+) -> Result<(), StoreError> {
+    db.query(
+        "UPSERT meta:main SET embedder_model = $model, embedder_dim = $dim,
+             embedder_revision = $revision",
+    )
+    .bind(("model", model_id.to_owned()))
+    .bind(("dim", width(dim)))
+    .bind(("revision", revision.map(str::to_owned)))
+    .await?
+    .check()?;
     Ok(())
 }
 

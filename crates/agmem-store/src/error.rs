@@ -50,14 +50,35 @@ pub enum StoreError {
 
     /// The store's vectors were built by a different embedder.
     #[error(
-        "store was embedded with {stored_model} ({stored_dim}d) but this run is configured for \
-         {configured_model} ({configured_dim}d); vectors from two models are not comparable — \
-         switch back, or re-embed the store with `agmem --reindex`"
+        "store was embedded with {stored_model} ({stored_dim}d{}) but this run is configured for \
+         {configured_model} ({configured_dim}d{}); vectors from two models are not comparable — \
+         switch back, or re-embed the store with `agmem reindex`",
+        revision_suffix(stored_revision.as_deref()),
+        revision_suffix(configured_revision.as_deref())
     )]
     EmbedderMismatch {
         stored_model: String,
         stored_dim: i64,
+        stored_revision: Option<String>,
         configured_model: String,
         configured_dim: i64,
+        configured_revision: Option<String>,
     },
+}
+
+/// `, rev <short>` when there is a revision to name, nothing otherwise.
+fn revision_suffix(revision: Option<&str>) -> String {
+    revision
+        .map(|revision| format!(", rev {}", short_revision(revision)))
+        .unwrap_or_default()
+}
+
+/// The first seven characters of a commit hash — enough to name it in a
+/// message, the way `git` does.
+#[must_use]
+pub fn short_revision(revision: &str) -> &str {
+    revision
+        .char_indices()
+        .nth(7)
+        .map_or(revision, |(end, _)| &revision[..end])
 }

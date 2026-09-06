@@ -67,6 +67,28 @@ pub struct Cli {
     #[arg(long, env = "AGMEM_ACCELERATOR", value_enum, default_value_t = AcceleratorKind::Auto)]
     pub accelerator: AcceleratorKind,
 
+    /// Base URL of an OpenAI-compatible embeddings API, for `--embedder api`:
+    /// `POST <url>/embeddings`. OpenAI, Voyage, Ollama, vLLM and llama.cpp's
+    /// own server all speak it. The key rides `AGMEM_API_KEY`, never a flag.
+    #[arg(
+        long,
+        env = "AGMEM_API_URL",
+        default_value = "https://api.openai.com/v1",
+        value_name = "URL"
+    )]
+    pub api_url: String,
+
+    /// The remote model `--embedder api` asks for. Its width is learnt from
+    /// the endpoint at startup; its cosine bands are unmeasured and carry
+    /// EmbeddingGemma's until they are.
+    #[arg(
+        long,
+        env = "AGMEM_API_MODEL",
+        default_value = "text-embedding-3-small",
+        value_name = "NAME"
+    )]
+    pub api_model: String,
+
     /// Which tools the MCP session serves. `core` (the default) leaves out
     /// the maintenance pair, `consolidate` and `forget`, which the shell
     /// serves as `agmem consolidate` and `agmem forget` (#150); `all` lists
@@ -388,11 +410,15 @@ pub struct ContextArgs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum EmbedderKind {
-    /// A GGUF model on llama.cpp, in this process (default). An API-backed
-    /// backend (issue #120) would be a second variant here and one more arm
-    /// in `embedder::build`; the model it runs is `--model`'s choice either
-    /// way.
+    /// A GGUF model on llama.cpp, in this process (default); the model is
+    /// `--model`'s choice.
     Llama,
+    /// A model behind an OpenAI-compatible embeddings endpoint (issue #120):
+    /// `--api-url`, `--api-model` and `AGMEM_API_KEY` name it, and `--model`
+    /// is ignored. Needs the network on every call and pays per call; the
+    /// local runtime is the design, this is the option for a host that
+    /// cannot run it.
+    Api,
     /// No embeddings at all. Not a supported deployment: agmem is BM25 plus a
     /// local model, always. Hidden from `--help`; it exists so the subprocess
     /// tests can start the real binary where CI forbids a model download.
@@ -406,6 +432,7 @@ impl EmbedderKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Llama => "llama",
+            Self::Api => "api",
             Self::None => "none",
         }
     }
@@ -441,6 +468,28 @@ impl ModelKind {
     /// The spelling `--model` takes, for a spawned daemon's argv.
     pub fn as_str(self) -> &'static str {
         self.into_embed().as_str()
+    }
+}
+
+/// What `--embedder api` embeds with: the endpoint and the remote model
+/// name. Two sessions naming different ones are two vector spaces, so it
+/// crosses the daemon handshake beside `model`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ApiModel {
+    /// Base URL; `/embeddings` is appended.
+    pub url: String,
+    /// The `model` field of every request.
+    pub model: String,
+}
+
+impl Default for ApiModel {
+    /// What a `Handshake` from a release before this field reads as — and
+    /// what clap defaults the flags to.
+    fn default() -> Self {
+        Self {
+            url: "https://api.openai.com/v1".to_owned(),
+            model: "text-embedding-3-small".to_owned(),
+        }
     }
 }
 
@@ -596,6 +645,10 @@ pub struct Config {
     /// Where the model runs; process-local like `embedder`, so it rides the
     /// spawn argv and not the handshake.
     pub accelerator: AcceleratorKind,
+    /// The endpoint and the remote model `EmbedderKind::Api` embeds with;
+    /// checked across the daemon handshake like `model`, and carried
+    /// regardless of `embedder` so the handshake compares one shape.
+    pub api: ApiModel,
     /// Which tools this session lists and serves — [`ToolGroup::Core`]
     /// unless `AGMEM_TOOLS=all`. Travels the daemon handshake like
     /// `tool_desc`, and the one-shots force `All` for their own session.
@@ -753,6 +806,10 @@ impl Cli {
             embedder: self.embedder,
             model: self.model,
             accelerator: self.accelerator,
+            api: ApiModel {
+                url: self.api_url,
+                model: self.api_model,
+            },
             tools: self.tools,
             pool: self.pool,
             max_k: self.max_k,
@@ -786,6 +843,30 @@ mod tests {
         let cfg = parse(&["--data", "/tmp/agmem-test"]);
         assert_eq!(cfg.db_url, "surrealkv:///tmp/agmem-test/agmem.db");
         assert!(!cfg.db_is_remote());
+    }
+
+    #[test]
+    fn the_api_backend_is_named_by_its_flags_and_defaults_to_openai() {
+        let cfg = parse(&["--data", "/tmp/agmem-test"]);
+        assert_eq!(cfg.embedder, EmbedderKind::Llama);
+        assert_eq!(
+            cfg.api,
+            ApiModel::default(),
+            "the flags' defaults are the wire defaults"
+        );
+
+        let cfg = parse(&[
+            "--embedder",
+            "api",
+            "--api-url",
+            "http://localhost:11434/v1",
+            "--api-model",
+            "nomic-embed-text",
+        ]);
+        assert_eq!(cfg.embedder, EmbedderKind::Api);
+        assert_eq!(cfg.embedder.as_str(), "api");
+        assert_eq!(cfg.api.url, "http://localhost:11434/v1");
+        assert_eq!(cfg.api.model, "nomic-embed-text");
     }
 
     #[test]

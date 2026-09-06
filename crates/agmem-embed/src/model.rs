@@ -4,10 +4,11 @@
 //! A [`ModelSpec`] is the whole identity of a vector space: the id the store
 //! records, the width, how the model marks passages and queries, how its
 //! token states pool, the cosine bands its vectors are read against, and
-//! where its weights come from. The runtime — [`crate::llama`] today, an
-//! API-backed backend later (issue #120) — is a way of running a spec, not
-//! the other way round: adding a backend adds a [`Source`] variant and one
-//! arm in the server's `build`, and nothing a caller holds changes.
+//! where its weights come from. The runtime — [`crate::llama`] — is a way of
+//! running a spec, not the other way round. The API backend
+//! ([`crate::api`], issue #120) stands outside this table on purpose: its
+//! model is a name the user types and its width is learnt from the first
+//! answer, so it carries its own identity rather than a [`ModelSpec`].
 
 use std::path::{Path, PathBuf};
 

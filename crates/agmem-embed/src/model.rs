@@ -25,6 +25,12 @@ pub enum Source {
         repo: &'static str,
         /// The file inside it.
         file: &'static str,
+        /// The repo commit the file is fetched at. Pinned so that the
+        /// weights behind an id are one set of bytes: a store records this
+        /// beside the id (issue #138), and a release that moves the pin is
+        /// then a vector-space change the store can see, instead of a
+        /// silent drift between what was embedded and what embeds queries.
+        revision: &'static str,
     },
 }
 
@@ -43,7 +49,8 @@ pub struct ModelSpec {
     /// What the store records in `meta.embedder_model`. Names the weights
     /// *and* their quantisation: a Q8_0 GGUF and an int8 ONNX export of the
     /// same model embed into spaces that agree to four decimals, and that is
-    /// still two spaces.
+    /// still two spaces. The prefixes and the pooling are properties of the
+    /// id too — a change to either is a new id, not a new field.
     pub id: &'static str,
     /// Vector width; what the store defines its HNSW indexes with.
     pub dim: usize,
@@ -57,6 +64,16 @@ pub struct ModelSpec {
     pub thresholds: Thresholds,
     /// Where the weights come from.
     pub source: Source,
+}
+
+impl ModelSpec {
+    /// The exact weights behind [`Self::id`]: the source's pinned revision.
+    /// Recorded in `meta.embedder_revision` next to the id and the width.
+    #[must_use]
+    pub fn revision(&self) -> &'static str {
+        let Source::Gguf { revision, .. } = self.source;
+        revision
+    }
 }
 
 /// The models `--model` can name.
@@ -95,6 +112,17 @@ impl Model {
         }
     }
 
+    /// The model whose spec carries `id` — what a store's
+    /// `meta.embedder_model` names, if this binary can still run it. `None`
+    /// for a retired id such as the pre-v0.3 `bge-small-en-v1.5-q` (bge on
+    /// ONNX Runtime), which no release since can load.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        [Self::Gemma300M, Self::BgeSmall]
+            .into_iter()
+            .find(|model| model.spec().id == id)
+    }
+
     /// Everything true of this model.
     #[must_use]
     pub fn spec(self) -> ModelSpec {
@@ -114,6 +142,7 @@ impl Model {
                 source: Source::Gguf {
                     repo: "ggml-org/embeddinggemma-300M-GGUF",
                     file: "embeddinggemma-300M-Q8_0.gguf",
+                    revision: "0f741b5a6585bd53aeb15cd1372c56f2a0f65e12",
                 },
             },
             Self::BgeSmall => ModelSpec {
@@ -126,6 +155,7 @@ impl Model {
                 source: Source::Gguf {
                     repo: "CompendiumLabs/bge-small-en-v1.5-gguf",
                     file: "bge-small-en-v1.5-q8_0.gguf",
+                    revision: "d32f8c040ea3b516330eeb75b72bcc2d3a780ab7",
                 },
             },
         }
@@ -163,14 +193,20 @@ pub fn model_dir(fallback: Option<PathBuf>) -> PathBuf {
 ///
 /// The Hugging Face cache layout is kept (`models--owner--name/snapshots/
 /// <commit>/<file>`): a second agmem, or any other tool using the hub
-/// cache, then shares the download instead of repeating it, and the commit
-/// in the path is the revision a later store check can record.
+/// cache, then shares the download instead of repeating it. The commit is
+/// the spec's pinned revision, never the repo's head, so two machines that
+/// fetched on different days hold the same bytes.
 ///
 /// # Errors
 /// [`EmbedError::Backend`] when the file is not there and cannot be
-/// fetched — no network, an unwritable dir, a repo that moved.
+/// fetched — no network, an unwritable dir, a repo that moved or was
+/// force-pushed over the pinned commit.
 pub fn fetch(spec: &ModelSpec, model_dir: &Path) -> Result<PathBuf, EmbedError> {
-    let Source::Gguf { repo, file } = spec.source;
+    let Source::Gguf {
+        repo,
+        file,
+        revision,
+    } = spec.source;
     let failed = |message: String| EmbedError::Backend {
         backend: spec.id,
         message,
@@ -181,9 +217,14 @@ pub fn fetch(spec: &ModelSpec, model_dir: &Path) -> Result<PathBuf, EmbedError> 
         .with_progress(false)
         .build()
         .map_err(|e| failed(format!("hub client: {e}")))?;
-    api.model(repo.to_owned()).get(file).map_err(|e| {
+    let pinned = hf_hub::Repo::with_revision(
+        repo.to_owned(),
+        hf_hub::RepoType::Model,
+        revision.to_owned(),
+    );
+    api.repo(pinned).get(file).map_err(|e| {
         failed(format!(
-            "fetch {repo}/{file} into {}: {e}",
+            "fetch {repo}/{file} at {revision} into {}: {e}",
             model_dir.display()
         ))
     })
@@ -197,11 +238,17 @@ mod tests {
     fn spellings_round_trip() {
         for model in [Model::Gemma300M, Model::BgeSmall] {
             assert_eq!(Model::parse(model.as_str()), Some(model));
+            assert_eq!(Model::from_id(model.spec().id), Some(model));
         }
         assert_eq!(
             Model::parse("bge-small-en-v1.5-q8_0"),
             None,
             "ids are not spellings"
+        );
+        assert_eq!(
+            Model::from_id("bge-small-en-v1.5-q"),
+            None,
+            "the pre-v0.3 ONNX id is retired: no model here runs it"
         );
     }
 
@@ -214,8 +261,13 @@ mod tests {
             assert!(spec.dim > 0);
             assert!(spec.passage_prefix.ends_with(' '));
             assert!(spec.query_prefix.ends_with(' '));
-            let Source::Gguf { file, .. } = spec.source;
+            let Source::Gguf { file, revision, .. } = spec.source;
             assert!(file.ends_with(".gguf"));
+            assert_eq!(spec.revision(), revision);
+            assert!(
+                revision.len() == 40 && revision.bytes().all(|b| b.is_ascii_hexdigit()),
+                "a pin is a full commit hash, not a branch name: {revision}"
+            );
         }
     }
 

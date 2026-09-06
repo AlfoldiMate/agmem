@@ -18,21 +18,25 @@ use rmcp::{
     ErrorData, Json, RoleServer, ServerHandler, ServiceExt,
     handler::server::router::prompt::PromptRouter,
     handler::server::router::tool::ToolRouter,
+    handler::server::tool::ToolCallContext,
     handler::server::wrapper::Parameters,
     model::{
-        CallToolResult, GetPromptResult, Implementation, ListResourceTemplatesResult,
-        ListResourcesResult, PaginatedRequestParams, PromptMessage, ReadResourceRequestParams,
-        ReadResourceResponse, Role, ServerCapabilities, ServerInfo,
+        CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock,
+        GetPromptResult, Implementation, ListResourceTemplatesResult, ListResourcesResult,
+        ListToolsResult, PaginatedRequestParams, PromptMessage, ProtocolVersion,
+        ReadResourceRequestParams, ReadResourceResponse, ResultType, Role, ServerCapabilities,
+        ServerInfo,
     },
     prompt, prompt_handler, prompt_router,
     service::{RequestContext, ServerInitializeError},
-    tool, tool_handler, tool_router,
+    tool, tool_router,
     transport::stdio,
 };
 
 use crate::config::{Config, ToolGroup};
 use crate::prompts::{self, Focus};
 use crate::resources;
+use crate::startup::VectorState;
 use crate::tools::GATED;
 use crate::tools::consolidate::{self, ConsolidateParams, ConsolidateResult};
 use crate::tools::context::{self, ContextParams};
@@ -84,14 +88,26 @@ pub struct AgmemService {
     /// request quite happily — so that a prompt-side override has the same
     /// seam waiting for it that `AGMEM_TOOL_DESC_<TOOL>` uses.
     prompt_router: PromptRouter<Self>,
+    /// How many rows the background re-embed still has to reach (issue
+    /// #138). Shared with the drain that lowers it; while it is above zero
+    /// every tool result ends with a line saying so, because a vector
+    /// recall silently misses those rows and nothing else would tell the
+    /// agent.
+    vectors: VectorState,
 }
 
 impl AgmemService {
     /// Assemble the service from an already-migrated store.
-    pub fn new(db: Db, embedder: Arc<dyn Embedder>, config: Arc<Config>) -> Self {
+    pub fn new(
+        db: Db,
+        embedder: Arc<dyn Embedder>,
+        config: Arc<Config>,
+        vectors: VectorState,
+    ) -> Self {
         Self {
             db,
             embedder,
+            vectors,
             pending_forget: Pending::default(),
             // Distinct per connection and sortable by start time; not a ULID
             // only because nothing in this crate mints those.
@@ -129,6 +145,19 @@ impl AgmemService {
     /// The session id this connection's writes fall back to (issue #75).
     pub(crate) fn session(&self) -> &str {
         &self.session
+    }
+
+    /// The line appended to every tool result while rows are still being
+    /// re-embedded, or nothing once they all carry a vector.
+    fn vector_notice(&self) -> Option<String> {
+        let pending = self.vectors.pending();
+        (pending > 0).then(|| {
+            format!(
+                "notice: {pending} row(s) are still being re-embedded for {}; recall's \
+                 vector arm misses them until then (BM25 still sees them)",
+                self.embedder.model_id()
+            )
+        })
     }
 }
 
@@ -486,13 +515,48 @@ claim before writing it, then remember the batch with supersedes on the correcti
 // request, which would serve the built-in descriptions and silently discard
 // every override — and for prompts it is symmetry.
 //
-// `#[tool_handler]` stays first: with `get_info` hand-written neither macro
-// generates one, but the order is what decides which capabilities an
-// auto-generated one would carry, and a future edit that deletes `get_info`
-// should degrade to "tools and prompts" rather than to "tools".
-#[tool_handler(router = self.tool_router)]
+// The tool side is written by hand rather than through `#[tool_handler]`:
+// `call_tool` has one thing to add to every answer (the re-embed notice,
+// issue #138), and the macro's `list_tools` is reproduced beside it so the
+// two stay one unit. `#[prompt_handler]` still generates the prompt side.
 #[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for AgmemService {
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, ErrorData> {
+        let call = ToolCallContext::new(self, request, context);
+        let mut response = self.tool_router.call(call).await?;
+        if let (Some(notice), CallToolResponse::Complete(result)) =
+            (self.vector_notice(), &mut response)
+        {
+            result.content.push(ContentBlock::text(notice));
+        }
+        Ok(response)
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, ErrorData> {
+        // What `#[tool_handler]` would generate, verbatim: the cache hints
+        // exist from the 2026-07-28 protocol on, and a client that speaks it
+        // is told the list never goes stale.
+        let supports_cache_hints = context
+            .protocol_version()
+            .is_some_and(|version| version >= ProtocolVersion::V_2026_07_28);
+        Ok(ListToolsResult {
+            result_type: Some(ResultType::COMPLETE),
+            tools: self.tool_router.list_all(),
+            meta: None,
+            next_cursor: None,
+            ttl_ms: supports_cache_hints.then_some(0),
+            cache_scope: supports_cache_hints.then_some(CacheScope::Public),
+        })
+    }
+
     fn get_info(&self) -> ServerInfo {
         // Writing `get_info` by hand replaces the one the handler macros would
         // generate, so every capability has to be repeated here or the server

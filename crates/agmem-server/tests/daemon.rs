@@ -135,6 +135,39 @@ async fn call(
         .expect("a tool answers with structured content")
 }
 
+/// `agmem reindex` needs the store to itself (#138): while a daemon serves
+/// it, the verb refuses before it touches the lock, naming the socket and
+/// the pid so the operator knows what to stop.
+#[tokio::test]
+async fn reindex_refuses_while_a_daemon_serves_the_store() {
+    let shared = Shared::start().await;
+    // A blocking child on a worker thread: the daemon serving it is a task
+    // on this runtime, which must keep turning while the child probes it.
+    let data = shared.data.path().to_path_buf();
+    let out = tokio::task::spawn_blocking(move || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_agmem"))
+            .args(["--embedder", "none", "--data"])
+            .arg(data)
+            .arg("reindex")
+            .output()
+    })
+    .await
+    .expect("join")
+    .expect("run agmem reindex");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "a live daemon owns the store: {stderr}"
+    );
+    assert!(out.stdout.is_empty(), "stdout stays the MCP wire: {stderr}");
+    assert!(
+        stderr.contains("a daemon is serving")
+            && stderr.contains(&format!("pid {}", std::process::id())),
+        "the refusal names the daemon and its pid: {stderr}"
+    );
+}
+
 #[tokio::test]
 async fn two_sessions_share_one_store() {
     let shared = Shared::start().await;

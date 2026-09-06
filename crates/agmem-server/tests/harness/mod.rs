@@ -17,6 +17,7 @@ use agmem_core::{MemoryRecord, SpaceName};
 use agmem_embed::{EmbedError, Embedder};
 use agmem_server::config::{Cli, ToolDescriptions, ToolGroup};
 use agmem_server::service::AgmemService;
+use agmem_server::startup;
 use agmem_store::db::Db;
 use agmem_store::migrate;
 use agmem_store::repo::{self, Liveness, Lookup, SpaceStats};
@@ -34,6 +35,9 @@ pub struct Harness {
     pub client: RunningService<RoleClient, ()>,
     pub server: tokio::task::JoinHandle<anyhow::Result<()>>,
     pub db: Db,
+    /// The re-embed counter the service reads (#138), for a test that runs
+    /// the drain by hand.
+    pub vectors: startup::VectorState,
     /// `mem://` never touches the data dir, but resolving one is part of
     /// startup, so it points somewhere disposable rather than at the
     /// developer's real platform directory. Dropped last.
@@ -76,6 +80,25 @@ impl Harness {
         tool_desc: ToolDescriptions,
         tools: ToolGroup,
     ) -> Self {
+        let db = agmem_store::db::connect("mem://")
+            .await
+            .expect("connect mem://");
+        Self::configure_on(db, embedder, tool_desc, tools).await
+    }
+
+    /// The whole surface on a store the test already holds — one another
+    /// backend wrote, for the cases where opening is the thing under test.
+    pub async fn start_on(db: Db, embedder: Arc<dyn Embedder>) -> Self {
+        Self::configure_on(db, embedder, ToolDescriptions::default(), ToolGroup::All).await
+    }
+
+    /// A client on `db`, serving `tools` with `tool_desc` applied.
+    pub async fn configure_on(
+        db: Db,
+        embedder: Arc<dyn Embedder>,
+        tool_desc: ToolDescriptions,
+        tools: ToolGroup,
+    ) -> Self {
         let data = tempfile::tempdir().expect("tempdir");
         let mut config = Cli::try_parse_from([
             "agmem",
@@ -97,14 +120,12 @@ impl Harness {
         .expect("resolve");
         config.tool_desc = tool_desc;
         config.tools = tools;
-        let db = agmem_store::db::connect(&config.db_url)
-            .await
-            .expect("connect mem://");
         migrate::ensure(&db).await.expect("migrate");
-        // Startup records the embedder pair right after migrating (main.rs),
-        // and a first backend whose width differs from the schema's baked
-        // 384 adopts the indexes there, so the harness mirrors it.
-        migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim())
+        // Startup settles the vector space right after migrating
+        // (`startup::resolve`): a first backend records itself, and one
+        // whose width differs from the schema's baked 384 adopts the indexes
+        // there, so the harness mirrors it.
+        let vectors = startup::resolve(&db, embedder.as_ref())
             .await
             .expect("record the embedder");
         // Startup registers the configured space before it serves anything
@@ -114,7 +135,7 @@ impl Harness {
         repo::ensure_space(&db, &space())
             .await
             .expect("register the space");
-        let service = AgmemService::new(db.clone(), embedder, Arc::new(config));
+        let service = AgmemService::new(db.clone(), embedder, Arc::new(config), vectors.clone());
 
         let (server_end, client_end) = tokio::io::duplex(4096);
         let server = tokio::spawn(async move {
@@ -126,6 +147,7 @@ impl Harness {
             client,
             server,
             db,
+            vectors,
             _data: data,
         }
     }
@@ -272,6 +294,18 @@ impl Harness {
 }
 
 /// The space the harness's server was started with.
+/// Every text block of a result, in order.
+pub fn texts(result: &CallToolResult) -> Vec<String> {
+    result
+        .content
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::Text(text) => Some(text.text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 pub fn space() -> SpaceName {
     "default".parse().expect("valid slug")
 }

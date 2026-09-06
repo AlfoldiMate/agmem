@@ -21,26 +21,80 @@ async fn the_embedder_is_recorded_once_and_then_enforced() {
     let conn = db::connect("mem://").await.expect("connect mem://");
     migrate::ensure(&conn).await.expect("ensure");
 
-    migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384)
+    migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384, None)
         .await
         .expect("first run records the embedder");
-    migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384)
+    migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384, None)
         .await
         .expect("the same embedder is fine");
 
-    let err = migrate::ensure_embedder(&conn, "potion-base-8m", 256)
+    let err = migrate::ensure_embedder(&conn, "potion-base-8m", 256, None)
         .await
         .expect_err("another model must be refused");
     let message = err.to_string();
     assert!(message.contains("bge-small-en-v1.5-q"), "{message}");
     assert!(
-        message.contains("--reindex"),
+        message.contains("agmem reindex"),
         "must name the remedy: {message}"
     );
 
-    migrate::ensure_embedder(&conn, "none", 0)
+    migrate::ensure_embedder(&conn, "none", 0, None)
         .await
         .expect("BM25-only mode claims no vector space and opens any store");
+}
+
+/// The revision is the third part of the key (issue #138): a store that
+/// never recorded one accepts any and takes it; once recorded, a different
+/// pin is a different space.
+#[tokio::test]
+async fn the_revision_is_backfilled_once_and_then_enforced() {
+    let conn = db::connect("mem://").await.expect("connect mem://");
+    migrate::ensure(&conn).await.expect("ensure");
+
+    migrate::ensure_embedder(&conn, "stub", 8, None)
+        .await
+        .expect("a backend without a revision records none");
+    let stored = migrate::stored_embedder(&conn)
+        .await
+        .expect("read")
+        .expect("recorded");
+    assert_eq!(stored.revision, None);
+    assert!(
+        stored.matches("stub", 8, Some("aaaa")),
+        "no revision on record matches any"
+    );
+
+    migrate::ensure_embedder(&conn, "stub", 8, Some("aaaa"))
+        .await
+        .expect("the first run that knows the revision is accepted");
+    let stored = migrate::stored_embedder(&conn)
+        .await
+        .expect("read")
+        .expect("recorded");
+    assert_eq!(stored.revision.as_deref(), Some("aaaa"), "and backfills it");
+
+    migrate::ensure_embedder(&conn, "stub", 8, None)
+        .await
+        .expect("a backend that claims no revision still matches");
+    let err = migrate::ensure_embedder(&conn, "stub", 8, Some("bbbb"))
+        .await
+        .expect_err("another pin of the same id is another space");
+    assert!(
+        matches!(
+            &err,
+            StoreError::EmbedderMismatch { stored_revision: Some(stored), configured_revision: Some(configured), .. }
+                if stored == "aaaa" && configured == "bbbb"
+        ),
+        "{err}"
+    );
+    assert!(err.to_string().contains("rev aaaa"), "{err}");
+
+    migrate::set_embedder(&conn, "stub", 8, Some("bbbb"))
+        .await
+        .expect("a re-embed moves the pin");
+    migrate::ensure_embedder(&conn, "stub", 8, Some("bbbb"))
+        .await
+        .expect("and the guard follows it");
 }
 
 /// Issue #72: concurrent first runs on one shared store race the
@@ -57,7 +111,7 @@ async fn concurrent_first_runs_record_exactly_one_embedder() {
         .map(|n| {
             let db = conn.clone();
             tokio::spawn(async move {
-                migrate::ensure_embedder(&db, &format!("contender-{n}"), 384).await
+                migrate::ensure_embedder(&db, &format!("contender-{n}"), 384, None).await
             })
         })
         .collect();
@@ -77,12 +131,15 @@ async fn concurrent_first_runs_record_exactly_one_embedder() {
     }
     assert_eq!(winners.len(), 1, "exactly one first run records its pair");
 
-    let (model, dim) = migrate::stored_embedder(&conn)
+    let stored = migrate::stored_embedder(&conn)
         .await
         .expect("read the pair")
         .expect("a pair was recorded");
-    assert_eq!(model, winners[0], "the store holds the winner's model");
-    assert_eq!(dim, 384);
+    assert_eq!(
+        stored.model, winners[0],
+        "the store holds the winner's model"
+    );
+    assert_eq!(stored.dim, 384);
 }
 
 /// A row written before v2 carries no `derived_from` column at all — a
@@ -376,7 +433,7 @@ async fn a_fresh_store_adopts_the_first_embedders_width() {
     let conn = db::connect("mem://").await.expect("connect mem://");
     migrate::ensure(&conn).await.expect("ensure");
 
-    migrate::ensure_embedder(&conn, "potion-base-8M", 256)
+    migrate::ensure_embedder(&conn, "potion-base-8M", 256, None)
         .await
         .expect("first run records the pair and adopts its width");
 
@@ -393,10 +450,10 @@ async fn a_fresh_store_adopts_the_first_embedders_width() {
     .check()
     .expect("a 256-wide vector lands in the redefined index");
 
-    migrate::ensure_embedder(&conn, "potion-base-8M", 256)
+    migrate::ensure_embedder(&conn, "potion-base-8M", 256, None)
         .await
         .expect("the same pair is still fine");
-    let err = migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384)
+    let err = migrate::ensure_embedder(&conn, "bge-small-en-v1.5-q", 384, None)
         .await
         .expect_err("the baked width is now the wrong one");
     assert!(err.to_string().contains("potion-base-8M"), "{err}");

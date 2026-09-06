@@ -46,6 +46,15 @@ pub trait Embedder: Send + Sync + 'static {
     /// silently mix vector spaces.
     fn model_id(&self) -> &str;
 
+    /// The exact weights behind [`Self::model_id`] — the pinned hub commit
+    /// for a GGUF model — recorded beside the id (issue #138) so that a
+    /// release moving the pin reads as a vector-space change. `None` for a
+    /// backend whose weights have no such identity (test doubles); the
+    /// store then keys on the id and the width alone.
+    fn revision(&self) -> Option<&str> {
+        None
+    }
+
     /// The cosine bands this backend's vectors are read against: the write
     /// gate, the correction band, the cluster bar and the abstention floor
     /// are all model-specific numbers (issue #138), and the tools take them

@@ -20,7 +20,8 @@ use tokio::time::Instant;
 use crate::config::Config;
 use crate::daemon::{Ack, Handshake, Refusal, socket_path};
 use crate::service::AgmemService;
-use crate::{doctor, embedder, lock};
+use crate::startup::{self, VectorState};
+use crate::{doctor, lock, reindex};
 
 /// How long a retiring daemon keeps serving the sessions already attached
 /// before it exits (issue #112). Long enough for a tool call in flight to
@@ -60,17 +61,21 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
     let path = socket_path(&cfg.data_dir)?;
     // The lock is what makes "one owner" true; the socket only advertises it.
     // Holding it here is also what makes the unlink below safe — no other
-    // daemon can be alive to have the socket we are about to replace.
+    // daemon can be alive to have the socket we are about to replace. A
+    // daemon is embedded by definition (`daemon::wanted`), so the lock is
+    // taken unconditionally here rather than through `startup::open`'s
+    // remote-engine exception.
     let _lock = lock::acquire(&cfg.data_dir)?;
     restrict(&cfg.data_dir);
 
-    let db = agmem_store::db::connect_with(&cfg.db_url, cfg.db_credentials()).await?;
-    let schema = agmem_store::migrate::ensure(&db).await?;
-    let embedder = embedder::build(&cfg)?;
-    agmem_store::migrate::ensure_embedder(&db, embedder.model_id(), embedder.dim()).await?;
-    // A daemon is where the sweep belongs: it is the process a machine starts
-    // once, and the sessions attaching to it never start anything.
-    let pruned = crate::startup::prune(&db).await;
+    let startup::Opened {
+        db,
+        embedder,
+        vectors,
+        schema,
+        pruned,
+        lock: _,
+    } = startup::open_locked(&cfg).await?;
     // The checks `--doctor` cannot run while a daemon holds the store, run by
     // the process that holds it (issue #112). They go to the log, not to the
     // exit code: the schema and the embedder are up, so the store can serve,
@@ -98,10 +103,22 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
         dim = embedder.dim(),
         accelerator = embedder.accelerator(),
         pruned,
+        pending = vectors.pending(),
         checks = checks.len(),
         socket = %path.display(),
         "shared store ready"
     );
+    // The daemon holds the store, so the daemon finishes its vectors (issue
+    // #138): a store moved to the configured model on open, or left with
+    // rows to embed by an earlier interruption, is drained here while every
+    // session it serves watches the count go down.
+    if vectors.pending() > 0 {
+        tokio::spawn(reindex::drain(
+            db.clone(),
+            Arc::clone(&embedder),
+            vectors.clone(),
+        ));
+    }
     if cfg.took_over {
         // The sessions that were on the old daemon are pumping a closed
         // socket: their memory tools are gone until they start again. This
@@ -129,10 +146,15 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
         tokio::select! {
             accepted = accept_on(listener.as_ref()), if listener.is_some() => {
                 let (stream, _) = accepted.context("accepting on the agmem socket")?;
-                let (db, embedder, daemon, retiring) =
-                    (db.clone(), Arc::clone(&embedder), Arc::clone(&daemon), Arc::clone(&retiring));
+                let (db, embedder, vectors, daemon, retiring) = (
+                    db.clone(),
+                    Arc::clone(&embedder),
+                    vectors.clone(),
+                    Arc::clone(&daemon),
+                    Arc::clone(&retiring),
+                );
                 sessions.spawn(async move {
-                    match session(stream, db, embedder, &daemon, &retiring).await {
+                    match session(stream, db, embedder, vectors, &daemon, &retiring).await {
                         Ok(end) => end,
                         Err(error) => {
                             tracing::warn!(error = %format!("{error:#}"), "session ended badly");
@@ -306,6 +328,7 @@ async fn session(
     stream: UnixStream,
     db: Db,
     embedder: Arc<dyn Embedder>,
+    vectors: VectorState,
     daemon: &Config,
     retiring: &AtomicBool,
 ) -> anyhow::Result<SessionEnd> {
@@ -368,7 +391,7 @@ async fn session(
         tools: asked.tools,
         ..daemon.clone()
     };
-    let service = AgmemService::new(db, embedder, Arc::new(session));
+    let service = AgmemService::new(db, embedder, Arc::new(session), vectors);
 
     // rmcp gets the *buffered* reader, not the raw half. `read_line` reads
     // ahead, so a client that put `initialize` in the same write as the

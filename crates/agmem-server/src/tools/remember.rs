@@ -292,6 +292,7 @@ pub async fn run(
     let mut duplicates: Vec<Duplicate> = Vec::new();
     let mut related: Vec<Related> = Vec::new();
     let mut blocked = vec![false; new_memories.len()];
+    let bands = service.embedder().thresholds();
     for (index, neighbours) in gated.into_iter().zip(neighbours) {
         // The gate's measurement rides along on what survives it (issue #83):
         // neighbours come back closest-first, so the first one is the row the
@@ -301,7 +302,7 @@ pub async fn run(
             .first()
             .map(|neighbour| dedup::novelty(neighbour.similarity));
         for neighbour in neighbours {
-            if dedup::is_near_duplicate(neighbour.similarity) {
+            if bands.is_near_duplicate(neighbour.similarity) {
                 blocked[index] = true;
                 duplicates.push(Duplicate {
                     id: neighbour.id.to_string(),
@@ -309,7 +310,7 @@ pub async fn run(
                     content: neighbour.content,
                     similarity: neighbour.similarity,
                 });
-            } else if dedup::is_correction_candidate(neighbour.similarity) {
+            } else if bands.is_correction_candidate(neighbour.similarity) {
                 related.push(Related {
                     id: neighbour.id.to_string(),
                     of: index,

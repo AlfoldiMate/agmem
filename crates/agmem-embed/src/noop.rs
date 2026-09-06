@@ -8,6 +8,8 @@
 //! the HNSW indexes skip them, so a later backend costs a re-embed of the old
 //! rows but breaks nothing.
 
+use agmem_core::dedup::Thresholds;
+
 use crate::{EmbedError, Embedder};
 
 /// Produces no vectors at all.
@@ -25,6 +27,13 @@ impl Embedder for NoopEmbedder {
 
     fn model_id(&self) -> &str {
         MODEL_ID
+    }
+
+    /// No vector is ever measured against these, so any table serves; the
+    /// one everything was first calibrated on keeps the test doubles' numbers
+    /// where they were.
+    fn thresholds(&self) -> Thresholds {
+        Thresholds::BGE_SMALL
     }
 
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {

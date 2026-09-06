@@ -25,7 +25,7 @@ use crate::lock;
 const SPAWN_LOCK_DEADLINE: Duration = Duration::from_secs(30);
 
 /// How long a starting daemon has to reach the point of accepting. The first
-/// run of a fresh install downloads the ONNX model, which dominates this.
+/// run of a fresh install fetches the model weights, which dominates this.
 const READY_DEADLINE: Duration = Duration::from_secs(120);
 
 /// How often to re-try the socket while waiting.
@@ -389,6 +389,8 @@ fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<Child> {
         .arg(&cfg.db_url)
         .arg("--embedder")
         .arg(cfg.embedder.as_str())
+        .arg("--model")
+        .arg(cfg.model.as_str())
         .arg("--accelerator")
         .arg(cfg.accelerator.as_str())
         .arg("--idle-timeout")

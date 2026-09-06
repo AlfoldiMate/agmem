@@ -1,8 +1,8 @@
 //! `--reindex` end to end, with a stub backend standing in for a model.
 //!
 //! The acceptance case for issue #28 is "a store built with the noop backend,
-//! reindexed to fastembed" — run here with a stub of a different width
-//! instead, because CI points `FASTEMBED_CACHE_DIR` somewhere unwritable on
+//! reindexed to the real model" — run here with a stub of a different width
+//! instead, because CI points `AGMEM_MODEL_DIR` somewhere unwritable on
 //! purpose and a test that loads the real model is a test that downloads one.
 //! Nothing in the pass looks at what a vector *means*, only that every row has
 //! one of the width the index was rebuilt at, so the stub proves the same
@@ -39,6 +39,10 @@ impl Embedder for Stub {
 
     fn model_id(&self) -> &str {
         self.model
+    }
+
+    fn thresholds(&self) -> agmem_core::dedup::Thresholds {
+        agmem_core::dedup::Thresholds::BGE_SMALL
     }
 
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {

@@ -29,7 +29,7 @@ const LABELS = ["fmt" "clippy" "test"]
 const WORKFLOW = ".github/workflows/ci.yml"
 
 # What CI sets that a shell here does not.
-const CI_ENV = {FASTEMBED_CACHE_DIR: "/nonexistent"}
+const CI_ENV = {AGMEM_MODEL_DIR: "/nonexistent"}
 
 def main [
     --keep-going # run every step instead of stopping at the first failure

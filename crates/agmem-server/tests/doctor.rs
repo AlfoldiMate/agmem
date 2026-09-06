@@ -1,8 +1,8 @@
 //! `--doctor` end-to-end: fresh setup passes, report goes to stderr only.
 //!
 //! Every case runs `--embedder none`: loading the real model is a download,
-//! and CI points `FASTEMBED_CACHE_DIR` somewhere unwritable precisely so an
-//! accidental one fails loudly. The ONNX path has its own ignored test.
+//! and CI points `AGMEM_MODEL_DIR` somewhere unwritable precisely so an
+//! accidental one fails loudly. The live model has its own ignored test.
 
 use std::process::Command;
 

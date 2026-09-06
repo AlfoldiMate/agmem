@@ -316,7 +316,7 @@ pub async fn run(
             truncated,
         });
 
-        let found = compare(space, rows);
+        let found = compare(space, rows, service.embedder().thresholds());
         clusters.extend(found.clusters);
         contradictions.extend(found.contradictions);
 
@@ -446,12 +446,13 @@ struct Found {
 /// Compare every live memory in one space against every other one.
 ///
 /// One pass answers both similarity questions, because they are the same
-/// number read against two bands: at or above [`dedup::CLUSTER_THRESHOLD`] a
-/// pair is one claim twice, and at or above [`dedup::CORRECTION_FLOOR`] it is
-/// one subject that may be stated two ways. The bands overlap from the
-/// clustering bar up — on purpose, for the reason on the contradiction branch
-/// below — so the closest pairs are reported under both names.
-fn compare(space: &SpaceName, rows: Vec<Embedded>) -> Found {
+/// number read against two bands of the model's [`dedup::Thresholds`]: at or
+/// above `cluster` a pair is one claim twice, and at or above
+/// `correction_floor` it is one subject that may be stated two ways. The
+/// bands overlap from the clustering bar up — on purpose, for the reason on
+/// the contradiction branch below — so the closest pairs are reported under
+/// both names.
+fn compare(space: &SpaceName, rows: Vec<Embedded>, bands: dedup::Thresholds) -> Found {
     let units: Vec<Option<dedup::Unit>> = rows
         .iter()
         .map(|row| dedup::Unit::new(&row.embedding))
@@ -471,14 +472,14 @@ fn compare(space: &SpaceName, rows: Vec<Embedded>) -> Found {
             let score = a.similarity(b);
             similarity.insert((left, right), score);
 
-            if dedup::is_cluster_candidate(score) {
+            if bands.is_cluster_candidate(score) {
                 groups.join(left, right);
             }
             // Not an `else`: the bands overlap on purpose. A pair above the
             // clustering bar is the *likeliest* disagreement, not the least
             // likely one, and partitioning here is what kept every real
-            // contradiction out of this list (`dedup::is_contradiction_candidate`).
-            if dedup::is_contradiction_candidate(score) {
+            // contradiction out of this list (`Thresholds::is_contradiction_candidate`).
+            if bands.is_contradiction_candidate(score) {
                 let shared = shared_entities(&rows[left].memory, &rows[right].memory);
                 if !shared.is_empty() {
                     contradictions.push(Contradiction {

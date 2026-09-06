@@ -539,7 +539,7 @@ def main [
                                               # so agmem is the only place to persist
     --desc: string = ""                       # JSON file of {tool: description},
                                               # served through AGMEM_TOOL_DESC_<TOOL>
-    --model-cache: string = ""                # FASTEMBED_CACHE_DIR; shared so a
+    --model-cache: string = ""                # AGMEM_MODEL_DIR; shared so a
                                               # fresh data dir does not re-download
 ] {
     let binary = ($binary | path expand)
@@ -625,7 +625,7 @@ def "main probe" [
     --k: int = 50                             # how many hits to ask for
     --entities: string = ""                   # comma-separated entity filter
     --binary: string = "target/release/agmem" # the agmem to serve
-    --model-cache: string = ""                # FASTEMBED_CACHE_DIR
+    --model-cache: string = ""                # AGMEM_MODEL_DIR
 ] {
     let binary = ($binary | path expand)
     if not ($binary | path exists) {
@@ -1377,7 +1377,7 @@ def closed-rows [data: string, seeded: list] {
 
 # Everything an agmem in this batch is started with.
 def agmem-env [data: string, cache: string, overrides: record] {
-    {AGMEM_DATA: $data, AGMEM_SPACE: "eval", FASTEMBED_CACHE_DIR: $cache} | merge $overrides
+    {AGMEM_DATA: $data, AGMEM_SPACE: "eval", AGMEM_MODEL_DIR: $cache} | merge $overrides
 }
 
 # The descriptions this binary serves, as `list_tools` reports them.

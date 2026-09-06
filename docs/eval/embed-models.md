@@ -60,7 +60,7 @@ of the answer.
 
 - `crates/agmem-embed/src/candidates.rs` (`--features candidates`) loads each
   candidate behind the `Embedder` trait with its prefixes and pooling.
-- `scripts/embed-candidates-fetch.nu` fetches the two user-defined ONNX
+- `scripts/embed-candidates-fetch.nu` (retired with ONNX Runtime, 2026-09-06; in git history) fetched the two user-defined ONNX
   exports and their tokenizer files into the model cache.
 - `cargo test -p agmem-embed --features candidates --release --test candidates
   -- --ignored` with `AGMEM_CANDIDATE=<id>`: `embed_dump` re-embeds a store

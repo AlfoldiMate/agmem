@@ -44,9 +44,9 @@ descriptions, and task breakdowns.
 │ └───┬────────────┬────┘ │ │   path via Surreal<Any> │
 │ ┌───▼──────┐ ┌───▼────┐ │ └─────────────────────────┘
 │ │ store    │ │ embed  │ │
-│ │ SurrealQL│ │fastembed│ │
-│ │ repo     │ │(local  │ │
-│ └───┬──────┘ │ ONNX)  │ │
+│ │ SurrealQL│ │llama.cpp│ │
+│ │ repo     │ │(GGUF,  │ │
+│ └───┬──────┘ │ Metal) │ │
 │     │        └────────┘ │
 │ ┌───▼──────────────────┐│
 │ │ SurrealDB embedded   ││   document + graph + vector
@@ -146,7 +146,7 @@ Design stances behind this shape (evidence in idea.md §3):
 -- meta: one row; guards schema + embedder compatibility
 DEFINE TABLE meta SCHEMAFULL;
 DEFINE FIELD schema_version ON meta TYPE int;
-DEFINE FIELD embedder_model ON meta TYPE option<string>; -- e.g. "bge-small-en-v1.5-q";
+DEFINE FIELD embedder_model ON meta TYPE option<string>; -- e.g. "embeddinggemma-300m-q8_0";
 DEFINE FIELD embedder_dim   ON meta TYPE option<int>;    --   none until a run that
                                                          --   could write a vector
 DEFINE FIELD created_at     ON meta TYPE datetime DEFAULT time::now();
@@ -255,8 +255,10 @@ Notes:
   near-dup gate (cosine ≥ 0.95 against each of the probe's live in-space
   neighbours, not only the nearest) runs in Rust during `remember` because
   it needs the query-side embedding anyway.
-- Dimension 384 matches the default embedder. The dimension is recorded in
-  `meta`; switching embedders requires an explicit `agmem --reindex`
+- Dimension 384 is what v1 baked in; a first run with a wider model (the
+  default is now 768) redefines the indexes before recording its pair. The
+  dimension is recorded in `meta`; switching models requires an explicit
+  `agmem --reindex`
   maintenance pass — startup refuses a model/dim mismatch with a clear
   error rather than silently mixing spaces.
 - `writer` (v6) is the attribution `source` never was: `source` says where
@@ -685,8 +687,11 @@ agmem/
 │   │   │   │                     #   embed_passages(), embed_query() };
 │   │   │   │                     #   slices batches of 128 so a shared
 │   │   │   │                     #   backend is free between slices (#67)
-│   │   │   ├── fastembed.rs      # BGESmallENV15Q 384d, spawn_blocking wrapper,
-│   │   │   │                     #   cache dir mgmt — the one real backend
+│   │   │   ├── model.rs          # ModelSpec table: id, dim, prefixes, pooling,
+│   │   │   │                     #   thresholds, GGUF source; hf-hub fetch
+│   │   │   ├── llama.rs          # the one real backend: GGUF on llama.cpp,
+│   │   │   │                     #   Metal on Apple silicon, worker thread
+│   │   │   ├── accelerator.rs    # auto|cpu|metal, settled once at load
 │   │   │   └── noop.rs           # test double, no vectors (dim 0)
 │   │   └── tests/                # recorded-vector fixtures + regeneration
 │   └── agmem-server/             # the binary: `agmem`
@@ -737,7 +742,8 @@ and dedup are unit-testable without a DB or model.
 |---|---|---|---|
 | `rmcp` | 3.1.x | Official MCP SDK: `#[tool_router]`/`#[tool]` macros, stdio transport, prompts, annotations | 3 majors in 6 months — pin minor; supports spec 2026-07-28; params must derive `schemars::JsonSchema` **1.x** |
 | `surrealdb` | 3.2.x, `default-features=false, features=["kv-surrealkv","kv-mem"]` | Embedded multi-model store | No documented cross-process lock → our lockfile; 3.0 renamed `SEARCH`→`FULLTEXT` analyzer clause; stay off 3.3 betas |
-| `fastembed` | 6.x | Default embedder (BGESmallENV15Q, 384d, quantized, offline after first fetch) | Rides `ort` 2.0.0-**rc** — pin exact; sync API → `spawn_blocking`; BGE wants `passage:`/`query:` prefixes; cache via `FASTEMBED_CACHE_DIR` |
+| `llama-cpp-2` | =0.1.156 | The embedding runtime: GGUF models, Metal on Apple silicon via a target-table feature, CPU elsewhere (#178) | Vendors and cmake-builds llama.cpp — every build host needs cmake + C++; context is `!Send`, so one worker thread per model; pooled output is raw, normalised here; `openmp` off (Apple clang ships no libomp) |
+| `hf-hub` | 0.5 | Fetches the GGUF once into `AGMEM_MODEL_DIR` (hub cache layout, so the snapshot commit is the revision) | `ureq` + `native-tls` features only; progress off — stdout is the wire |
 | `tokio` | 1.53.x | Runtime (required by rmcp + surrealdb) | — |
 | `serde`/`serde_json` | 1.x | Wire + rows | — |
 | `schemars` | 1.2.x | Tool JSON schemas | Must be 1.x (rmcp `^1.0`); a stray 0.8 in the tree = baffling trait errors |
@@ -1191,8 +1197,9 @@ rather than details:
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine string; `mem://` (tests), `ws://host` (sharing mode) |
 | `--db-user`, `--db-pass` / `AGMEM_DB_USER`, `AGMEM_DB_PASS` | none | Root signin for a remote `--db`, as a pair; embedded engines have no signin |
 | `--space` / `AGMEM_SPACE` | derived: git project name, else cwd name, else `default` | Current space for this server instance; an explicit value pins it (#44). Derivation uses the git *common* dir's parent, so every worktree of a repo shares one space, and never lands on the reserved `user` |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only supported backend (`none` is a hidden test-only value) |
-| `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | ONNX Runtime execution provider: `cpu`, or `coreml` on a macOS build with `--features coreml` (#139, measured and dropped — `docs/eval/coreml-ep.md`; the feature is off in releases, so `auto` is the CPU everywhere) |
+| `--embedder` / `AGMEM_EMBEDDER` | `llama` | The local llama.cpp runtime, the only supported backend (`none` is a hidden test-only value). An API-backed backend (#120) would be a second variant |
+| `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | `embeddinggemma-300m` (768d, Q8_0, the measured winner — `docs/eval/embed-models.md`, `docs/eval/llama-runtime.md`) or `bge-small-en-v1.5` (384d, Q8_0, light). The model carries its own thresholds (`dedup::Thresholds`); checked across the daemon handshake; changing it on a store with vectors is `--reindex` (#138) |
+| `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | `metal` on an Apple-silicon build (compiled in by target, not by feature), `cpu` everywhere else and as the opt-out. CoreML on ONNX Runtime was measured and dropped (#139, `docs/eval/coreml-ep.md`) before ONNX Runtime itself was replaced |
 | `--pool`, `--max-k` / `AGMEM_POOL`, `AGMEM_MAX_K` | 64 / 50 | Retrieval pool and k ceiling |
 | `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session serves: `core` removes `consolidate` and `forget` from the router (neither listed nor callable), `all` serves every tool. Travels the daemon handshake per session; one-shots ask for `all` on their own (#150) |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in | Override a tool description (steering lever) |
@@ -1254,7 +1261,7 @@ Each phase is releasable; later phases only add.
 - **Phase 0 — skeleton:** repo init, workspace + crate stubs, CI (fmt, clippy,
   test), config/telemetry/lockfile, `--doctor`, `mem://` connect + migrate
   walking skeleton. *(~small)*
-- **Phase 1 — the loop (MVP):** schema + migrations; embed crate (fastembed +
+- **Phase 1 — the loop (MVP):** schema + migrations; embed crate (local model +
   none); `remember` (dedup, supersession, episodes) + `recall` (hybrid RRF +
   rescoring + reinforcement) + `inspect` (history/stats); stdio serve; protocol
   tests. **Exit criterion: usable daily from Claude Code.**
@@ -1276,9 +1283,12 @@ Each phase is releasable; later phases only add.
 
 ## 9. Risks & open questions
 
-1. **ort is still 2.0-rc** under fastembed — pin exact versions. There is
-   no contingency build any more: the local ONNX model is a hard requirement,
-   and if linking breaks on a platform the fix is in fastembed/ort, not a
+1. **The runtime is built from source.** llama.cpp is compiled by cmake
+   inside every `cargo build` (it replaced ONNX Runtime in v0.3 — #178,
+   `docs/eval/llama-runtime.md` — after CoreML proved slower than the CPU
+   and ORT was left with no macOS acceleration path). There is no
+   contingency build: the local model is a hard requirement, and if the
+   C++ build breaks on a platform the fix is in llama-cpp-2, not a
    degraded mode. (A pure-Rust model2vec `static` backend and a
    `--no-default-features` BM25-only build both filled this role until v0.1.7;
    both were removed unexercised — never built in CI, never needed on a

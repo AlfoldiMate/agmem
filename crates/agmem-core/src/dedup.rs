@@ -6,13 +6,6 @@
 //! nearest live neighbour). The first stops re-runs of the same distillation;
 //! the second stops the same claim in different words.
 
-/// Cosine similarity at or above which two memories state the same thing.
-///
-/// Chosen high on purpose: a false merge silently loses a distinction the
-/// agent drew, while a false split only costs a row the `consolidate` flow
-/// can offer up later.
-pub const NEAR_DUP_THRESHOLD: f64 = 0.95;
-
 /// Fold content down to what identity should depend on: case and whitespace
 /// carry no meaning for "have I already stored this?".
 ///
@@ -53,76 +46,125 @@ pub fn novelty(best_similarity: f64) -> f64 {
     (1.0 - best_similarity).clamp(0.0, 1.0)
 }
 
-/// Cosine similarity below which two memories are simply about different
-/// things, and a neighbour is not worth mentioning.
+/// The cosine bands one embedding model's vectors are read against.
 ///
-/// The band between this and [`NEAR_DUP_THRESHOLD`] is where a *correction*
-/// lives: close enough to be about the same subject, far enough apart to be
-/// saying something else about it — which is exactly the shape of "we moved
-/// off black" against "the user formats Python with black". Nothing is decided
-/// on that basis; a neighbour in the band is handed back for the agent to
-/// judge, the way a near-duplicate already is (issue #38).
-pub const CORRECTION_FLOOR: f64 = 0.75;
-
-/// Whether a candidate's nearest live neighbour is close enough to call it a
-/// restatement rather than a new memory.
-pub fn is_near_duplicate(similarity: f64) -> bool {
-    similarity >= NEAR_DUP_THRESHOLD
+/// Cosine similarity means something different for every model — BGE-small's
+/// unrelated pairs score high, EmbeddingGemma's score near zero — so every
+/// bar is data carried by the embedder (issue #138), never a constant a
+/// caller reaches for. A backend hands out the table for the model it
+/// loaded; the tools ask the embedder rather than this module.
+///
+/// The bands, all stated as similarity:
+///
+/// - **`near_dup`** — at or above it two memories state the same thing.
+///   Chosen high on purpose: a false merge silently loses a distinction the
+///   agent drew, while a false split only costs a row the `consolidate` flow
+///   can offer up later.
+/// - **`correction_floor`** — below it two memories are simply about
+///   different things, and a neighbour is not worth mentioning. The band
+///   between it and `near_dup` is where a *correction* lives: close enough
+///   to be about the same subject, far enough apart to be saying something
+///   else about it — the shape of "we moved off black" against "the user
+///   formats Python with black". Nothing is decided on that basis; a
+///   neighbour in the band is handed back for the agent to judge (issue #38).
+/// - **`cluster`** — at or above it two *stored* memories are worth offering
+///   as one cluster (design §5.5, issue #25). Lower than `near_dup` on
+///   purpose: the write gate only ever compares a new claim against its
+///   nearest live neighbour, so a pair can end up live together at any
+///   similarity, and consolidation can afford a looser bar because it
+///   *proposes* rather than blocks. No ceiling: a pair at 0.99 belongs in
+///   the same list as one at 0.91.
+/// - **`abstention`** — below it a recall page's best measured hit is not an
+///   answer, and the page comes back empty with a note (issue #77).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Thresholds {
+    /// Same claim in different words.
+    pub near_dup: f64,
+    /// Same subject at all.
+    pub correction_floor: f64,
+    /// Worth offering as one cluster.
+    pub cluster: f64,
+    /// Below this, a recall has no answer.
+    pub abstention: f64,
 }
 
-/// Whether a neighbour is a claim the new one might be correcting: same
-/// subject, different statement.
-///
-/// Deliberately exclusive of [`NEAR_DUP_THRESHOLD`] — a near-duplicate is
-/// already reported, and reporting it twice under two names would suggest
-/// there were two neighbours.
-pub fn is_correction_candidate(similarity: f64) -> bool {
-    (CORRECTION_FLOOR..NEAR_DUP_THRESHOLD).contains(&similarity)
-}
+impl Thresholds {
+    /// bge-small-en-v1.5, the calibration everything here was first measured
+    /// on: the gate and the cluster bar by hand (`docs/design.md` §5.2,
+    /// §5.5), the abstention floor with `calibrate_abstention` in the eval
+    /// harness — every labelled-relevant probe measures ≥ 0.656 at its best
+    /// hit, six of eight unanswerables ≤ 0.599, and 0.62 sits in that gap.
+    pub const BGE_SMALL: Self = Self {
+        near_dup: 0.95,
+        correction_floor: 0.75,
+        cluster: 0.90,
+        abstention: 0.62,
+    };
 
-/// Cosine similarity at or above which two *stored* memories are worth
-/// offering as one cluster (design §5.5, issue #25).
-///
-/// Lower than [`NEAR_DUP_THRESHOLD`] on purpose, and that gap is the whole
-/// point: the write gate only ever compares a new claim against its nearest
-/// live neighbour, so a pair can end up live together at any similarity — two
-/// entries of one batch never meet each other, and a `forget` or a
-/// supersession can leave a row whose twin was written while it was closed.
-/// Consolidation is where those show up, and it can afford a looser bar than
-/// the gate because it *proposes* rather than blocks: a false cluster costs
-/// the agent a glance, where a false auto-merge would silently lose a
-/// distinction.
-///
-/// There is no ceiling. A pair at 0.99 is the most duplicated thing the store
-/// holds and belongs in the same list as one at 0.91.
-pub const CLUSTER_THRESHOLD: f64 = 0.90;
+    /// EmbeddingGemma-300M, measured on the same fixtures in
+    /// `docs/eval/embed-models.md` §Thresholds: the 0.95 gate holds (the
+    /// paraphrase band tops out at 0.921), the correction floor moves down
+    /// to 0.70 (random pairs' p99.9 is 0.69, corrected pairs' p5 is 0.68),
+    /// and the abstention floor to 0.14 — Gemma's unrelated pairs sit near
+    /// zero where BGE's sit near 0.6. The cluster bar is **unmeasured** for
+    /// Gemma and carries BGE's number until `scripts/band-probe.nu` says
+    /// otherwise.
+    pub const GEMMA_300M: Self = Self {
+        near_dup: 0.95,
+        correction_floor: 0.70,
+        cluster: 0.90,
+        abstention: 0.14,
+    };
 
-/// Whether two live memories are close enough to offer as the same claim.
-pub fn is_cluster_candidate(similarity: f64) -> bool {
-    similarity >= CLUSTER_THRESHOLD
-}
+    /// Whether a candidate's nearest live neighbour is close enough to call
+    /// it a restatement rather than a new memory.
+    #[must_use]
+    pub fn is_near_duplicate(self, similarity: f64) -> bool {
+        similarity >= self.near_dup
+    }
 
-/// Whether two live memories are close enough to be about one subject at all.
-///
-/// The floor is [`CORRECTION_FLOOR`], the same one the write path uses. There
-/// is deliberately **no ceiling**, and that is a measurement rather than a
-/// taste: seven contradiction pairs an agent would plausibly hold at once —
-/// stdout against stderr, npm against pnpm, Friday deploys against never on a
-/// Friday — score 0.919 to 0.974 with BGE-small, while a pair about one
-/// subject that merely says two *different* things scores 0.898. An embedding
-/// encodes topic, not polarity, so a claim and its negation read as
-/// paraphrases of each other, and a ceiling under [`CLUSTER_THRESHOLD`]
-/// therefore reported the pairs that agree and hid every pair that disagrees.
-///
-/// So the two lists `consolidate` returns do not partition, and cannot: above
-/// [`CLUSTER_THRESHOLD`] a pair is offered as both a merge candidate and a
-/// disagreement, because nothing on this side of the wire can tell those
-/// apart. What separates the lists is the question, not the range —
-/// `near_duplicates` asks whether one of these could be deleted,
-/// `contradictions` asks which of them is true — and the shared entity is what
-/// keeps the second list from being a copy of the first.
-pub fn is_contradiction_candidate(similarity: f64) -> bool {
-    similarity >= CORRECTION_FLOOR
+    /// Whether a neighbour is a claim the new one might be correcting: same
+    /// subject, different statement.
+    ///
+    /// Deliberately exclusive of `near_dup` — a near-duplicate is already
+    /// reported, and reporting it twice under two names would suggest there
+    /// were two neighbours.
+    #[must_use]
+    pub fn is_correction_candidate(self, similarity: f64) -> bool {
+        (self.correction_floor..self.near_dup).contains(&similarity)
+    }
+
+    /// Whether two live memories are close enough to offer as the same claim.
+    #[must_use]
+    pub fn is_cluster_candidate(self, similarity: f64) -> bool {
+        similarity >= self.cluster
+    }
+
+    /// Whether two live memories are close enough to be about one subject at
+    /// all.
+    ///
+    /// The floor is `correction_floor`, the same one the write path uses.
+    /// There is deliberately **no ceiling**, and that is a measurement rather
+    /// than a taste: seven contradiction pairs an agent would plausibly hold
+    /// at once — stdout against stderr, npm against pnpm, Friday deploys
+    /// against never on a Friday — score 0.919 to 0.974 with BGE-small, while
+    /// a pair about one subject that merely says two *different* things
+    /// scores 0.898. An embedding encodes topic, not polarity, so a claim and
+    /// its negation read as paraphrases of each other, and a ceiling under
+    /// `cluster` therefore reported the pairs that agree and hid every pair
+    /// that disagrees.
+    ///
+    /// So the two lists `consolidate` returns do not partition, and cannot:
+    /// above `cluster` a pair is offered as both a merge candidate and a
+    /// disagreement, because nothing on this side of the wire can tell those
+    /// apart. What separates the lists is the question, not the range —
+    /// `near_duplicates` asks whether one of these could be deleted,
+    /// `contradictions` asks which of them is true — and the shared entity is
+    /// what keeps the second list from being a copy of the first.
+    #[must_use]
+    pub fn is_contradiction_candidate(self, similarity: f64) -> bool {
+        similarity >= self.correction_floor
+    }
 }
 
 /// A vector prepared for repeated comparison: scaled to unit length, so
@@ -209,33 +251,48 @@ mod tests {
 
     #[test]
     fn the_gate_only_fires_at_or_above_the_threshold() {
-        assert!(is_near_duplicate(similarity_from_distance(0.0)));
-        assert!(is_near_duplicate(similarity_from_distance(0.05)));
-        assert!(!is_near_duplicate(similarity_from_distance(0.051)));
-        assert!(!is_near_duplicate(similarity_from_distance(1.0)));
+        let bge = Thresholds::BGE_SMALL;
+        assert!(bge.is_near_duplicate(similarity_from_distance(0.0)));
+        assert!(bge.is_near_duplicate(similarity_from_distance(0.05)));
+        assert!(!bge.is_near_duplicate(similarity_from_distance(0.051)));
+        assert!(!bge.is_near_duplicate(similarity_from_distance(1.0)));
     }
 
     #[test]
     fn the_two_consolidate_bands_overlap_above_the_cluster_threshold() {
-        assert!(is_cluster_candidate(CLUSTER_THRESHOLD));
-        assert!(is_contradiction_candidate(0.8999));
-        assert!(!is_cluster_candidate(0.8999));
-        assert!(is_contradiction_candidate(CORRECTION_FLOOR));
-        assert!(!is_contradiction_candidate(CORRECTION_FLOOR - 0.0001));
+        let bge = Thresholds::BGE_SMALL;
+        assert!(bge.is_cluster_candidate(bge.cluster));
+        assert!(bge.is_contradiction_candidate(0.8999));
+        assert!(!bge.is_cluster_candidate(0.8999));
+        assert!(bge.is_contradiction_candidate(bge.correction_floor));
+        assert!(!bge.is_contradiction_candidate(bge.correction_floor - 0.0001));
 
         // Measured with BGE-small: a real contradiction scores 0.919–0.974,
         // which is cluster territory, and both lists have to be able to hold
         // it. A band that stopped at the cluster threshold contained the
         // control pair — same subject, no disagreement — and nothing else.
         for measured in [0.919, 0.948, 0.974] {
-            assert!(is_cluster_candidate(measured));
-            assert!(is_contradiction_candidate(measured));
+            assert!(bge.is_cluster_candidate(measured));
+            assert!(bge.is_contradiction_candidate(measured));
         }
 
         // A pair the write gate would have blocked is still a cluster — the
         // gate never compared these two to each other.
-        assert!(is_cluster_candidate(NEAR_DUP_THRESHOLD));
-        assert!(is_cluster_candidate(1.0));
+        assert!(bge.is_cluster_candidate(bge.near_dup));
+        assert!(bge.is_cluster_candidate(1.0));
+    }
+
+    #[test]
+    fn every_model_keeps_its_bands_ordered() {
+        // The correction band must be non-empty and sit under the gate, and
+        // the cluster bar must stay inside it, for any model's table.
+        for table in [Thresholds::BGE_SMALL, Thresholds::GEMMA_300M] {
+            assert!(table.correction_floor < table.cluster);
+            assert!(table.cluster <= table.near_dup);
+            assert!(table.abstention < table.correction_floor);
+            assert!(table.is_correction_candidate(table.correction_floor));
+            assert!(!table.is_correction_candidate(table.near_dup));
+        }
     }
 
     #[test]

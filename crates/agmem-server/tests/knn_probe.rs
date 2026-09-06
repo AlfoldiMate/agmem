@@ -17,7 +17,7 @@
 
 use agmem_core::{Kind, SpaceName, Writer};
 use agmem_embed::Embedder;
-use agmem_embed::fastembed::FastembedBackend;
+use agmem_embed::{Accelerator, LlamaEmbedder, Model};
 use agmem_store::db::Db;
 use agmem_store::repo::{self, Batch, NewMemory, Search};
 use agmem_store::{db, migrate};
@@ -380,7 +380,7 @@ async fn a_store_on_disk_reads_the_same_cold() {
 async fn a_cold_vector_arm_reads_as_a_warm_one_does() {
     let cache = std::env::temp_dir().join("agmem-model-cache");
     let embedder =
-        FastembedBackend::new(Some(cache), agmem_embed::Accelerator::Cpu).expect("load model");
+        LlamaEmbedder::new(Model::BgeSmall, Some(cache), Accelerator::Cpu).expect("load model");
     let directory = tempfile::tempdir().expect("tempdir");
 
     let mut faults: Vec<String> = Vec::new();

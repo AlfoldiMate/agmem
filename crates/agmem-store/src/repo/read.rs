@@ -363,7 +363,7 @@ pub async fn count_matching(db: &Db, lookup: &Lookup) -> Result<u64, StoreError>
 /// neighbours behind it are the correction band (issue #38) — same subject,
 /// different statement — reported so the agent has the id of what it may be
 /// contradicting. Deciding *how* close either is belongs to
-/// [`dedup::is_near_duplicate`] and [`dedup::is_correction_candidate`]; this
+/// the model's [`dedup::Thresholds`]; this
 /// only measures.
 ///
 /// An empty slot means the space holds no vector to compare against yet.

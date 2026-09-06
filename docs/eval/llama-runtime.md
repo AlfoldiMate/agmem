@@ -76,7 +76,7 @@ like `candidates` and `coreml`.
 - The GGUF candidates are four more `AGMEM_CANDIDATE` ids —
   `bge-small-en-v1.5-gguf-f16|q8_0` and `embeddinggemma-300m-gguf-f16|q8_0` —
   and `AGMEM_ACCELERATOR=cpu|metal` says where llama.cpp runs them (`metal`
-  offloads every layer; `cpu` none). `scripts/embed-candidates-fetch.nu`
+  offloads every layer; `cpu` none). `scripts/embed-candidates-fetch.nu` (since retired)
   fetches the files.
 - `cargo test -p agmem-embed --features llama-metal --release --test
   candidates -- --ignored --nocapture latency` per id and accelerator; rows go
@@ -202,3 +202,17 @@ or nothing; and shipping llama.cpp means a cmake-and-clang build in the
 release pipeline and a second runtime in the binary, which the 2026-09-03
 one-runtime rule was written to avoid. The feature stays off by default
 until #138 decides.
+
+### Decision (2026-09-06)
+
+The user decided the same day: **llama.cpp becomes the only runtime**, not
+a second one. Gemma on llama.cpp beat bge on every bar column, and bge
+Q8_0 on llama.cpp's CPU path (5.2 ms) is faster than it ever was on ONNX
+Runtime, so dropping ORT loses nothing and the "two runtimes in the binary"
+objection disappears; the accepted cost is cmake and a C++ compiler on
+every build host. EmbeddingGemma-300M Q8_0 is the default model,
+bge-small-en-v1.5 Q8_0 the light option (`--model`), Metal compiled in by
+target on Apple silicon and the CPU elsewhere. The measurement harness
+(`candidates` feature, `scripts/embed-candidates-*.nu`) went with ORT;
+the fixtures under `tests/fixtures/eval/candidates/` stay as the record.
+Migrating existing stores is #138.

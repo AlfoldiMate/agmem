@@ -26,8 +26,8 @@ user's preferences, the lesson that cost an hour yesterday: all gone. Most
 memory layers fix this with a hosted service and a second model that rewrites
 what the agent said. agmem does neither.
 
-- **Local and offline.** SurrealDB embedded in the process, an ONNX embedding
-  model cached on first run. Nothing leaves the machine.
+- **Local and offline.** SurrealDB embedded in the process, an embedding
+  model on llama.cpp fetched on first run. Nothing leaves the machine.
 - **The agent is the author.** agmem never rewrites a claim. It stores what it
   is given, reports duplicates and neighbours, and lets the agent decide.
 - **Corrections, not contradictions.** A wrong claim is superseded, never
@@ -51,7 +51,8 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/AlfoldiMate/agmem/releases/latest/download/agmem-server-installer.sh | sh
 ```
 
-Anywhere else, build from source with Rust 1.89 or newer. The crate is
+Anywhere else, build from source with Rust 1.89 or newer plus cmake and a
+C++ compiler (llama.cpp is compiled into the binary). The crate is
 `agmem-server`; the binary is `agmem`.
 
 ```sh
@@ -59,8 +60,10 @@ cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
 ```
 
 Then run the self-check once. It creates the data directory, opens the store,
-runs migrations, does a write/read roundtrip and downloads the embedding model
-(BGE-small-en-v1.5, quantised, 65 MB). Every run after that is offline.
+runs migrations, does a write/read roundtrip and fetches the embedding model
+(EmbeddingGemma-300M, Q8_0, ~314 MB; `--model bge-small-en-v1.5` is the
+36 MB light option). Every run after that is offline. On Apple silicon the
+model runs on Metal; elsewhere on the CPU.
 
 ```
 $ agmem --doctor
@@ -330,7 +333,9 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--data` / `AGMEM_DATA` | platform data dir | Store, lock file, model cache |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine. `mem://` for scratch, `ws://host` to share |
 | `--space` / `AGMEM_SPACE` | derived from cwd | This instance's space |
-| `--embedder` / `AGMEM_EMBEDDER` | `fastembed` | The local ONNX model, the only backend |
+| `--embedder` / `AGMEM_EMBEDDER` | `llama` | The local llama.cpp runtime, the only backend |
+| `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | Or `bge-small-en-v1.5`, the light option. Changing it on a store with vectors needs `--reindex` |
+| `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | `metal` on Apple silicon, `cpu` anywhere, or to opt out |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session |
@@ -338,7 +343,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--log`, `--log-file` | `info` to stderr | Telemetry. stdout is the MCP wire and stays empty |
 | `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session lists: `core` leaves out `consolidate` and `forget` (the shell serves them), `all` puts them back |
 | `AGMEM_TOOL_DESC_<TOOL>` | built-in wording | Replace one tool's description, per server, no rebuild |
-| `FASTEMBED_CACHE_DIR` | `<data>/models` | Where the embedding model lives |
+| `AGMEM_MODEL_DIR` | `<data>/models` | Where the model weights live |
 | `--doctor` | | Self-check, then exit. Counts documents per space |
 | `--reindex` | | Re-embed every row under the configured embedder. The one way to change models |
 
@@ -360,12 +365,14 @@ effect of the built-in wording and the harness that measures it.
 - **`--doctor` says `skip` on two lines.** Healthy, with a daemon running. The
   lock and the schema belong to the daemon. Stop the sessions for the full
   report.
-- **The first run stalls on the model download.** It pulls 65 MB from Hugging
-  Face into `<data dir>/models`. Behind a proxy, copy that directory from a
-  machine that has it, or point `FASTEMBED_CACHE_DIR` at one that does.
+- **The first run stalls on the model download.** It pulls ~314 MB from
+  Hugging Face into `<data dir>/models`. Behind a proxy, copy that directory
+  from a machine that has it, or point `AGMEM_MODEL_DIR` at one that does.
+  `--model bge-small-en-v1.5` is 36 MB.
 - **A different model.** A store written with one model refuses to open under
-  a different one; `--reindex` converts it. There is no model-less mode:
-  recall is BM25 *and* vectors, and ONNX Runtime is a hard requirement.
+  a different one; `--reindex` converts it. Stores from before v0.3 were
+  embedded with bge on ONNX Runtime and need `--reindex` once. There is no
+  model-less mode: recall is BM25 *and* vectors.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 
@@ -377,10 +384,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Four crates: `agmem-core` (records, scoring, dedup, chunking; no I/O),
-`agmem-store` (SurrealDB schema and queries), `agmem-embed` (ONNX and no-op
-backends) and `agmem-server` (the MCP service and the `agmem` binary).
+`agmem-store` (SurrealDB schema and queries), `agmem-embed` (llama.cpp and
+no-op backends) and `agmem-server` (the MCP service and the `agmem` binary).
 CI never downloads a model: tests that need real semantics replay recorded
-BGE vectors (`tests/fixtures/`), and tests that need the live model are
+model vectors (`tests/fixtures/`), and tests that need the live model are
 `#[ignore]`d.
 
 The repo's own `.claude/` is the ctx-flow framework — routing discipline,

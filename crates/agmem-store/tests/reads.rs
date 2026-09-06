@@ -610,7 +610,7 @@ async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
         "a vector identical to a stored one is a similarity of 1: {}",
         exact.similarity
     );
-    assert!(dedup::is_near_duplicate(exact.similarity));
+    assert!(dedup::Thresholds::BGE_SMALL.is_near_duplicate(exact.similarity));
     assert!(
         probes[0]
             .windows(2)
@@ -619,12 +619,12 @@ async fn the_near_dup_gate_measures_the_nearest_live_neighbour() {
     );
     let orthogonal = probes[1].first().expect("the space holds vectors");
     assert!(
-        !dedup::is_near_duplicate(orthogonal.similarity),
+        !dedup::Thresholds::BGE_SMALL.is_near_duplicate(orthogonal.similarity),
         "every fixture axis is orthogonal to every other: {}",
         orthogonal.similarity
     );
     assert!(
-        !dedup::is_correction_candidate(orthogonal.similarity),
+        !dedup::Thresholds::BGE_SMALL.is_correction_candidate(orthogonal.similarity),
         "an orthogonal axis is not a correction candidate either: {}",
         orthogonal.similarity
     );
@@ -874,7 +874,8 @@ async fn the_all_pairs_similarity_is_the_one_the_engine_reports() {
     assert!(
         neighbours
             .iter()
-            .any(|neighbour| dedup::is_contradiction_candidate(neighbour.similarity)),
+            .any(|neighbour| dedup::Thresholds::BGE_SMALL
+                .is_contradiction_candidate(neighbour.similarity)),
         "the probe is meant to land in the band the contradiction arm reads"
     );
 

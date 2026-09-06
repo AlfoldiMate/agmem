@@ -1,53 +1,32 @@
 [package]
 name = "agmem-embed"
-description = "agmem embedding backends: fastembed/ONNX, plus a no-op test double."
+description = "agmem embedding backend: GGUF models on llama.cpp, plus a no-op test double."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[features]
-# The cross-encoder rerank probe (issue #81): measurement surface only —
-# nothing in the server links it.
-rerank = []
-# The #133 embedding-candidate probe: measurement surface only — nothing in
-# the server links it. Loads the candidates behind `Embedder` with their own
-# prefixes and pooling so the numbers come off the production ORT path.
-candidates = ["dep:ndarray", "dep:serde_json", "dep:ort", "dep:tokenizers"]
-# The CoreML execution provider on macOS (issue #139). ONNX Runtime as pyke
-# ships it for aarch64-apple-darwin already carries the provider; this turns
-# on ort's Rust surface for it and lets `Accelerator::CoreMl` resolve. Off
-# by default: the CPU path is the portable one.
-coreml = ["dep:ort", "ort/coreml"]
-# llama.cpp as a second embedding runtime (issue #178): measurement surface
-# only, like `candidates`, which it implies. `llama-metal` turns on the Metal
-# backend on macOS; without it the runtime is CPU-only everywhere.
-llama = ["candidates", "dep:llama-cpp-2"]
-llama-metal = ["llama", "llama-cpp-2/metal"]
-
 [dependencies]
-fastembed = { workspace = true }
+agmem-core = { workspace = true }
+hf-hub = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-# fastembed's own ndarray, for the attention mask the last-token pooling reads.
-ndarray = { version = "0.17.2", default-features = false, optional = true }
-serde_json = { workspace = true, optional = true }
-# fastembed's own ort and tokenizers, for the one export it cannot drive
-# itself (Qwen3 wants `position_ids`); the pins match fastembed's so one
-# ONNX Runtime is linked.
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["ndarray", "std"], optional = true }
-tokenizers = { version = "0.22.2", default-features = false, features = ["onig"], optional = true }
-# Vendors and statically links llama.cpp. Default features off: `openmp` needs
-# a libomp Apple clang does not ship, and `common` is the CLI helper library.
-llama-cpp-2 = { version = "=0.1.156", default-features = false, optional = true }
+# Vendors and statically links llama.cpp, so the binary stays one file and
+# needs cmake and a C++ compiler only to build. Default features off:
+# `openmp` needs a libomp Apple clang does not ship, and `common` is the CLI
+# helper library.
+llama-cpp-2 = { version = "=0.1.156", default-features = false }
+
+# Metal is not a cargo feature but a target: Cargo unifies features per
+# target, so this entry adds llama.cpp's Metal backend on Apple Silicon and
+# nothing anywhere else, and no user has to pass a flag to get or avoid it.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+llama-cpp-2 = { version = "=0.1.156", default-features = false, features = ["metal"] }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-# The eval vector regenerator chunks fixture documents exactly as `remember`
-# does, so the recorded texts are the texts the store will ask for.
-agmem-core = { workspace = true }
 serde_json = { workspace = true }

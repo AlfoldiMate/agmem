@@ -7,9 +7,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Embed tests that need a real model are #[ignore]d / feature-gated;
-  # CI must never download ONNX models (design §7, issue #2).
-  FASTEMBED_CACHE_DIR: /nonexistent
+  # Embed tests that need a real model are #[ignore]d; CI must never fetch
+  # model weights (design §7, issues #2, #119).
+  AGMEM_MODEL_DIR: /nonexistent
 
 jobs:
   check:
@@ -37,14 +37,9 @@ jobs:
           mkdir -p "$HOME/.surrealdb"
           curl -sSfL "https://download.surrealdb.com/v3.2.3/$asset" | tar -xz -C "$HOME/.surrealdb"
           echo "$HOME/.surrealdb" >> "$GITHUB_PATH"
+      # llama.cpp is vendored and built from source by llama-cpp-2: the
+      # build needs cmake and a C++ compiler, which both images carry.
+      - run: cmake --version
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      # The CoreML feature (#139) must keep compiling; the model itself never
-      # runs here (#119), and `--accelerator cpu` is what the tests use.
-      - if: runner.os == 'macOS'
-        run: cargo clippy -p agmem-server -p agmem-embed --features coreml --all-targets -- -D warnings
-      # The llama.cpp runtime (#178) must keep compiling too; the C++ build
-      # needs cmake, which the macOS image carries. No model runs (#119).
-      - if: runner.os == 'macOS'
-        run: cargo clippy -p agmem-embed --features llama-metal --all-targets -- -D warnings

@@ -17,6 +17,8 @@ pub mod accelerator;
 #[cfg(feature = "candidates")]
 pub mod candidates;
 pub mod fastembed;
+#[cfg(feature = "llama")]
+pub mod llama;
 pub mod noop;
 #[cfg(feature = "rerank")]
 pub mod rerank;

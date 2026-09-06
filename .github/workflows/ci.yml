@@ -44,3 +44,7 @@ jobs:
       # runs here (#119), and `--accelerator cpu` is what the tests use.
       - if: runner.os == 'macOS'
         run: cargo clippy -p agmem-server -p agmem-embed --features coreml --all-targets -- -D warnings
+      # The llama.cpp runtime (#178) must keep compiling too; the C++ build
+      # needs cmake, which the macOS image carries. No model runs (#119).
+      - if: runner.os == 'macOS'
+        run: cargo clippy -p agmem-embed --features llama-metal --all-targets -- -D warnings

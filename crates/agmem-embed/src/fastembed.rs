@@ -69,6 +69,14 @@ impl FastembedBackend {
         accelerator: Accelerator,
     ) -> Result<Self, EmbedError> {
         let active = accelerator.resolve()?;
+        if active == Active::Metal {
+            return Err(EmbedError::Backend {
+                backend: MODEL_ID,
+                message:
+                    "metal is llama.cpp's (#178); the shipped ONNX model runs on cpu or coreml"
+                        .to_owned(),
+            });
+        }
         // Download progress bars are not ours to print: stdout is the MCP wire.
         let mut options = TextInitOptions::new(MODEL).with_show_download_progress(false);
         let cache_dir = match std::env::var_os("FASTEMBED_CACHE_DIR") {

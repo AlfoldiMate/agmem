@@ -20,6 +20,11 @@ candidates = ["dep:ndarray", "dep:serde_json", "dep:ort", "dep:tokenizers"]
 # on ort's Rust surface for it and lets `Accelerator::CoreMl` resolve. Off
 # by default: the CPU path is the portable one.
 coreml = ["dep:ort", "ort/coreml"]
+# llama.cpp as a second embedding runtime (issue #178): measurement surface
+# only, like `candidates`, which it implies. `llama-metal` turns on the Metal
+# backend on macOS; without it the runtime is CPU-only everywhere.
+llama = ["candidates", "dep:llama-cpp-2"]
+llama-metal = ["llama", "llama-cpp-2/metal"]
 
 [dependencies]
 fastembed = { workspace = true }
@@ -34,6 +39,9 @@ serde_json = { workspace = true, optional = true }
 # ONNX Runtime is linked.
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["ndarray", "std"], optional = true }
 tokenizers = { version = "0.22.2", default-features = false, features = ["onig"], optional = true }
+# Vendors and statically links llama.cpp. Default features off: `openmp` needs
+# a libomp Apple clang does not ship, and `common` is the CLI helper library.
+llama-cpp-2 = { version = "=0.1.156", default-features = false, optional = true }
 
 [lints]
 workspace = true

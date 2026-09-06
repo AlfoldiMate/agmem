@@ -7,6 +7,10 @@
 //! `coreml` cargo feature, so a build without it can only ever resolve to
 //! [`Active::Cpu`].
 //!
+//! `metal` is the one exception to "one runtime" (issue #178): it names
+//! llama.cpp's Metal backend, exists only behind the `llama` feature, is a
+//! measurement surface like `candidates`, and never resolves from `auto`.
+//!
 //! `auto` is resolved once, before any model loads, so the daemon, `doctor`
 //! and a spawned child all hold — and print — the same concrete answer.
 
@@ -25,6 +29,9 @@ pub enum Accelerator {
     Cpu,
     /// The CoreML provider; an error when the build or the machine lacks it.
     CoreMl,
+    /// llama.cpp's Metal backend (#178); an error without the `llama`
+    /// feature, and only a GGUF candidate can run on it.
+    Metal,
 }
 
 impl Accelerator {
@@ -35,6 +42,7 @@ impl Accelerator {
             Self::Auto => "auto",
             Self::Cpu => "cpu",
             Self::CoreMl => "coreml",
+            Self::Metal => "metal",
         }
     }
 
@@ -45,6 +53,7 @@ impl Accelerator {
             "auto" => Some(Self::Auto),
             "cpu" => Some(Self::Cpu),
             "coreml" => Some(Self::CoreMl),
+            "metal" => Some(Self::Metal),
             _ => None,
         }
     }
@@ -73,6 +82,15 @@ impl Accelerator {
                         .to_owned()
                 },
             }),
+            Self::Metal if cfg!(all(feature = "llama-metal", target_os = "macos")) => {
+                Ok(Active::Metal)
+            }
+            Self::Metal => Err(EmbedError::Backend {
+                backend: "accelerator",
+                message: "this build has no Metal support; build with `--features llama-metal` \
+                          on macOS"
+                    .to_owned(),
+            }),
         }
     }
 }
@@ -85,6 +103,9 @@ pub enum Active {
     /// The CoreML provider, with the CPU provider behind it for the ops
     /// Core ML has no kernel for (embedding lookups, the mask path).
     CoreMl,
+    /// llama.cpp's Metal backend, every layer offloaded (#178). Not an
+    /// ONNX Runtime provider: an ORT session asked to run here is an error.
+    Metal,
 }
 
 impl Active {
@@ -94,6 +115,7 @@ impl Active {
         match self {
             Self::Cpu => "cpu",
             Self::CoreMl => "coreml",
+            Self::Metal => "metal",
         }
     }
 
@@ -113,7 +135,10 @@ impl Active {
         cache_dir: Option<&Path>,
     ) -> Vec<ort::ep::ExecutionProviderDispatch> {
         match self {
-            Self::Cpu => Vec::new(),
+            Self::Cpu => {
+                let _ = cache_dir; // only the CoreML arm reads it
+                Vec::new()
+            }
             #[cfg(feature = "coreml")]
             Self::CoreMl => {
                 use ort::ep::{CoreML, coreml::ComputeUnits, coreml::ModelFormat};
@@ -130,6 +155,7 @@ impl Active {
             }
             #[cfg(not(feature = "coreml"))]
             Self::CoreMl => unreachable!("CoreMl never resolves without the coreml feature"),
+            Self::Metal => unreachable!("Metal is llama.cpp's; no ORT session is built for it"),
         }
     }
 }
@@ -153,7 +179,12 @@ mod tests {
 
     #[test]
     fn spellings_round_trip() {
-        for accelerator in [Accelerator::Auto, Accelerator::Cpu, Accelerator::CoreMl] {
+        for accelerator in [
+            Accelerator::Auto,
+            Accelerator::Cpu,
+            Accelerator::CoreMl,
+            Accelerator::Metal,
+        ] {
             assert_eq!(Accelerator::parse(accelerator.as_str()), Some(accelerator));
         }
         assert_eq!(Accelerator::parse("gpu"), None);

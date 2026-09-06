@@ -373,3 +373,88 @@ fn coreml_vectors_match_cpu() {
     );
     assert!(min >= BAR, "min cosine {min:.6} is under the {BAR} bar");
 }
+
+/// The #178 drift check: a GGUF candidate on llama.cpp must reproduce the
+/// ORT vectors of the same model's fp32 export closely enough that no
+/// threshold moves — the `coreml_vectors_match_cpu` shape generalised to a
+/// runtime pair. `AGMEM_CANDIDATE` names the `-gguf-` candidate and
+/// `AGMEM_ACCELERATOR` (`cpu|metal`) where it runs; the ORT twin runs on the
+/// CPU. The bar is in `docs/eval/llama-runtime.md`.
+#[cfg(feature = "llama")]
+#[test]
+#[ignore = "runs a GGUF candidate on llama.cpp against its ORT twin"]
+fn llama_vectors_match_ort() {
+    use agmem_embed::candidates::{CANDIDATE_ENV, Candidate, CandidateBackend, cache_dir};
+    use agmem_embed::{Accelerator, Active};
+
+    const BAR: f32 = 0.999;
+
+    let candidate = Candidate::from_env()
+        .unwrap_or_else(|| panic!("{CANDIDATE_ENV} names the GGUF candidate to check"));
+    let twin = candidate
+        .ort_twin()
+        .unwrap_or_else(|| panic!("{} is not a GGUF candidate", candidate.id()));
+    let spelling = std::env::var("AGMEM_ACCELERATOR").unwrap_or_else(|_| "cpu".to_owned());
+    let accelerator = Accelerator::parse(&spelling)
+        .unwrap_or_else(|| panic!("AGMEM_ACCELERATOR={spelling:?}: one of cpu, metal"))
+        .resolve()
+        .expect("resolve the accelerator");
+
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../agmem-server/tests/fixtures/eval/vectors.json");
+    let recording: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixture).expect("read vectors.json"))
+            .expect("vectors.json parses");
+    let texts = |section: &str| -> Vec<String> {
+        recording[section]
+            .as_object()
+            .expect(section)
+            .keys()
+            .cloned()
+            .collect()
+    };
+    let passages = texts("passages");
+    let queries = texts("queries");
+    assert!(!passages.is_empty() && !queries.is_empty(), "empty fixture");
+
+    let cache = cache_dir();
+    let ort = CandidateBackend::load(twin, &cache, Active::Cpu).expect("load the ORT twin");
+    let llama = CandidateBackend::load(candidate, &cache, accelerator).expect("load the GGUF");
+    assert_eq!(llama.accelerator(), accelerator.as_str());
+
+    let mut cosines: Vec<f32> = Vec::with_capacity(passages.len() + queries.len());
+    let mut worst: Option<(f32, String)> = None;
+    let a = ort.embed_passages(&passages).expect("ort passages");
+    let b = llama.embed_passages(&passages).expect("llama passages");
+    for ((x, y), text) in a.iter().zip(&b).zip(&passages) {
+        let c = cosine(x, y);
+        if worst.as_ref().is_none_or(|(w, _)| c < *w) {
+            worst = Some((c, text.clone()));
+        }
+        cosines.push(c);
+    }
+    for query in &queries {
+        let x = ort.embed_query(query).expect("ort query");
+        let y = llama.embed_query(query).expect("llama query");
+        let c = cosine(&x, &y);
+        if worst.as_ref().is_none_or(|(w, _)| c < *w) {
+            worst = Some((c, query.clone()));
+        }
+        cosines.push(c);
+    }
+
+    let min = cosines.iter().copied().fold(f32::INFINITY, f32::min);
+    let mean = cosines.iter().sum::<f32>() / cosines.len() as f32;
+    let under = cosines.iter().filter(|c| **c < BAR).count();
+    eprintln!(
+        "{} on {} vs {} on cpu over {} texts: min cosine {min:.6}, mean {mean:.6}, {under} under {BAR}",
+        candidate.id(),
+        accelerator.as_str(),
+        twin.id(),
+        cosines.len()
+    );
+    if let Some((c, text)) = &worst {
+        eprintln!("worst {c:.6}: {text:?}");
+    }
+    assert!(min >= BAR, "min cosine {min:.6} is under the {BAR} bar");
+}

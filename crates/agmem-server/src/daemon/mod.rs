@@ -33,7 +33,7 @@ use agmem_core::SpaceName;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Config, EmbedderKind, ModelKind, ToolDescriptions, ToolGroup};
+use crate::config::{ApiModel, Config, EmbedderKind, ModelKind, ToolDescriptions, ToolGroup};
 
 /// The socket the daemon listens on, inside the data dir.
 pub const SOCKET_FILE: &str = "agmem.sock";
@@ -132,6 +132,11 @@ pub struct Handshake {
     /// mismatch anyway, refused above on `release`.
     #[serde(default)]
     pub model: ModelKind,
+    /// The endpoint and remote model `--embedder api` uses (issue #120).
+    /// Absent on the wire from a release before it, which reads as the
+    /// defaults — the same release-mismatch story as `model`.
+    #[serde(default)]
+    pub api: ApiModel,
     /// The project asking — what `space` defaults to for this connection.
     pub space: SpaceName,
     /// Candidate pool for this connection's recalls.
@@ -156,6 +161,7 @@ impl Handshake {
             db_url: cfg.db_url.clone(),
             embedder: cfg.embedder,
             model: cfg.model,
+            api: cfg.api.clone(),
             space: cfg.space.clone(),
             pool: cfg.pool,
             max_k: cfg.max_k,
@@ -259,6 +265,17 @@ impl Handshake {
                      --model.",
                     self.model.as_str(),
                     asked.model.as_str()
+                ),
+            });
+        }
+        if asked.api != self.api {
+            return Err(Refusal {
+                retire: false,
+                message: format!(
+                    "the running daemon embeds with {} at {} and this session asked for {} at \
+                     {}. Vectors from two models cannot be compared; stop the daemon or match \
+                     --api-url and --api-model.",
+                    self.api.model, self.api.url, asked.api.model, asked.api.url
                 ),
             });
         }
@@ -457,6 +474,17 @@ mod tests {
                 "embedder",
                 Handshake {
                     embedder: EmbedderKind::None,
+                    ..daemon.clone()
+                },
+                false,
+            ),
+            (
+                "api model",
+                Handshake {
+                    api: ApiModel {
+                        model: "text-embedding-3-large".to_owned(),
+                        ..ApiModel::default()
+                    },
                     ..daemon.clone()
                 },
                 false,

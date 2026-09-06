@@ -1,6 +1,6 @@
 [package]
 name = "agmem-embed"
-description = "agmem embedding backend: GGUF models on llama.cpp, plus a no-op test double."
+description = "agmem embedding backends: GGUF models on llama.cpp, an OpenAI-compatible API, plus a no-op test double."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,8 @@ repository.workspace = true
 [dependencies]
 agmem-core = { workspace = true }
 hf-hub = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -18,6 +20,9 @@ tracing = { workspace = true }
 # `openmp` needs a libomp Apple clang does not ship, and `common` is the CLI
 # helper library.
 llama-cpp-2 = { version = "=0.1.156", default-features = false }
+# The API backend (issue #120). The TLS stack is the one hf-hub already links
+# (native-tls), so the remote option adds an HTTP client and nothing else.
+ureq = { version = "3", default-features = false, features = ["json", "native-tls"] }
 
 # Metal is not a cargo feature but a target: Cargo unifies features per
 # target, so this entry adds llama.cpp's Metal backend on Apple Silicon and
@@ -28,5 +33,3 @@ llama-cpp-2 = { version = "=0.1.156", default-features = false, features = ["met
 [lints]
 workspace = true
 
-[dev-dependencies]
-serde_json = { workspace = true }

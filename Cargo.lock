@@ -54,10 +54,12 @@ dependencies = [
  "agmem-core",
  "hf-hub",
  "llama-cpp-2",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "tracing",
+ "ureq",
 ]
 
 [[package]]

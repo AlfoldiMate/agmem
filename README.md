@@ -333,9 +333,12 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--data` / `AGMEM_DATA` | platform data dir | Store, lock file, model cache |
 | `--db` / `AGMEM_DB` | `surrealkv://<data>/agmem.db` | Engine. `mem://` for scratch, `ws://host` to share |
 | `--space` / `AGMEM_SPACE` | derived from cwd | This instance's space |
-| `--embedder` / `AGMEM_EMBEDDER` | `llama` | The local llama.cpp runtime, the only backend |
+| `--embedder` / `AGMEM_EMBEDDER` | `llama` | The local llama.cpp runtime. `api` embeds through an OpenAI-compatible endpoint instead, for a host that cannot run the model |
 | `--model` / `AGMEM_MODEL` | `embeddinggemma-300m` | Or `bge-small-en-v1.5`, the light option. The configured model wins: a store holding another model's vectors is moved on open and re-embedded in the background |
 | `--accelerator` / `AGMEM_ACCELERATOR` | `auto` | `metal` on Apple silicon, `cpu` anywhere, or to opt out |
+| `--api-url` / `AGMEM_API_URL` | `https://api.openai.com/v1` | For `--embedder api`: `POST <url>/embeddings`. OpenAI, Voyage, Ollama, vLLM and `llama-server` all answer it |
+| `--api-model` / `AGMEM_API_MODEL` | `text-embedding-3-small` | For `--embedder api`: the remote model. Its width is learnt at startup; its thresholds are unmeasured and carry EmbeddingGemma's |
+| `AGMEM_API_KEY` | unset | For `--embedder api`: the bearer token. Never a flag, never logged; a local endpoint needs none |
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session |

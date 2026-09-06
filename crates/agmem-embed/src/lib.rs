@@ -1,13 +1,16 @@
 //! agmem's embedding backend.
 //!
-//! A narrow [`Embedder`] trait with one production implementation — a GGUF
+//! A narrow [`Embedder`] trait with two production implementations — a GGUF
 //! model on llama.cpp ([`llama::LlamaEmbedder`]), Metal on Apple Silicon and
-//! the CPU elsewhere — and a no-op test double that produces no vectors.
+//! the CPU elsewhere, and a model behind an OpenAI-compatible endpoint
+//! ([`api::ApiEmbedder`], issue #120) — and a no-op test double that
+//! produces no vectors.
 //! What is true of a *model* rather than of the runtime (its id, width,
 //! prefixes, pooling, cosine bands, where its weights live) is a
 //! [`ModelSpec`], so a second runtime is one more way of running a spec and
-//! nothing a caller holds changes. Nothing here touches the network at
-//! runtime once the model is fetched; see `docs/design.md` §4.
+//! nothing a caller holds changes. The local backend touches the network
+//! only to fetch the model once; the API backend is the deliberate
+//! exception, and needs it on every call. See `docs/design.md` §4.
 //!
 //! Backends are synchronous — inference is compute-bound, and pretending
 //! otherwise would only hide it. The async wrappers [`embed_passages`] and
@@ -21,11 +24,13 @@ use std::sync::Arc;
 use agmem_core::dedup::Thresholds;
 
 pub mod accelerator;
+pub mod api;
 pub mod llama;
 pub mod model;
 pub mod noop;
 
 pub use accelerator::{Accelerator, Active};
+pub use api::ApiEmbedder;
 pub use llama::LlamaEmbedder;
 pub use model::{Model, ModelSpec};
 pub use noop::NoopEmbedder;

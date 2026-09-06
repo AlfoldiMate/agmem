@@ -1,17 +1,17 @@
-//! An embedder that replays committed real-BGE vectors (issue #32, #116).
+//! An embedder that replays committed real-model vectors (issue #32, #116).
 //!
 //! The tests want real model semantics — whether "which tool tidies up our
 //! source code layout?" lands nearer the ruff claim than the pizza order is
 //! exactly what the eval measures, and the write gate, the abstention floor
 //! and the consolidate arms all key on cosine — but a live model download in
-//! CI would make every number network-dependent and, across ONNX releases,
+//! CI would make every number network-dependent and, across runtime releases,
 //! drift-prone. So the vectors are recorded once from the real model and
 //! committed: real semantics, bit-stable, offline.
 //!
 //! Two recordings feed one embedder:
 //!
 //! - `fixtures/eval/vectors.json` — every text the eval scenarios use,
-//!   written by `regenerate_eval_vectors` in `agmem-embed/tests/fastembed.rs`
+//!   written by `regenerate_eval_vectors` in `agmem-embed/tests/llama.rs`
 //!   from the scenario files. Scenario-driven, so a scenario edit regenerates
 //!   it wholesale. Its sibling `fixtures/eval/documents-vectors.json` holds
 //!   every chunk of the fixture document corpus (issue #137), written by the
@@ -31,12 +31,13 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use agmem_embed::{EmbedError, Embedder};
+use agmem_core::dedup::Thresholds;
+use agmem_embed::{Accelerator, EmbedError, Embedder, LlamaEmbedder, Model};
 use serde::Deserialize;
 
 /// The command that refreshes the eval recording after a scenario edit.
 const REGENERATE_EVAL: &str =
-    "cargo test -p agmem-embed --test fastembed -- --ignored regenerate_eval_vectors";
+    "cargo test -p agmem-embed --test llama -- --ignored regenerate_eval_vectors";
 
 /// Set this to grow the protocol recording from the real model.
 const RECORD_ENV: &str = "AGMEM_RECORD_VECTORS";
@@ -162,22 +163,36 @@ fn protocol() -> &'static Mutex<Recording> {
     })
 }
 
+/// Which shipped model a recording's `model` field names, by family: the
+/// bge recordings predate the llama.cpp ids (`BGE-small-en-v1.5-q` was the
+/// ONNX export), and the vectors of the two exports agree to four decimals
+/// (`docs/eval/llama-runtime.md`), so the family is the identity that
+/// matters here.
+fn model_of(recorded: &str) -> Model {
+    if recorded.to_ascii_lowercase().starts_with("bge") {
+        Model::BgeSmall
+    } else {
+        Model::Gemma300M
+    }
+}
+
+/// The bands the recording's model is read against.
+fn thresholds_of(recorded: &str) -> Thresholds {
+    model_of(recorded).spec().thresholds
+}
+
 /// The live model, loaded once and only when capturing.
-fn live() -> Option<&'static agmem_embed::fastembed::FastembedBackend> {
-    static LIVE: OnceLock<Option<agmem_embed::fastembed::FastembedBackend>> = OnceLock::new();
+fn live() -> Option<&'static LlamaEmbedder> {
+    static LIVE: OnceLock<Option<LlamaEmbedder>> = OnceLock::new();
     LIVE.get_or_init(|| {
         std::env::var_os(RECORD_ENV)?;
         let cache = std::env::temp_dir().join("agmem-model-cache");
-        let backend = agmem_embed::fastembed::FastembedBackend::new(
-            Some(cache),
-            agmem_embed::Accelerator::Cpu,
-        )
-        .expect("load the real model");
-        // The eval recording spells the id as the backend did when it was
-        // made; the vectors, not the letter case, are the contract.
+        let model = model_of(&eval().model);
+        let backend =
+            LlamaEmbedder::new(model, Some(cache), Accelerator::Auto).expect("load the real model");
         assert_eq!(
-            (backend.model_id().to_ascii_lowercase(), backend.dim()),
-            (eval().model.to_ascii_lowercase(), eval().dim),
+            backend.dim(),
+            eval().dim,
             "the live model must be the one the recordings were made with"
         );
         Some(backend)
@@ -282,6 +297,12 @@ impl Embedder for RecordedEmbedder {
 
     fn model_id(&self) -> &str {
         &eval().model
+    }
+
+    /// The bands of whichever model made the recording: the eval numbers
+    /// are only meaningful against the floor calibrated on the same vectors.
+    fn thresholds(&self) -> Thresholds {
+        thresholds_of(&eval().model)
     }
 
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {

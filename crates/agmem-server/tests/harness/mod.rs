@@ -296,6 +296,10 @@ impl Embedder for KeywordEmbedder {
         "test-keyword"
     }
 
+    fn thresholds(&self) -> agmem_core::dedup::Thresholds {
+        agmem_core::dedup::Thresholds::BGE_SMALL
+    }
+
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
         Ok(passages.iter().map(|text| vector(text)).collect())
     }
@@ -352,6 +356,10 @@ impl Embedder for AngleEmbedder {
 
     fn model_id(&self) -> &str {
         "test-angle"
+    }
+
+    fn thresholds(&self) -> agmem_core::dedup::Thresholds {
+        agmem_core::dedup::Thresholds::BGE_SMALL
     }
 
     fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {

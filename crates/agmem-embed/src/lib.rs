@@ -1,10 +1,15 @@
-//! agmem embedding backends.
+//! agmem's embedding backend.
 //!
-//! A narrow [`Embedder`] trait with one real implementation, fastembed/ONNX,
-//! and a no-op test double that produces no vectors. Nothing here touches the
-//! network at runtime once the model is cached; see `docs/design.md` §4.
+//! A narrow [`Embedder`] trait with one production implementation — a GGUF
+//! model on llama.cpp ([`llama::LlamaEmbedder`]), Metal on Apple Silicon and
+//! the CPU elsewhere — and a no-op test double that produces no vectors.
+//! What is true of a *model* rather than of the runtime (its id, width,
+//! prefixes, pooling, cosine bands, where its weights live) is a
+//! [`ModelSpec`], so a second runtime is one more way of running a spec and
+//! nothing a caller holds changes. Nothing here touches the network at
+//! runtime once the model is fetched; see `docs/design.md` §4.
 //!
-//! Backends are synchronous — ONNX inference is CPU-bound, and pretending
+//! Backends are synchronous — inference is compute-bound, and pretending
 //! otherwise would only hide it. The async wrappers [`embed_passages`] and
 //! [`embed_query`] move that work off the runtime with `spawn_blocking`, so
 //! the MCP server never stalls its reactor on a model; [`embed_passages`]
@@ -13,17 +18,16 @@
 
 use std::sync::Arc;
 
+use agmem_core::dedup::Thresholds;
+
 pub mod accelerator;
-#[cfg(feature = "candidates")]
-pub mod candidates;
-pub mod fastembed;
-#[cfg(feature = "llama")]
 pub mod llama;
+pub mod model;
 pub mod noop;
-#[cfg(feature = "rerank")]
-pub mod rerank;
 
 pub use accelerator::{Accelerator, Active};
+pub use llama::LlamaEmbedder;
+pub use model::{Model, ModelSpec};
 pub use noop::NoopEmbedder;
 
 /// Turns text into vectors, one backend at a time.
@@ -42,10 +46,16 @@ pub trait Embedder: Send + Sync + 'static {
     /// silently mix vector spaces.
     fn model_id(&self) -> &str;
 
-    /// The execution provider the model runs on — `cpu` unless a backend
-    /// registered another (`docs/design.md` §4; issue #139). Printed by
-    /// `doctor` and the startup log; never stored, since the vectors are
-    /// the same modulo accelerator drift the fixtures check.
+    /// The cosine bands this backend's vectors are read against: the write
+    /// gate, the correction band, the cluster bar and the abstention floor
+    /// are all model-specific numbers (issue #138), and the tools take them
+    /// from here rather than from a constant.
+    fn thresholds(&self) -> Thresholds;
+
+    /// What the model runs on — `cpu` unless a backend put it somewhere else
+    /// (`docs/design.md` §4). Printed by `doctor` and the startup log; never
+    /// stored, since the vectors are the same modulo accelerator drift the
+    /// fixtures check.
     fn accelerator(&self) -> &str {
         "cpu"
     }
@@ -139,6 +149,10 @@ mod tests {
 
         fn model_id(&self) -> &str {
             "slice-recorder"
+        }
+
+        fn thresholds(&self) -> Thresholds {
+            Thresholds::BGE_SMALL
         }
 
         fn embed_passages(&self, passages: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {

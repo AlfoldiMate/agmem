@@ -25,8 +25,19 @@ github-attestations = true
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 
+# llama.cpp is built from source inside the cargo build (llama-cpp-2 vendors
+# it), so every build host needs cmake and a C++ compiler. The GitHub images
+# carry both; the lines below make it explicit for the installers' sake.
+[dist.dependencies.apt]
+cmake = { version = "*", stage = ["build"] }
+
+[dist.dependencies.homebrew]
+cmake = { version = "*", stage = ["build"] }
+
 [dist.github-custom-runners]
-# Native arm runner: ort ships no easy cross toolchain for aarch64-linux.
+# Native arm runner: llama.cpp's NEON paths want a real aarch64 host, and
+# cross-compiling a C++ tree from x86 is a second toolchain to keep alive.
 aarch64-unknown-linux-gnu = "ubuntu-24.04-arm"
-# ort's prebuilt onnxruntime needs glibc >= 2.38; 22.04 has 2.35 and fails to link.
+# 24.04 rather than the 22.04 default: a recent cmake and compiler for the
+# vendored llama.cpp.
 x86_64-unknown-linux-gnu = "ubuntu-24.04"

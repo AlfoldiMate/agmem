@@ -13,7 +13,7 @@ and shows its work.
 [![MSRV](https://img.shields.io/badge/rust-1.89%2B-orange)](Cargo.toml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
-[Install](#install) · [Register](#register-with-your-client) · [The loop](#the-loop) · [Spaces](#spaces) · [Configuration](#configuration) · [Docs](#docs)
+[Install](#install) · [How it works](#how-it-works) · [The tools](#the-tools) · [Spaces](#spaces) · [Configuration](#configuration) · [Development](#development) · [Docs](#docs)
 
 </div>
 
@@ -39,31 +39,33 @@ what the agent said. agmem does neither.
 
 ## Install
 
-Prebuilt binaries cover macOS on Apple silicon and Linux on arm64 and x86_64
-(glibc 2.38+).
+Three steps: the binary, a self-check, and the Claude Code plugin that wires
+it into every session.
+
+### 1. The binary
+
+Homebrew is the supported path on macOS (Apple silicon) and Linux (arm64 and
+x86_64, glibc 2.38+). The tap is updated by every release.
 
 ```sh
 brew install AlfoldiMate/tap/agmem
 ```
 
-```sh
-curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/AlfoldiMate/agmem/releases/latest/download/agmem-server-installer.sh | sh
-```
-
-Anywhere else, build from source with Rust 1.89 or newer plus cmake and a
-C++ compiler (llama.cpp is compiled into the binary). The crate is
-`agmem-server`; the binary is `agmem`.
+Anywhere Homebrew does not reach, build from source. You need Rust 1.89 or
+newer, `cmake` and a C++ compiler, because llama.cpp is compiled into the
+binary. Nothing is on crates.io; the crate is `agmem-server` and the binary
+it produces is `agmem`.
 
 ```sh
 cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
 ```
 
-Then run the self-check once. It creates the data directory, opens the store,
-runs migrations, does a write/read roundtrip and fetches the embedding model
-(EmbeddingGemma-300M, Q8_0, ~314 MB; `--model bge-small-en-v1.5` is the
-36 MB light option). Every run after that is offline. On Apple silicon the
-model runs on Metal; elsewhere on the CPU.
+### 2. The self-check
+
+Run it once. It creates the data directory, opens the store, runs migrations,
+does a write/read roundtrip and downloads the embedding model,
+EmbeddingGemma-300M at Q8_0, about 314 MB. Every run after that is offline.
+On Apple silicon the model runs on Metal; elsewhere on the CPU.
 
 ```
 $ agmem --doctor
@@ -74,14 +76,15 @@ $ agmem --doctor
   ok    database open        surrealkv://…/agmem.db
   ok    schema               v9
   ok    write/read roundtrip scratch record created and removed
-  ok    embedder             bge-small-en-v1.5-q (384d)
+  ok    embedder             embeddinggemma-300m-q8 (768d)
   ok    embedder vs store    same model and width
   ok    vector coverage      every row carries a vector
 doctor: all checks passed
 ```
 
 The report goes to stderr and the exit status is 0 only when every line
-passed, so it doubles as a setup gate.
+passed, so it doubles as a setup gate. `--model bge-small-en-v1.5` picks the
+36 MB light option if the download or the machine is the constraint.
 
 | Platform | Data directory |
 |---|---|
@@ -93,107 +96,78 @@ One directory holds the store, the model cache, the lock file and the daemon
 socket. Back it up, move it or delete it as a unit. `--data` or `AGMEM_DATA`
 points it elsewhere.
 
-## Register with your client
+### 3. The Claude Code plugin
 
-agmem is a stdio MCP server: `command: "agmem"`, no arguments. One global
-registration covers every project.
-
-**Claude Code** — the plugin does the whole wiring: it registers the server,
-injects the memory briefing at every session start, ships `/agmem:checkpoint`,
+The binary is an MCP server. Registering it alone gives the agent seven tools
+and no reason to call them. The plugin gives it the reasons: it registers the
+server, puts the memory briefing in front of the model before its first
+token, nudges at the moments worth writing down, ships `/agmem:checkpoint`,
 `/agmem:memory` and `/agmem:doctor`, and logs which claims each session
-recalled and wrote (`plugin/README.md` has the details):
+recalled and wrote. Every hook is a subcommand of the binary itself, so the
+plugin needs nothing else installed.
 
 ```sh
 claude plugin marketplace add AlfoldiMate/agmem
 claude plugin install agmem@agmem
 ```
 
-Or register the server alone and wire hooks yourself:
+The plugin's version tracks the binary's; upgrade both together.
+[plugin/README.md](plugin/README.md) describes each piece.
 
-```sh
-claude mcp add agmem --scope user -- agmem
-```
+**A worked example of the wiring** is this repository's own `.claude/`
+folder. It is the framework agmem is developed with, and the first consumer
+of the plugin: agents that recall their own lessons, hooks that nudge at the
+seams, a checkpoint command that decides what a session leaves behind. Read
+[.claude/README.md](.claude/README.md) for the reasoning, and
+[Development](#development) below for what it takes to run it.
 
-**Cursor**, in `~/.cursor/mcp.json`:
+**Any other MCP client** registers the binary as a stdio server with no
+arguments: `{ "mcpServers": { "agmem": { "command": "agmem" } } }`. Desktop
+apps do not inherit your shell's `PATH`, so give them the absolute path from
+`which agmem`. Without a project directory, set `AGMEM_SPACE=user` so the
+session serves the cross-project space. The briefing is also a shell command,
+`agmem context --query "…" --budget-chars 4000`, so any client with a
+session-start hook can inject it the way the plugin does.
 
-```json
-{ "mcpServers": { "agmem": { "command": "agmem" } } }
-```
+## How it works
 
-**Claude Desktop**, in `claude_desktop_config.json`. Desktop apps do not
-inherit your shell's `PATH`, so give it the absolute path from `which agmem`,
-and since there is no project, serve the cross-project `user` space:
+A session opens, and the plugin's hook asks agmem for a **briefing**: a
+character-budgeted block of what the store knows, aimed at the current branch
+and last commit. Instructions first, then the user's profile, then what is
+relevant, then lessons. Every line ends in the id of the claim it came from.
+The agent reads it and starts from there instead of from zero.
 
-```json
-{ "mcpServers": { "agmem": {
-    "command": "/Users/you/.cargo/bin/agmem",
-    "env": { "AGMEM_SPACE": "user" }
-} } }
-```
+While it works, the agent **recalls** in words when it is about to assume
+something, and the store answers with the claims that match, ranked by a
+fusion of full-text and vector search and rescored by how recent and how used
+each claim is. Every hit carries its signals, so a low-ranked answer explains
+why it is low.
 
-No space needs configuring. Each session derives one from where it runs: the
-enclosing git project's name, so every worktree of a repo shares a space, else
-the directory name. Set `AGMEM_SPACE` only to pin a name the folder does not
-already say.
+At a seam, a decision made, a push, a question answered, the agent
+**remembers**: one atomic claim per entry, in the third person, so it still
+makes sense with no conversation around it. The store embeds it, checks it
+against what it holds, and answers with a diff: created, duplicate of, or
+related to. A claim that corrects an older one names it in `supersedes`, and
+the old one closes but stays readable. Nothing is ever rewritten by a model
+you did not talk to.
 
-### Inject the briefing on session start
+Over weeks, claims **decay** unless they are used. A `fact` fades in weeks, a
+`lesson` in months, an `instruction` never and is pinned into every briefing.
+Branch state is a fast-decaying fact tagged with the branch, so it dies on its
+own once the branch is gone. `consolidate` lists what needs tidying, near
+duplicates, contradictions, stale notes, and does nothing about them until the
+agent decides.
 
-The Claude Code plugin does this through `agmem hook session-start`, which
-reads the hook payload on stdin and prints the briefing as hook context — the
-same binary answers every plugin hook, so nothing else needs installing. For
-any other client, `context` is also a shell command, so a session-start hook
-can put the memory block in front of the model before its first token instead
-of hoping it asks:
+Long output has a home too. A plan, a review, a test log is a **document**:
+stored whole, versioned by title, readable a chunk at a time, and addressable
+by id. A subagent hands back `DOC: <id>` instead of a wall of text, and a
+recall hit that lands inside a document links to it.
 
-```sh
-agmem context --query "release work" --budget-chars 4000
-```
+All of this sits in one directory under your home, served by a small daemon
+the first session starts and the last session lets expire. There is nothing
+to run, nothing to host, and nothing that phones out.
 
-It attaches to the running daemon, or starts the one the session is about to
-reuse, and prints the same block the MCP tool returns.
-
-### Documents from the shell
-
-A subagent has a shell before it has MCP tools, and a plan handed around by
-id is a plan nobody has to find on disk. `agmem doc` is the document tier as
-four shell verbs, each the MCP tool it mirrors — `remember`, `inspect`,
-`forget` — with the document fields as flags:
-
-```sh
-agmem doc put --title plan-x --kind plan --tag role:architect < plan.md
-# 01K4…  memory://myproject/doc/01K4…
-agmem doc get plan-x --raw                 # the newest version, as stored
-agmem doc get 01K4… --offset 0 --limit 4000
-agmem doc list --kind plan
-agmem doc forget 01K4… --purge [--cascade]
-```
-
-### Maintenance from the shell
-
-`consolidate` and `forget` are maintenance verbs: one tidy session in many
-calls them, and every session would otherwise carry them in context on every
-turn. So a session lists five tools by default, and the two live in the shell
-(`AGMEM_TOOLS=all` puts them back on the wire):
-
-```sh
-agmem consolidate [--space user]           # the tool's JSON: what needs tidying
-agmem forget 01K4… memory:01K4… --dry-run  # what those ids select, as JSON
-agmem forget 01K4…                         # close it; --purge deletes outright
-```
-
-Forgetting by query stays on MCP: its dry run has to be held against the call
-that follows it, and a one-shot has no session to hold it in.
-
-`put` prints the id and the resource URI on one line — what an agent returns
-to the main thread instead of a path. A second `put` under the same title is
-a new version; `get <title>` resolves to the newest, and every version stays
-readable by id. The same document is an MCP resource at
-`memory://<space>/doc/<id>`, served as its own text under its own media type,
-so a client's `@` picker can attach it like a file; `resources/list` shows the
-newest ten per space, and a `recall` hit that slices a document carries a
-`resource_link` to it.
-
-## The loop
+## The tools
 
 Seven tools. Two MCP prompts, which Claude Code shows as slash commands, ask
 for them at the right moments.
@@ -215,7 +189,7 @@ for them at the right moments.
 
 ### A round trip
 
-Store a claim. One atomic, self-contained statement per entry, third person:
+Store a claim:
 
 ```json
 { "memories": [
@@ -284,7 +258,48 @@ Start the next session with what is known:
 | `episode` | verbatim text | Stored unedited, chunked, and provenanced to every claim in the same call. |
 | `supersedes` | ids | Closes those claims as corrected by this one. |
 
+### The shell side
+
+Three things are easier from a shell than over MCP, and each is a subcommand
+of the same binary.
+
+**Documents.** A subagent has a shell before it has MCP tools, and a plan
+handed around by id is a plan nobody has to find on disk:
+
+```sh
+agmem doc put --title plan-x --kind plan --tag role:architect < plan.md
+# 01K4…  memory://myproject/doc/01K4…
+agmem doc get plan-x --raw                 # the newest version, as stored
+agmem doc get 01K4… --offset 0 --limit 4000
+agmem doc list --kind plan
+agmem doc forget 01K4… --purge [--cascade]
+```
+
+A second `put` under the same title is a new version; `get <title>` resolves
+to the newest, and every version stays readable by id. The same document is
+an MCP resource at `memory://<space>/doc/<id>`, so a client's `@` picker can
+attach it like a file.
+
+**Maintenance.** `consolidate` and `forget` are tidy-session verbs, so a
+session lists five tools by default and these two live in the shell
+(`AGMEM_TOOLS=all` puts them back on the wire):
+
+```sh
+agmem consolidate [--space user]           # the tool's JSON: what needs tidying
+agmem forget 01K4… memory:01K4… --dry-run  # what those ids select, as JSON
+agmem forget 01K4…                         # close it; --purge deletes outright
+```
+
+**The briefing.** `agmem context --query "release work" --budget-chars 4000`
+prints the same block the MCP tool returns, attaching to the running daemon
+or starting the one the session is about to reuse.
+
 ## Spaces
+
+No space needs configuring. Each session derives one from where it runs: the
+enclosing git project's name, so every worktree of a repo shares a space,
+else the directory name. Set `AGMEM_SPACE` only to pin a name the folder does
+not already say.
 
 | `space` | Means |
 |---|---|
@@ -373,44 +388,99 @@ effect of the built-in wording and the harness that measures it.
   from a machine that has it, or point `AGMEM_MODEL_DIR` at one that does.
   `--model bge-small-en-v1.5` is 36 MB.
 - **A different model.** The configured model wins. A store written with
-  another model — every store from before v0.3, which holds bge on ONNX
-  Runtime — is moved on the next start: vectors cleared, indexes resized,
-  and the rows re-embedded in the background while the store already
-  serves. Until the last row is done, every tool result ends with a line
-  saying how many are left; recall sees them through BM25 meanwhile. To do
-  it in one sitting instead, `agmem reindex` (with `--model` to pick the
-  target) — it needs the store to itself, so end the sessions first. There
-  is no model-less mode: recall is BM25 *and* vectors.
+  another model, which includes every store from before v0.3, is moved on the
+  next start: vectors cleared, indexes resized, rows re-embedded in the
+  background while the store already serves. Until the last row is done,
+  every tool result ends with a line saying how many are left; recall sees
+  them through BM25 meanwhile. To do it in one sitting, `agmem reindex`
+  (with `--model` to pick the target) needs the store to itself, so end the
+  sessions first. There is no model-less mode: recall is BM25 *and* vectors.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 
 ## Development
 
+### Building and testing
+
+Rust 1.89 or newer, `cmake` and a C++ compiler; llama.cpp is compiled into
+the binary on the first build, so expect a few minutes then.
+
 ```sh
+git clone https://github.com/AlfoldiMate/agmem
+cd agmem
 cargo test --workspace                                   # unit, integration and the offline quality eval
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Four crates: `agmem-core` (records, scoring, dedup, chunking; no I/O),
-`agmem-store` (SurrealDB schema and queries), `agmem-embed` (llama.cpp and
-no-op backends) and `agmem-server` (the MCP service and the `agmem` binary).
-CI never downloads a model: tests that need real semantics replay recorded
-model vectors (`tests/fixtures/`), and tests that need the live model are
-`#[ignore]`d.
-
-The repo's own `.claude/` is the ctx-flow framework — routing discipline,
-agents, hooks, commands — tuned to run on the plugin under `plugin/`. Nothing
-in the repo enables the plugin; sessions here use it the way any user does,
-installed from the marketplace at user scope, so a plugin change is dogfooded
-once it is released. `claude --plugin-dir ./plugin` loads the working-tree
-plugin without installing it; `claude plugin marketplace add /path/to/agmem`
-installs it from a checkout.
+`agmem-store` (SurrealDB schema and queries), `agmem-embed` (llama.cpp, API
+and no-op backends) and `agmem-server` (the MCP service and the `agmem`
+binary). CI never downloads a model: tests that need real semantics replay
+recorded model vectors from `tests/fixtures/`, and tests that need the live
+model are `#[ignore]`d.
 
 Retrieval quality is measured, not asserted. An offline, deterministic eval
 rides `cargo test` against a recorded baseline in
 [docs/eval/quality.md](docs/eval/quality.md), and an LLM-driven harness in
 `scripts/desc-eval.nu` measures whether a tool description gets the tool
 called. Both are the gate for changes to ranking or wording.
+
+### Working in this repo with Claude Code
+
+The repository's `.claude/` folder is [ctx-flow](.claude/README.md), the
+framework agmem is developed with. It loads with every Claude Code session
+opened here, and it assumes a few tools are on `PATH`. Without them the hooks
+fail silently, so install them first:
+
+| Tool | Why | Install |
+|---|---|---|
+| [nu](https://www.nushell.sh) | runs every hook and script; also the shell MCP server | `brew install nushell` |
+| agmem | memory, through the plugin from step 3 above | `brew install AlfoldiMate/tap/agmem` |
+| [ast-grep](https://ast-grep.github.io) | syntax-aware code search | `brew install ast-grep` |
+| [gh](https://cli.github.com) | GitHub from the shell | `brew install gh` |
+| [rtk](https://github.com/rtk-ai/rtk) | compresses Bash output; the hook is already registered in `settings.json`, so no `rtk init` | `brew install rtk` |
+| [playwright-cli](https://github.com/microsoft/playwright-cli) *(optional)* | browser driving, for the `browser` agent | `npm i -g playwright-cli` |
+| acli *(optional)* | Jira, for the `tracker` agent | Atlassian's installer |
+
+You do not need Nushell as your login shell; the hooks run under `nu` whatever
+your terminal runs. Then register the two MCP servers the framework relies on.
+The shell server is registered by hand, memory comes with the plugin:
+
+```sh
+claude mcp add nu -- nu --mcp
+claude plugin marketplace add AlfoldiMate/agmem
+claude plugin install agmem@agmem
+```
+
+Do not also register agmem by hand with `claude mcp add`. Claude Code
+connects only one, yours would win, and that renames the tools so the
+framework's agents start without memory. Do not run `rtk init -g` either;
+the framework registers rtk's hook in its own `settings.json`, and a second
+registration rewrites every command twice.
+
+Open Claude Code in the checkout and run `/ctx-flow-doctor`. It checks each
+dependency, both MCP registrations, the hooks, and whether ast-grep parses
+Rust here, and prints the exact fix for anything missing. `/ast-grep-it nu`
+teaches ast-grep the Nushell grammar the hooks are written in; it writes a
+machine-local `sgconfig.yml` at the repo root, which is gitignored.
+
+What the folder holds, in one breath: `CLAUDE.md` carries the routing rules,
+`settings.json` registers the hooks, `agents/` holds seven scoped subagents,
+`commands/` the five slash commands, `hooks/` and `scripts/` the Nushell
+behind them, `skills/` the reference cards, and `notebook.md` is Claude's own
+undistilled notes, loaded whole each session. The plugin under `plugin/` is
+not enabled by anything in the repo; sessions here use it the way any user
+does, installed at user scope, so a plugin change is dogfooded once it is
+released. `claude --plugin-dir ./plugin` loads the working-tree plugin
+without installing it.
+
+**Worktrees.** The maintainer's checkout uses a bare repository with one
+sibling directory per branch, managed by `/bare-worktree`. That command
+symlinks the machine-local files each worktree needs, the local settings,
+`sgconfig.yml`, a private skill, from a `.profiles/` directory beside the
+bare repo, and the framework's hooks deny a raw `git worktree add` in that
+layout because it would skip them. A plain clone needs none of this;
+`/bare-worktree init` converts one if you want the same setup.
 
 ### Contributing and releasing
 
@@ -419,16 +489,18 @@ the full suite on Linux and macOS.
 
 A release is one merge. release-plz keeps a rolling PR open proposing the next
 version, and merging it pushes the tag. The tag fires cargo-dist, which builds
-every target, publishes the GitHub release with build attestations and the
-shell installer, and updates the Homebrew tap. Nothing after the merge is
-manual.
+every target, publishes the GitHub release with build attestations, and
+updates the Homebrew tap. The plugin's manifest is pinned to the same version
+in the same PR. Nothing after the merge is manual.
 
 ## Docs
 
 - [docs/design.md](docs/design.md) — architecture, schema, tool contracts, retrieval and decay
 - [docs/tool-descriptions.md](docs/tool-descriptions.md) — what the descriptions say, and the measured effect
-- [docs/eval/](docs/eval/) — quality baseline, fusion sweep, rerank and NLI probes
+- [docs/eval/](docs/eval/) — quality baseline, fusion sweep, rerank and NLI probes, embedding model measurements
 - [docs/idea.md](docs/idea.md) — the research this is built on
+- [plugin/README.md](plugin/README.md) — the Claude Code plugin, piece by piece
+- [.claude/README.md](.claude/README.md) — ctx-flow, the framework this repo is developed with
 
 ## License
 

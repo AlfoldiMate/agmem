@@ -16,11 +16,10 @@ repository = "https://github.com/AlfoldiMate/agmem"
 homepage = "https://github.com/AlfoldiMate/agmem"
 
 [workspace.dependencies]
-# The `version` beside each `path` is for `cargo package`, which release-plz
-# runs to compare a crate against its last release: packaging refuses a path
-# dependency with no version requirement. Local builds resolve by path either
-# way, and a caret requirement stays satisfied across the bumps release-plz
-# makes.
+# The `version` beside each `path` is for `cargo package`, which refuses a
+# path dependency with no version requirement. Local builds resolve by path
+# either way. The release bump (.github/scripts/bump-version.sh) moves these
+# three together with the workspace version.
 agmem-core = { path = "crates/agmem-core", version = "0.4.1" }
 agmem-store = { path = "crates/agmem-store", version = "0.4.1" }
 agmem-embed = { path = "crates/agmem-embed", version = "0.4.1" }

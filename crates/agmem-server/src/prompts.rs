@@ -293,9 +293,9 @@ mod plugin_drift {
     ));
 
     /// The plugin's hooks are `agmem hook …`, so the plugin is only ever as
-    /// new as the binary: both manifests carry the crate version. release-plz
-    /// bumps Cargo.toml alone and the release-pr workflow re-pins these two
-    /// after it; this is what notices a bump that skipped them.
+    /// new as the binary: both manifests carry the crate version. The release
+    /// bump script (.github/scripts/bump-version.sh) pins these two with
+    /// Cargo.toml; this is what notices a bump that skipped them.
     #[test]
     fn the_plugin_manifests_carry_the_crate_version() {
         let want = format!("\"version\": \"{}\"", env!("CARGO_PKG_VERSION"));

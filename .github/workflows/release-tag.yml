@@ -1,0 +1,168 @@
+# Releases without a human step.
+#
+# The rule: an ordinary PR merged to main becomes a patch release once CI has
+# passed on the merge; a PR attached to an open milestone waits, and closing
+# the milestone ships everything since the last tag as one minor release. A
+# `release:minor` label on a PR makes its own merge a minor; `release:skip`
+# makes it none. `workflow_dispatch` forces a bump by hand.
+#
+# Two passes over main, because the ruleset makes main PR-only:
+#   1. decide → bump: run the bump script on a branch, open the release PR
+#      (`chore: release vX.Y.Z`) and enable auto-merge. CI runs on it like
+#      on any PR, and the ruleset merges it.
+#   2. decide → tag: that merge lands on main, CI passes again, this
+#      workflow sees a release PR and pushes the tag. cargo-dist's
+#      release.yml reacts to the tag exactly as to a hand-pushed one: build,
+#      GitHub release, Homebrew tap.
+#
+# Everything authenticates with RELEASE_PLZ_TOKEN — a fine-grained PAT with
+# Contents and Pull requests read+write. The default GITHUB_TOKEN cannot do
+# this job: a PR it opens never runs CI (so the ruleset never merges it) and a
+# tag it pushes never triggers release.yml.
+#
+# Guards, in order: CI conclusion; the commit is still main's tip (a stale
+# run steps aside for the newer one); main is ahead of the last tag. A
+# release that finds nothing to ship is a no-op, not a failure.
+
+name: release-tag
+
+permissions: {}
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  milestone:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Force a bump of this size on main's tip
+        type: choice
+        options: [patch, minor, major]
+        required: true
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.decide.outputs.mode }}
+      bump: ${{ steps.decide.outputs.bump }}
+      version: ${{ steps.decide.outputs.version }}
+      sha: ${{ steps.decide.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - id: decide
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          FORCED: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          skip() { echo "skip: $1"; echo "mode=skip" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          tip=$(git rev-parse HEAD)
+          echo "sha=$tip" >> "$GITHUB_OUTPUT"
+
+          case "$EVENT" in
+            workflow_run)
+              [ "$RUN_SHA" = "$tip" ] || skip "CI ran for $RUN_SHA, main is at $tip"
+              ;;
+            *)
+              # Not a CI event: require the last CI run on the tip to be green.
+              conclusion=$(gh run list --workflow CI --branch main --commit "$tip" \
+                --json conclusion --jq '.[0].conclusion // "none"')
+              [ "$conclusion" = success ] || skip "CI on $tip is $conclusion"
+              ;;
+          esac
+
+          last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "")
+          if [ -n "$last" ] && [ "$(git rev-parse "$last^{commit}")" = "$tip" ]; then
+            skip "main is already tagged $last"
+          fi
+
+          # The PR that put this commit on main, if any (squash merges have one).
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tip/pulls" \
+            --jq '.[0] // {} | {number, title, milestone: (.milestone.state // ""), labels: [.labels[]?.name]}' 2>/dev/null || echo "{}")
+
+          title=$(printf '%s' "$pr" | jq -r '.title // ""')
+          if [[ "$title" =~ ^chore:\ release\ v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            version=${BASH_REMATCH[1]}
+            have=$(cargo metadata --no-deps --format-version 1 \
+              | jq -r '.packages[] | select(.name == "agmem-server") | .version')
+            [ "$version" = "$have" ] || { echo "release PR says $version, Cargo.toml says $have" >&2; exit 1; }
+            git rev-parse -q --verify "refs/tags/v$version" >/dev/null && skip "v$version exists"
+            echo "mode=tag" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          case "$EVENT" in
+            workflow_dispatch) bump=$FORCED ;;
+            milestone) bump=minor ;;
+            workflow_run)
+              labels=$(printf '%s' "$pr" | jq -r '.labels[]?' || true)
+              milestone=$(printf '%s' "$pr" | jq -r '.milestone // ""')
+              if grep -qx 'release:skip' <<<"$labels"; then skip "labelled release:skip"; fi
+              [ "$milestone" = open ] && skip "PR #$(printf '%s' "$pr" | jq -r .number) waits for its milestone"
+              if grep -qx 'release:minor' <<<"$labels"; then bump="minor"; else bump="patch"; fi
+              ;;
+          esac
+          echo "mode=bump" >> "$GITHUB_OUTPUT"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "bump $bump from ${last:-nothing}"
+
+  bump:
+    needs: decide
+    if: needs.decide.outputs.mode == 'bump'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.decide.outputs.sha }}
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bump, open the release PR, let the ruleset merge it
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          BUMP: ${{ needs.decide.outputs.bump }}
+        run: |
+          set -euo pipefail
+          version=$(.github/scripts/bump-version.sh "$BUMP")
+          branch="release/v$version"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "chore: release v$version"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore: release v$version" \
+            --body "Version bump for the release; merges itself once CI passes, and the merge pushes the tag."
+          gh pr merge "$branch" --auto --squash --delete-branch
+
+  tag:
+    needs: decide
+    if: needs.decide.outputs.mode == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.decide.outputs.sha }}
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - name: Push the tag; cargo-dist takes it from here
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          git tag "v$VERSION"
+          git push origin "v$VERSION"

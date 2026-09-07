@@ -487,11 +487,19 @@ layout because it would skip them. A plain clone needs none of this;
 `main` is protected and PR-only. CI runs fmt, clippy with warnings denied, and
 the full suite on Linux and macOS.
 
-A release is one merge. release-plz keeps a rolling PR open proposing the next
-version, and merging it pushes the tag. The tag fires cargo-dist, which builds
-every target, publishes the GitHub release with build attestations, and
-updates the Homebrew tap. The plugin's manifest is pinned to the same version
-in the same PR. Nothing after the merge is manual.
+A release is what happens after a merge. Once CI passes on `main`, the
+`release-tag` workflow opens a version-bump PR that merges itself, and that
+merge pushes the tag. The tag fires cargo-dist, which builds every target,
+publishes the GitHub release with build attestations, and updates the Homebrew
+tap. The plugin's manifests are pinned to the same version in the bump.
+
+The bump size follows the PR: an ordinary merge is a patch; a PR labelled
+`release:minor` is a minor; `release:skip` releases nothing. A PR attached to
+an open milestone does not release on its own — closing the milestone ships
+everything since the last tag as one minor. Anything merged in the meantime
+still rides the next patch release, so keep milestone work on its branch if it
+must not leak early. `workflow_dispatch` on `release-tag` forces a bump by
+hand.
 
 ## Docs
 

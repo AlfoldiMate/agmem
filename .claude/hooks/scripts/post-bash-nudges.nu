@@ -7,9 +7,11 @@
 # actually appears, which is the conditional-rule case hooks exist for, rather
 # than spending prompt on a rule that is usually irrelevant.
 #
-# The `git push` checkpoint nudge used to live here too. It is the agmem
-# plugin's now (`agmem hook post-tool-use`), along with the other memory
-# seams, so a project without this framework gets it as well.
+# The `git push` checkpoint nudge used to live here too, and the context-size
+# nudge in a UserPromptSubmit hook beside this one. Both are the agmem
+# plugin's now (`agmem hook post-tool-use`, `agmem hook user-prompt-submit`),
+# along with the other memory seams, so a project without this framework
+# gets them as well.
 #
 # Two rules govern the text, both learned from the hook reference:
 #

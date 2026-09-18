@@ -227,7 +227,6 @@ injection, the recall log, the seam nudges) are the agmem plugin's
 
 | Event | Script | Does |
 |---|---|---|
-| `UserPromptSubmit` | `prompt-context-nudge.nu` | The session-length nudge: reads the context size the last turn was served with (the API `usage` on the transcript's last assistant line, a `tail -c`, no parse of the file) and, from 120k tokens, says once "/checkpoint then /clear", then again only per further 40k. CLAUDE.md's "prefer several short sessions" rule had no enforcement; the audit's two largest sessions ran 400+ turns at ~267k each and never cleared. Knobs `CTX_FLOW_CONTEXT_NUDGE_TOKENS` / `_STEP` |
 | `SessionStart` | `session-start-layout.nu` | The worktree layout check: in a bare layout the real `.claude` is symlinked into each worktree, and one carrying its own copy has silently diverged, a fact about this checkout the plugin cannot know. The briefing, the branch tag and the post-compaction warning arrive through the plugin's own SessionStart hook |
 | `SessionStart` | `session-start-notebook.nu` | Prints `notebook.md` into context whole, verbatim, no budget. If it outgrows a session, that is a finding for Claude to act on by pruning, not for a hook to hide by summarising |
 | `PreToolUse` (Bash) | `rtk hook claude` | Transparently rewrites Bash commands so their output arrives compressed |
@@ -428,9 +427,9 @@ excluded directory, so `!` negations under it would be silently dead.
 
 No hook can call `/clear`; the harness owns session control flow. The loop:
 
-1. `/checkpoint` at a natural seam (a `git push`, an answered question, or a
-   turn that recalled memory and wrote none; the plugin's hooks nudge at
-   each).
+1. `/checkpoint` at a natural seam (a `git push`, an answered question, a
+   turn that recalled memory and wrote none, or a context past 120k tokens;
+   the plugin's hooks nudge at each).
 2. `/clear`.
 3. The plugin's `SessionStart` hook puts the briefing in front of the fresh
    session before its first token, and this folder's puts the notebook
@@ -457,7 +456,7 @@ compacts; the token saving is a side effect of the quality win.
 ├── commands/               checkpoint (wraps the plugin's), agmem-import, ctx-flow-doctor, ast-grep-it, bare-worktree
 ├── docs/reference.md       contracts, memory mapping, playbook guards; loaded on demand
 ├── hooks/scripts/          the six hooks, _common.nu and the ctx-flow-paths.nu resolver
-├── hooks/tests/            their cases: read-guard, context-nudge, notebook-load
+├── hooks/tests/            their cases: read-guard, notebook-load
 ├── output-styles/          ctx-flow.md: the hard rules, appended to the system prompt
 ├── scripts/                doctor.nu, doc-put.nu (subagent artifacts → documents), import-notes.nu, build-grammar.nu, the grammars.nu registry, bare-worktree.nu
 ├── skills/nushell/         deep Nushell reference, loaded when writing nu

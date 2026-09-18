@@ -8,7 +8,7 @@
 //! must never break a session, so every failure here degrades to silence and
 //! a log line, never to a non-zero exit.
 //!
-//! Three events carry memory behaviour:
+//! Four events carry memory behaviour:
 //!
 //! - `session-start` injects the briefing (`agmem context`, the same block
 //!   the MCP tool assembles) before the first token, names the branch tag,
@@ -19,6 +19,15 @@
 //!   per session at two seams: a successful `git push`, and an answered
 //!   `AskUserQuestion`.
 //! - `stop` nudges once, when a session recalled memory and wrote none.
+//! - `user-prompt-submit` nudges once per step of context size — from
+//!   120k tokens, then per further 40k — to checkpoint and `/clear`. Context
+//!   size is the seam the other three cannot see, and the expensive one: a
+//!   2026-09-03 audit of 71 sessions put 91% of spend on main-thread
+//!   cache reads, which scale with context × turns, and the two largest
+//!   sessions ran 400+ turns at ~267k tokens without ever clearing. The
+//!   hook runs on every prompt but injects only at a step, so it is not the
+//!   per-turn injection the plugin's design rejected; its per-prompt cost
+//!   is one seek-and-read of the transcript's last 128 KiB.
 //!
 //! The log is the one thing the store cannot keep (issue #86): `REINFORCE`
 //! overwrites `last_accessed`, so "which rows did this session see" is
@@ -27,11 +36,11 @@
 //! object per line, and is pruned at session start.
 
 use std::fs::{self, OpenOptions};
-use std::io::Write as _;
+use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -39,7 +48,7 @@ use crate::config::{Config, ContextArgs};
 use crate::oneshot;
 
 /// Which hook event the payload on stdin belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Subcommand)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub enum HookEvent {
     /// SessionStart: print the memory briefing as `additionalContext`.
     SessionStart,
@@ -47,6 +56,44 @@ pub enum HookEvent {
     PostToolUse,
     /// Stop: nudge once if the session recalled memory and wrote none.
     Stop,
+    /// UserPromptSubmit: nudge to checkpoint and /clear once per step of context size.
+    UserPromptSubmit(ContextNudgeArgs),
+}
+
+impl HookEvent {
+    /// The event's name as the hook reference spells it.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::SessionStart => "SessionStart",
+            Self::PostToolUse => "PostToolUse",
+            Self::Stop => "Stop",
+            Self::UserPromptSubmit(_) => "UserPromptSubmit",
+        }
+    }
+}
+
+/// Where the context-size nudge fires. The defaults were measured on the
+/// agmem repo's own transcripts (~17k tokens of fixed prefix); a project
+/// with a heavier prefix or a cheaper model moves them by environment.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct ContextNudgeArgs {
+    /// Context tokens at which the first nudge fires; 0 turns the nudge off.
+    #[arg(
+        long,
+        env = "AGMEM_CONTEXT_NUDGE_TOKENS",
+        default_value_t = 120_000,
+        value_name = "N"
+    )]
+    pub tokens: u64,
+
+    /// Further context tokens between one nudge and the next.
+    #[arg(
+        long,
+        env = "AGMEM_CONTEXT_NUDGE_STEP",
+        default_value_t = 40_000,
+        value_name = "N"
+    )]
+    pub step: u64,
 }
 
 /// Days a session log outlives its last write before session start removes it.
@@ -95,6 +142,25 @@ established anything durable — a decision with its reason, a corrected assumpt
 gotcha that cost time — /agmem:checkpoint stores it; if it established nothing, nothing \
 is the right amount to store.";
 
+/// Bytes read from the end of the transcript to find the last `usage` line.
+///
+/// A transcript runs to tens of MB; the last assistant turn is within the
+/// final 128 KiB of every one of the 69 transcripts this was measured on.
+const TRANSCRIPT_TAIL: u64 = 128 * 1024;
+
+/// Fallback only: transcript bytes per context token when no `usage` line is
+/// in reach (median 6.5 at end of file across the same 69 transcripts).
+const BYTES_PER_TOKEN: u64 = 6;
+
+fn context_nudge(tokens: u64) -> String {
+    let k = tokens.div_ceil(1000);
+    format!(
+        "Context is ~{k}k tokens, and every turn from here is served all of it again. \
+/agmem:checkpoint then /clear: a fresh session starts from the briefing at a fraction \
+of the cost, with nothing lost that the checkpoint stored."
+    )
+}
+
 /// One line of the session log.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Entry {
@@ -135,20 +201,16 @@ pub async fn run(cfg: Config, event: HookEvent) -> anyhow::Result<()> {
 /// Separated from [`run`] so tests can feed a payload without a stdin.
 pub async fn respond(cfg: &Config, event: HookEvent, payload: &Value) -> Option<String> {
     let session = Session::from_payload(&cfg.data_dir, payload);
-    let text = match event {
+    let text = match &event {
         HookEvent::SessionStart => session_start(cfg, &session, payload).await,
         HookEvent::PostToolUse => post_tool_use(&session, payload),
         HookEvent::Stop => stop(&session, payload),
+        HookEvent::UserPromptSubmit(args) => user_prompt_submit(&session, payload, args),
     }?;
-    let event_name = match event {
-        HookEvent::SessionStart => "SessionStart",
-        HookEvent::PostToolUse => "PostToolUse",
-        HookEvent::Stop => "Stop",
-    };
     Some(
         json!({
             "hookSpecificOutput": {
-                "hookEventName": event_name,
+                "hookEventName": event.name(),
                 "additionalContext": text,
             }
         })
@@ -453,6 +515,70 @@ fn stop(session: &Session, payload: &Value) -> Option<String> {
         return None;
     }
     session.first_time("stop").then(|| STOP_NUDGE.to_owned())
+}
+
+/// The context-size nudge: once per step, per transcript.
+///
+/// The step a context sits at is `tokens` rounded down to the threshold
+/// plus whole steps (125k → 120k, 175k → 160k), and the nudge for a step
+/// fires the first time the session is seen there. The transcript path is
+/// part of the key: a resumed session keeps its transcript and stays quiet
+/// until the next step, while a `/clear` under the same session id gets a
+/// fresh transcript and starts over from the threshold.
+fn user_prompt_submit(
+    session: &Session,
+    payload: &Value,
+    args: &ContextNudgeArgs,
+) -> Option<String> {
+    if args.tokens == 0 {
+        return None;
+    }
+    let transcript = payload
+        .get("transcript_path")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty())
+        .map(Path::new)?;
+    let tokens = context_tokens(transcript)?;
+    if tokens < args.tokens {
+        return None;
+    }
+    let step = args.step.max(1);
+    let level = args.tokens + (tokens - args.tokens) / step * step;
+    let key = format!("context:{level}:{}", transcript.display());
+    session.first_time(&key).then(|| context_nudge(tokens))
+}
+
+/// The context the transcript's last assistant turn was served with, or
+/// `None` when the transcript cannot be read.
+///
+/// Exact when a `usage` line is in reach: the API reports, per turn, the
+/// input it was given as `input_tokens` + `cache_read_input_tokens` +
+/// `cache_creation_input_tokens`. Otherwise the file size stands in at
+/// [`BYTES_PER_TOKEN`], which over-counts mid-file (the ratio there is
+/// nearer 11) — an early nudge, not a missed one.
+fn context_tokens(transcript: &Path) -> Option<u64> {
+    let mut file = fs::File::open(transcript).ok()?;
+    let len = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(len.saturating_sub(TRANSCRIPT_TAIL)))
+        .ok()?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail).ok()?;
+    let tail = String::from_utf8_lossy(&tail);
+    let exact = tail
+        .lines()
+        .rev()
+        .filter(|line| line.contains("\"usage\"") && line.contains("\"cache_read_input_tokens\""))
+        .find_map(|line| {
+            let usage = serde_json::from_str::<Value>(line).ok()?;
+            let usage = usage.get("message")?.get("usage")?;
+            let count = |key: &str| usage.get(key).and_then(Value::as_u64).unwrap_or(0);
+            Some(
+                count("input_tokens")
+                    + count("cache_read_input_tokens")
+                    + count("cache_creation_input_tokens"),
+            )
+        });
+    Some(exact.unwrap_or(len / BYTES_PER_TOKEN))
 }
 
 // --- payload shapes -------------------------------------------------------
@@ -780,6 +906,88 @@ mod tests {
         let decision = json!({"session_id": "s4", "tool_name": "AskUserQuestion"});
         assert!(post_tool_use(&session, &decision).is_some());
         assert_eq!(post_tool_use(&session, &decision), None, "once per session");
+    }
+
+    /// A transcript as Claude Code records one: a user line, an assistant
+    /// line carrying the API's `usage`, a user line after it.
+    fn transcript(dir: &Path, name: &str, tokens: u64) -> String {
+        let path = dir.join(format!("{name}.jsonl"));
+        let user = json!({"type": "user", "message": {"role": "user", "content": "x"}});
+        let assistant = json!({"type": "assistant", "message": {"role": "assistant", "usage": {
+            "input_tokens": 40,
+            "cache_read_input_tokens": tokens - 1040,
+            "cache_creation_input_tokens": 1000,
+            "output_tokens": 5,
+        }}});
+        fs::write(&path, format!("{user}\n{assistant}\n{user}\n")).expect("transcript");
+        path.display().to_string()
+    }
+
+    #[test]
+    fn the_context_nudge_fires_once_per_step_per_transcript() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let args = ContextNudgeArgs {
+            tokens: 120_000,
+            step: 40_000,
+        };
+        let session = Session::from_payload(dir.path(), &json!({"session_id": "s6"}));
+        let fire = |path: &str| {
+            let payload = json!({"session_id": "s6", "transcript_path": path, "prompt": "hi"});
+            user_prompt_submit(&session, &payload, &args)
+        };
+
+        let low = transcript(dir.path(), "low", 80_000);
+        let at = transcript(dir.path(), "at", 125_000);
+        let up = transcript(dir.path(), "up", 170_000);
+        let fresh = transcript(dir.path(), "fresh", 130_000);
+
+        assert_eq!(fire(&low), None, "silent below the threshold");
+        let first = fire(&at).expect("nudges at the threshold");
+        assert!(first.starts_with("Context is ~125k tokens"), "{first}");
+        assert!(first.contains("/agmem:checkpoint then /clear"), "{first}");
+        assert_eq!(fire(&at), None, "silent on the next prompt");
+        assert!(fire(&up).is_some(), "nudges again one step up");
+        assert_eq!(fire(&up), None, "silent at the same step");
+        assert!(
+            fire(&fresh).is_some(),
+            "a fresh transcript under the same session starts over"
+        );
+        assert_eq!(fire(""), None, "no transcript path");
+        assert_eq!(fire("/nonexistent/transcript.jsonl"), None, "no transcript");
+
+        let off = ContextNudgeArgs {
+            tokens: 0,
+            step: 40_000,
+        };
+        let payload = json!({"session_id": "s7", "transcript_path": up});
+        let other = Session::from_payload(dir.path(), &json!({"session_id": "s7"}));
+        assert_eq!(
+            user_prompt_submit(&other, &payload, &off),
+            None,
+            "0 turns it off"
+        );
+    }
+
+    #[test]
+    fn context_tokens_read_the_last_usage_line_and_fall_back_to_file_size() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let exact = transcript(dir.path(), "exact", 150_000);
+        assert_eq!(context_tokens(Path::new(&exact)), Some(150_000));
+
+        // A partially written last line is skipped for the one before it.
+        let torn = dir.path().join("torn.jsonl");
+        let mut body = fs::read_to_string(&exact).expect("read");
+        body.push_str(r#"{"type":"assistant","message":{"usage":{"cache_read_input_tokens":9"#);
+        fs::write(&torn, body).expect("torn");
+        assert_eq!(context_tokens(&torn), Some(150_000));
+
+        let sized = dir.path().join("sized.jsonl");
+        fs::write(&sized, "x".repeat(6_000)).expect("sized");
+        assert_eq!(
+            context_tokens(&sized),
+            Some(1_000),
+            "bytes / BYTES_PER_TOKEN"
+        );
     }
 
     #[test]

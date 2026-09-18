@@ -100,8 +100,8 @@ words, correct with `supersedes` and never contradict. This framework adds:
   drafts. Written the moment something is noticed, mid-task, not held for a
   checkpoint. What firms up moves to agmem; the file is pruned by hand.
 
-Prefer several short sessions chained through memory over one long one; a hook
-says so at 120k tokens of context and per 40k after.
+Prefer several short sessions chained through memory over one long one; the
+plugin's hook says so at 120k tokens of context and per 40k after.
 
 ## Answer shape
 

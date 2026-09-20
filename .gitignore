@@ -4,9 +4,10 @@
 # ~/.cache/ctx-flow, so it is machine-local (/ast-grep-it writes it)
 sgconfig.yml
 
-# .claude is this repo's own Claude Code framework (ctx-flow, tuned to the
-# agmem plugin) and is tracked; its machine-local parts are listed in
-# .claude/.gitignore
+# .claude is a symlink the bare-worktree layout places on apply — it points
+# at the ctx-flow checkout at the root, never tracked here (a symlink does
+# not match a `.claude/` dir pattern, so no trailing slash)
+.claude
 
 # Rust
 target/

@@ -1,6 +1,13 @@
 {
-  "description": "agmem memory: inject the briefing at session start, log which claims were recalled and written, nudge at checkpoint seams. Every hook is `agmem hook <event>`, so nothing beyond the agmem binary is needed.",
+  "description": "agmem memory: inject the briefing at session start, log which claims were recalled and written, nudge at checkpoint seams — a push, an answered question, a session that recalled and wrote nothing, and context size from 120k tokens. Every hook is `agmem hook <event>`, so nothing beyond the agmem binary is needed.",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "agmem hook user-prompt-submit", "timeout": 5 }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact|fork",

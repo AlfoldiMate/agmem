@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -20,9 +20,9 @@ homepage = "https://github.com/AlfoldiMate/agmem"
 # path dependency with no version requirement. Local builds resolve by path
 # either way. The release bump (.github/scripts/bump-version.sh) moves these
 # three together with the workspace version.
-agmem-core = { path = "crates/agmem-core", version = "0.4.1" }
-agmem-store = { path = "crates/agmem-store", version = "0.4.1" }
-agmem-embed = { path = "crates/agmem-embed", version = "0.4.1" }
+agmem-core = { path = "crates/agmem-core", version = "0.4.2" }
+agmem-store = { path = "crates/agmem-store", version = "0.4.2" }
+agmem-embed = { path = "crates/agmem-embed", version = "0.4.2" }
 
 # MCP + storage + embeddings (pinned per docs/design.md §4.1)
 rmcp = { version = "3.1", features = ["server", "macros", "transport-io"] }

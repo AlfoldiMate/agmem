@@ -132,6 +132,18 @@ produces is `agmem`.
 cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
 ```
 
+**Windows** has no prebuilt binary, so this is the install path there. The
+toolchain is the MSVC one: install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+with the *Desktop development with C++* workload, and CMake, then the same
+`cargo install` from a Developer PowerShell. The model runs on the CPU, the
+data directory is `%APPDATA%\agmem\agmem\data`, and `agmem --doctor` is the
+same self-check.
+
+```powershell
+winget install Kitware.CMake Rustlang.Rustup
+cargo install --git https://github.com/AlfoldiMate/agmem agmem-server
+```
+
 </details>
 
 <details>

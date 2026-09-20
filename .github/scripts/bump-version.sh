@@ -42,8 +42,13 @@ for f in plugin/.claude-plugin/plugin.json .claude-plugin/marketplace.json; do
 done
 
 # Refresh the lock file's entries for the workspace members only; no
-# dependency moves. --offline: the registry index is not needed for that.
-cargo update --workspace --offline --quiet
+# dependency moves. Not --offline: a fresh runner has no registry index and
+# cargo fails to resolve without one. The diff is checked instead — four
+# version lines out, four in, nothing else — so a dependency that moved
+# under us stops the release rather than riding it.
+cargo update --workspace --quiet
+[ "$(git diff Cargo.lock | grep -c '^[-+]version = ')" = 8 ] \
+  || { echo "Cargo.lock: something other than the workspace versions moved" >&2; git diff --stat Cargo.lock >&2; exit 1; }
 for crate in agmem-core agmem-store agmem-embed agmem-server; do
   grep -A1 "^name = \"$crate\"$" Cargo.lock | grep -q "^version = \"$new\"$" \
     || { echo "Cargo.lock: $crate not at $new" >&2; exit 1; }

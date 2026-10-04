@@ -536,6 +536,11 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
   before v0.3); `--dry-run` lists them first. The daemon log names the space
   they take at every start. `daemon.log` rotates at 5 MB and keeps two old
   files.
+- **Memory.** The embedded engine is capped at a 64 MiB memtable, a 64 MiB
+  block cache and a 64 MiB vector-index cache (a patched surrealdb, see
+  `vendor/surrealdb/AGMEM-PATCH.md`); upstream sizes them from total RAM.
+  The first start after upgrading replays and splits the old write-ahead log
+  once, which can take some seconds on a store that ran for weeks.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 

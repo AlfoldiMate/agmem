@@ -496,6 +496,7 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
 | `--pool` / `AGMEM_POOL` | 64 | Candidate pool before rescoring |
 | `--max-k` / `AGMEM_MAX_K` | 50 | Ceiling for `recall`'s `k` |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; `0` keeps it up |
+| `--unload-after` / `AGMEM_UNLOAD_AFTER` | 300 | Seconds the embedding model stays loaded with no embed call; it reloads on the next one (~0.25 s). `0` keeps it loaded |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process, one session at a time |
 | `--log`, `--log-file` | `info` to stderr | Telemetry. stdout is the MCP wire and stays empty |
 | `--tools` / `AGMEM_TOOLS` | `core` | Which tools a session lists: `core` leaves out `consolidate` and `forget` (the shell serves them), `all` puts them back |
@@ -530,6 +531,11 @@ Every flag has an environment variable. `agmem --help` has the exact spellings.
   them through BM25 meanwhile. `agmem reindex` needs the store to itself, so
   end the sessions first. There is no model-less mode: recall is BM25 *and*
   vectors.
+- **Disk.** `agmem gc` deletes the downloaded models the configured one does
+  not need (other models, other revisions, the ONNX and fastembed caches from
+  before v0.3); `--dry-run` lists them first. The daemon log names the space
+  they take at every start. `daemon.log` rotates at 5 MB and keeps two old
+  files.
 - **Starting over.** Delete the data directory. Keep `models/` to skip the
   download.
 

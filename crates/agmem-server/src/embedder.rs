@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agmem_embed::{ApiEmbedder, Embedder, LlamaEmbedder, NoopEmbedder};
 
@@ -19,11 +20,15 @@ use crate::config::{Config, EmbedderKind};
 /// probe.
 pub fn build(cfg: &Config) -> anyhow::Result<Arc<dyn Embedder>> {
     match cfg.embedder {
-        EmbedderKind::Llama => Ok(Arc::new(LlamaEmbedder::new(
-            cfg.model.into_embed(),
-            Some(model_dir(cfg)),
-            cfg.accelerator.into_embed(),
-        )?)),
+        EmbedderKind::Llama => {
+            let embedder = LlamaEmbedder::new(
+                cfg.model.into_embed(),
+                Some(model_dir(cfg)),
+                cfg.accelerator.into_embed(),
+            )?;
+            embedder.unload_after(unload_after(cfg));
+            Ok(Arc::new(embedder))
+        }
         EmbedderKind::Api => {
             let key = std::env::var(API_KEY_ENV)
                 .ok()
@@ -36,6 +41,12 @@ pub fn build(cfg: &Config) -> anyhow::Result<Arc<dyn Embedder>> {
         }
         EmbedderKind::None => Ok(Arc::new(NoopEmbedder)),
     }
+}
+
+/// How long an idle model stays loaded: `--unload-after`, with 0 meaning for
+/// good.
+fn unload_after(cfg: &Config) -> Option<Duration> {
+    (cfg.unload_after > 0).then(|| Duration::from_secs(cfg.unload_after))
 }
 
 /// The bearer token `--embedder api` sends. An environment variable and not

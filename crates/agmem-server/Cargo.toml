@@ -46,6 +46,11 @@ semver = "1.0"
 # the shared daemon from the client side, over the same socket a session uses.
 rmcp = { workspace = true, features = ["client"] }
 
+# The daemon logs its own memory footprint (issue #196); macOS keeps that
+# figure behind proc_pid_rusage, which this wraps without unsafe on our side.
+[target.'cfg(target_os = "macos")'.dependencies]
+libproc = "0.14"
+
 [dev-dependencies]
 insta = { workspace = true }
 tempfile = { workspace = true }

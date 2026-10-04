@@ -157,6 +157,17 @@ pub struct Cli {
     )]
     pub idle_timeout: u64,
 
+    /// Seconds the embedding model stays loaded with no embed call before it
+    /// is freed, to be loaded again on the next one (issue #196). 0 keeps it
+    /// loaded for as long as the process runs.
+    #[arg(
+        long = "unload-after",
+        env = "AGMEM_UNLOAD_AFTER",
+        default_value_t = 300,
+        value_name = "SECONDS"
+    )]
+    pub unload_after: u64,
+
     /// One-shot mode instead of serving MCP.
     #[command(subcommand)]
     pub command: Option<CliCommand>,
@@ -196,6 +207,11 @@ pub enum CliCommand {
     /// after a model change, done now, in one sitting, with no session
     /// attached. Needs the store to itself: refuses while a daemon serves.
     Reindex(ReindexArgs),
+
+    /// Delete downloaded models the configured one does not need — other
+    /// models, other revisions, and the ONNX and fastembed caches from
+    /// before v0.3 — and print what went. Leaves the store alone.
+    Gc(GcArgs),
 }
 
 /// What `agmem reindex` takes.
@@ -207,6 +223,14 @@ pub struct ReindexArgs {
     /// background re-embed.
     #[arg(long, value_enum)]
     pub model: Option<ModelKind>,
+}
+
+/// What `agmem gc` takes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+pub struct GcArgs {
+    /// Print what would be removed and remove nothing.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// What `agmem consolidate` passes to `consolidate`.
@@ -667,6 +691,9 @@ pub struct Config {
     pub daemon_serve: bool,
     pub took_over: bool,
     pub idle_timeout: u64,
+    /// Seconds before an idle embedding model is freed; 0 never. Process-local
+    /// like `accelerator`, so it rides the spawn argv and not the handshake.
+    pub unload_after: u64,
     /// The one-shot subcommand this run is, if it is one.
     pub command: Option<CliCommand>,
 }
@@ -822,6 +849,7 @@ impl Cli {
             daemon_serve: self.daemon_serve,
             took_over: self.took_over,
             idle_timeout: self.idle_timeout,
+            unload_after: self.unload_after,
             command: self.command,
         })
     }

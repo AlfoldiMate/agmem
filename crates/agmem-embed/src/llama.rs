@@ -16,6 +16,7 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use agmem_core::dedup::Thresholds;
 use llama_cpp_2::context::LlamaContext;
@@ -68,13 +69,21 @@ struct Job {
     reply: mpsc::Sender<Result<Vec<Vec<f32>>, String>>,
 }
 
+/// What the worker's channel carries.
+enum Msg {
+    Embed(Job),
+    /// How long the worker keeps the model with nothing to do; `None` keeps
+    /// it for good.
+    UnloadAfter(Option<Duration>),
+}
+
 /// A GGUF model loaded on its own thread.
 pub struct LlamaEmbedder {
     spec: ModelSpec,
     accelerator: Active,
     /// `None` only while dropping: the sender goes first so the worker sees
     /// end-of-jobs and tears the model down on its own thread.
-    jobs: Option<Mutex<mpsc::Sender<Job>>>,
+    jobs: Option<Mutex<mpsc::Sender<Msg>>>,
     worker: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -149,7 +158,7 @@ impl LlamaEmbedder {
             Active::Metal => 1000,
             Active::Cpu => 0,
         };
-        let (jobs, inbox) = mpsc::channel::<Job>();
+        let (jobs, inbox) = mpsc::channel::<Msg>();
         let (ready, loaded) = mpsc::channel::<Result<(), String>>();
         let path = path.to_path_buf();
         let handle = std::thread::Builder::new()
@@ -177,6 +186,21 @@ impl LlamaEmbedder {
         &self.spec
     }
 
+    /// Free the model, its context and their Metal buffers after `idle`
+    /// with no embed call, and load them again on the next one; `None` keeps
+    /// them loaded for good, which is also what a new embedder does.
+    ///
+    /// A daemon lives for days and embeds for seconds of them, and what it
+    /// holds while idle is the model plus a compute buffer sized for a
+    /// 2048-token batch (issue #196). The price is one load — about the
+    /// warm-up `new` already pays — on the first call after an idle spell.
+    pub fn unload_after(&self, idle: Option<Duration>) {
+        if let Some(Ok(jobs)) = self.jobs.as_ref().map(Mutex::lock) {
+            // A worker that has exited has nothing loaded to free.
+            let _ = jobs.send(Msg::UnloadAfter(idle));
+        }
+    }
+
     /// Embed already-prefixed texts, in order, L2-normalised.
     fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
         let failed = |message: String| EmbedError::Backend {
@@ -192,10 +216,10 @@ impl LlamaEmbedder {
             .ok_or_else(|| failed("the model is being dropped".to_owned()))?
             .lock()
             .map_err(|_| failed("the model lock was poisoned by an earlier panic".to_owned()))?
-            .send(Job {
+            .send(Msg::Embed(Job {
                 texts: texts.to_vec(),
                 reply,
-            })
+            }))
             .map_err(|_| failed("the model thread has exited".to_owned()))?;
         answer
             .recv()
@@ -244,75 +268,181 @@ impl Embedder for LlamaEmbedder {
     }
 }
 
-/// The thread body: load, report, then serve jobs until the sender drops.
-///
-/// Model, context and batch are locals here rather than fields of a struct
-/// because the context borrows the model; the loop is the struct.
+/// The thread body: load, report, then serve jobs until the sender drops —
+/// unloading after an idle spell and loading again on the next job, when
+/// [`LlamaEmbedder::unload_after`] asked for that.
 fn worker(
     path: &Path,
     pooling: Pooling,
     dim: usize,
     gpu_layers: u32,
     ready: &mpsc::Sender<Result<(), String>>,
-    inbox: &mpsc::Receiver<Job>,
+    inbox: &mpsc::Receiver<Msg>,
 ) {
-    let loaded = backend().and_then(|backend| {
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
-        let model = LlamaModel::load_from_file(backend, path, &model_params)
-            .map_err(|e| format!("load {}: {e}", path.display()))?;
-        let n_embd = usize::try_from(model.n_embd_out()).unwrap_or(0);
-        if n_embd != dim {
-            return Err(format!(
-                "{} is {n_embd}-dimensional, expected {dim}",
-                path.display()
-            ));
-        }
-        Ok((backend, model))
-    });
-    let (backend, model) = match loaded {
-        Ok(loaded) => loaded,
+    let backend = match backend() {
+        Ok(backend) => backend,
         Err(message) => {
             let _ = ready.send(Err(message));
             return;
         }
     };
-    let threads =
-        i32::try_from(std::thread::available_parallelism().map_or(4, |n| n.get())).unwrap_or(4);
-    let batch_tokens = u32::try_from(BATCH_TOKENS).expect("fits");
-    let context_params = LlamaContextParams::default()
-        .with_embeddings(true)
-        .with_pooling_type(pooling.llama())
-        .with_n_ctx(NonZeroU32::new(batch_tokens))
-        .with_n_batch(batch_tokens)
-        .with_n_ubatch(batch_tokens)
-        .with_n_seq_max(u32::try_from(MAX_SEQUENCES).expect("fits"))
-        .with_n_threads(threads)
-        .with_n_threads_batch(threads);
-    let mut context = match model.new_context(backend, context_params) {
-        Ok(context) => context,
-        Err(e) => {
-            let _ = ready.send(Err(e.to_string()));
+    let load = Load {
+        backend,
+        path,
+        pooling,
+        dim,
+        gpu_layers,
+    };
+    let mut idle = None;
+    let mut first = Some(ready);
+    let mut pending = None;
+    loop {
+        if load.serve(first.take(), pending.take(), &mut idle, inbox) == Ended::Closed {
             return;
         }
-    };
-    let mut batch = LlamaBatch::new(BATCH_TOKENS, i32::try_from(MAX_SEQUENCES).expect("fits"));
-    let truncate_to = MAX_TOKENS.min(usize::try_from(model.n_ctx_train()).unwrap_or(MAX_TOKENS));
-    let runtime = Runtime {
-        model: &model,
-        dim,
-        truncate_to,
-    };
-    // One warm-up so the first Metal shader compile is paid before any
-    // caller waits on it, and a broken parameter set fails at load.
-    if let Err(message) = runtime.embed(&mut context, &mut batch, &["warm-up".to_owned()]) {
-        let _ = ready.send(Err(message));
-        return;
+        // Unloaded: nothing is held until the next job arrives.
+        loop {
+            match inbox.recv() {
+                Err(_) => return,
+                Ok(Msg::UnloadAfter(after)) => idle = after,
+                Ok(Msg::Embed(job)) => {
+                    pending = Some(job);
+                    break;
+                }
+            }
+        }
     }
-    let _ = ready.send(Ok(()));
-    while let Ok(job) = inbox.recv() {
-        let _ = job
-            .reply
-            .send(runtime.embed(&mut context, &mut batch, &job.texts));
+}
+
+/// Why [`Load::serve`] returned.
+#[derive(Debug, PartialEq, Eq)]
+enum Ended {
+    /// Every sender is gone: the embedder was dropped.
+    Closed,
+    /// The model is freed — idle, or a reload that failed — and the worker
+    /// waits for the next job before loading again.
+    Unloaded,
+}
+
+/// What one load of the model needs.
+struct Load<'a> {
+    backend: &'static LlamaBackend,
+    path: &'a Path,
+    pooling: Pooling,
+    dim: usize,
+    gpu_layers: u32,
+}
+
+impl Load<'_> {
+    /// Load the model and serve jobs until the channel closes or `idle`
+    /// passes with none.
+    ///
+    /// Model, context and batch are locals here rather than fields of a
+    /// struct because the context borrows the model; returning frees all
+    /// three. `ready` is the first load's: it is told the outcome after a
+    /// warm-up, and a failure there ends the thread as before. A reload has
+    /// `pending` instead, the job that woke it, which is its warm-up and
+    /// which hears about a failed load in its place.
+    fn serve(
+        &self,
+        ready: Option<&mpsc::Sender<Result<(), String>>>,
+        pending: Option<Job>,
+        idle: &mut Option<Duration>,
+        inbox: &mpsc::Receiver<Msg>,
+    ) -> Ended {
+        let fail = |message: String| match (ready, pending.as_ref()) {
+            (Some(ready), _) => {
+                let _ = ready.send(Err(message));
+                Ended::Closed
+            }
+            (None, Some(job)) => {
+                tracing::warn!(error = %message, "reloading the embedding model failed");
+                let _ = job.reply.send(Err(message));
+                Ended::Unloaded
+            }
+            (None, None) => Ended::Unloaded,
+        };
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(self.gpu_layers);
+        let model = match LlamaModel::load_from_file(self.backend, self.path, &model_params) {
+            Ok(model) => model,
+            Err(e) => return fail(format!("load {}: {e}", self.path.display())),
+        };
+        let n_embd = usize::try_from(model.n_embd_out()).unwrap_or(0);
+        if n_embd != self.dim {
+            return fail(format!(
+                "{} is {n_embd}-dimensional, expected {}",
+                self.path.display(),
+                self.dim
+            ));
+        }
+        let threads =
+            i32::try_from(std::thread::available_parallelism().map_or(4, |n| n.get())).unwrap_or(4);
+        let batch_tokens = u32::try_from(BATCH_TOKENS).expect("fits");
+        let context_params = LlamaContextParams::default()
+            .with_embeddings(true)
+            .with_pooling_type(self.pooling.llama())
+            .with_n_ctx(NonZeroU32::new(batch_tokens))
+            .with_n_batch(batch_tokens)
+            .with_n_ubatch(batch_tokens)
+            .with_n_seq_max(u32::try_from(MAX_SEQUENCES).expect("fits"))
+            .with_n_threads(threads)
+            .with_n_threads_batch(threads);
+        let mut context = match model.new_context(self.backend, context_params) {
+            Ok(context) => context,
+            Err(e) => return fail(e.to_string()),
+        };
+        let mut batch = LlamaBatch::new(BATCH_TOKENS, i32::try_from(MAX_SEQUENCES).expect("fits"));
+        let truncate_to =
+            MAX_TOKENS.min(usize::try_from(model.n_ctx_train()).unwrap_or(MAX_TOKENS));
+        let runtime = Runtime {
+            model: &model,
+            dim: self.dim,
+            truncate_to,
+        };
+        if let Some(ready) = ready {
+            // One warm-up so the first Metal shader compile is paid before
+            // any caller waits on it, and a broken parameter set fails at
+            // load.
+            if let Err(message) = runtime.embed(&mut context, &mut batch, &["warm-up".to_owned()]) {
+                let _ = ready.send(Err(message));
+                return Ended::Closed;
+            }
+            let _ = ready.send(Ok(()));
+        } else {
+            tracing::info!("reloaded the embedding model");
+        }
+        if let Some(job) = pending {
+            let _ = job
+                .reply
+                .send(runtime.embed(&mut context, &mut batch, &job.texts));
+        }
+        loop {
+            let msg = match *idle {
+                Some(after) => match inbox.recv_timeout(after) {
+                    Ok(msg) => msg,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        tracing::info!(
+                            idle_secs = after.as_secs(),
+                            "unloaded the embedding model until the next embed"
+                        );
+                        return Ended::Unloaded;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ended::Closed,
+                },
+                None => match inbox.recv() {
+                    Ok(msg) => msg,
+                    Err(_) => return Ended::Closed,
+                },
+            };
+            match msg {
+                Msg::Embed(job) => {
+                    let _ = job
+                        .reply
+                        .send(runtime.embed(&mut context, &mut batch, &job.texts));
+                }
+                Msg::UnloadAfter(after) => *idle = after,
+            }
+        }
     }
 }
 

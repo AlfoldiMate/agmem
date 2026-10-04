@@ -334,3 +334,23 @@ fn regenerate_eval_vectors() {
     );
     eprintln!("recorded {} ({dim}d) into {}", spec.id, out_dir.display());
 }
+
+#[test]
+#[ignore = "fetches the model on first run"]
+fn an_unloaded_model_reloads_on_the_next_call_and_embeds_the_same() {
+    let embedder = load(Model::BgeSmall);
+    let text = "The daemon frees its model when nobody is embedding.";
+    let before = embedder.embed_query(text).expect("embed while loaded");
+
+    embedder.unload_after(Some(std::time::Duration::from_millis(50)));
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let after = embedder.embed_query(text).expect("embed after the unload");
+    assert!(
+        cosine(&before, &after) > 0.9999,
+        "a reload is the same weights, so the same vector"
+    );
+
+    // Unloaded again, then dropped with nothing loaded: teardown must not hang.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    drop(embedder);
+}

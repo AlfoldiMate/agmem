@@ -9,6 +9,8 @@ pub mod daemon;
 pub mod doc;
 pub mod doctor;
 pub mod embedder;
+pub mod footprint;
+pub mod gc;
 pub mod hook;
 pub mod lock;
 pub mod oneshot;

@@ -1209,6 +1209,7 @@ rather than details:
 | `--log`, `--log-file` / `AGMEM_LOG`, `AGMEM_LOG_FILE` | `warn` + agmem crates at `info`, stderr | Telemetry |
 | `--no-daemon` / `AGMEM_NO_DAEMON` | off | Own the store in this process instead of through the shared daemon (#37) |
 | `--idle-timeout` / `AGMEM_IDLE_TIMEOUT` | 600 | Seconds the daemon outlives its last session; 0 keeps it until reboot |
+| `--unload-after` / `AGMEM_UNLOAD_AFTER` | 300 | Seconds the llama model, its context and their Metal buffers stay loaded with no embed call; freed after, reloaded on the next call (#196). 0 keeps them loaded. Process-local: rides the spawn argv, not the handshake |
 | `--daemon-serve` | — | Be the daemon. Started automatically; hidden from `--help` |
 | `--doctor` | — | One-shot self check: lock, DB open, migrate, embedder, sample roundtrip, vector coverage; prints report, exits |
 | `reindex` subcommand | — | Re-embed every row now, under the configured model or `--model`; refuses while a daemon serves the store; exits. `--reindex` is the hidden pre-v0.3.1 spelling |

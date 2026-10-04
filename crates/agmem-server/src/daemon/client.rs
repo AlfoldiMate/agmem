@@ -399,6 +399,8 @@ fn spawn(cfg: &Config, takeover: Takeover) -> anyhow::Result<Child> {
         .arg(&cfg.api.model)
         .arg("--idle-timeout")
         .arg(cfg.idle_timeout.to_string())
+        .arg("--unload-after")
+        .arg(cfg.unload_after.to_string())
         .arg("--log")
         .arg(&cfg.log)
         // A detached process with nowhere to write is one nobody can diagnose,

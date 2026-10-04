@@ -6,6 +6,8 @@ members = [
     "crates/agmem-embed",
     "crates/agmem-server",
 ]
+# A patched copy of a dependency, not ours to lint, format or test.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.4.2"
@@ -71,3 +73,12 @@ opt-level = 3
 [profile.dist]
 inherits = "release"
 lto = true
+
+# surrealdb 3.2.4 with one change (issue #196): `engine::local::
+# set_datastore_config`, so agmem can size surrealkv's memtable and block
+# cache, which upstream sizes from total RAM with no way to override. The
+# diff against the registry copy is vendor/surrealdb/AGMEM-PATCH.md. Drop
+# this when an upstream release takes a ConfigMap; a surrealdb bump must
+# re-vendor or it silently stops applying.
+[patch.crates-io]
+surrealdb = { path = "vendor/surrealdb" }

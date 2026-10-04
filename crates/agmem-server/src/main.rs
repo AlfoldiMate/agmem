@@ -19,7 +19,7 @@ use std::sync::Arc;
 #[cfg(unix)]
 use agmem_server::daemon;
 use agmem_server::service::{self, AgmemService};
-use agmem_server::{config, doc, doctor, hook, oneshot, reindex, startup, telemetry};
+use agmem_server::{config, doc, doctor, gc, hook, oneshot, reindex, startup, telemetry};
 use clap::Parser;
 
 #[tokio::main]
@@ -57,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(config::CliCommand::Forget(args)) => return oneshot::forget(cfg, args).await,
         Some(config::CliCommand::Reindex(args)) => return reindex::run(&cfg, args).await,
+        Some(config::CliCommand::Gc(args)) => return gc::run(&cfg, &args),
         None => {}
     }
 

@@ -21,7 +21,7 @@ use crate::config::Config;
 use crate::daemon::{Ack, Handshake, Refusal, socket_path};
 use crate::service::AgmemService;
 use crate::startup::{self, VectorState};
-use crate::{doctor, lock, reindex};
+use crate::{doctor, footprint, gc, lock, reindex};
 
 /// How long a retiring daemon keeps serving the sessions already attached
 /// before it exits (issue #112). Long enough for a tool call in flight to
@@ -35,6 +35,10 @@ pub const DRAIN: Duration = Duration::from_secs(2);
 /// and release the store's own file lock, before it gives up its data-dir
 /// lock regardless (issue #124).
 const STORE_RELEASE_DEADLINE: Duration = Duration::from_secs(10);
+
+/// How often a serving daemon writes its memory footprint to the log, so
+/// growth over days is a column to read rather than a guess (issue #196).
+const FOOTPRINT_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Own the store and serve every session that attaches, until nothing has
 /// been attached for `idle_timeout` — or a newer release attaches, in which
@@ -129,8 +133,22 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
         );
     }
 
+    // Models nothing loads are gigabytes a person would not know were there
+    // (issue #196); the log is where a detached process can say so.
+    let unused = gc::plan(&cfg).bytes();
+    if unused > 0 {
+        tracing::warn!(
+            unused_mb = unused / 1_000_000,
+            "downloaded models the configured one does not need; `agmem gc` removes them"
+        );
+    }
+
     let idle = Duration::from_secs(cfg.idle_timeout);
     let daemon = Arc::new(cfg);
+    // The first tick is now: the footprint with the store open and the model
+    // loaded is the baseline the daily lines are read against.
+    let mut footprint_tick = tokio::time::interval(FOOTPRINT_EVERY);
+    footprint_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // Once set, every handshake still in flight is answered "retiring" rather
     // than "ok": a session accepted onto a daemon that is about to exit would
     // come up with memory tools and lose them a moment later.
@@ -210,6 +228,7 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
                 tracing::warn!(attached, "drain window over; cutting the remaining sessions loose");
                 break;
             }
+            _ = footprint_tick.tick() => footprint::log(),
             () = idle_elapsed(idle, attached == 0), if drain_until.is_none() => {
                 tracing::info!(?idle, "nothing attached; shutting down");
                 break;
